@@ -186,9 +186,9 @@
 						</goals>
 						<phase>package</phase>
 						<configuration>
-							<path>/vijay</path>
+							<path>/vijayspace</path>
 							<enableNaming>false</enableNaming>
-							<finalName>vijay.jar</finalName>
+							<finalName>vijayspace.jar</finalName>
 							<charset>utf-8</charset>
 						</configuration>
 					</execution>
