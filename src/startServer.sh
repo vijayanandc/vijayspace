@@ -1,0 +1,1 @@
+java -jar vijayspace.jar -extractDirectory vijayspace  -httpPort=7070
