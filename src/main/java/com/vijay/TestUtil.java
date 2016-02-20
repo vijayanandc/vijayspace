@@ -14,6 +14,7 @@ public class TestUtil {
 		list.add("Home");
 		list.add("Issues");
 		list.add("Support");
+		list.add("Payment");
 		
 		return list;
 	}
