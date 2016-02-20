@@ -207,6 +207,7 @@
 						<configuration>
 							<tasks>
 								<copy file="${basedir}/src/startServer.sh" tofile="${basedir}/target/startServer.sh" />
+								<copy file="${basedir}/src/killServer.sh" tofile="${basedir}/target/killServer.sh" />
 							</tasks>
 						</configuration>
 					</execution>

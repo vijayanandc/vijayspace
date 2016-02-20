@@ -10,6 +10,7 @@
 			<directory>${project.build.directory}</directory>
 			<includes>
 				<include>startServer.sh</include>
+				<include>killServer.sh</include>
 				<include>vijayspace.jar</include>
 			</includes>
 			<outputDirectory>/VijaySpace</outputDirectory>
