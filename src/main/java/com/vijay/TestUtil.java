@@ -17,6 +17,7 @@ public class TestUtil {
 		list.add("Payment");
 		list.add("Mobiles");
 		list.add("Music");
+		list.add("Videos");
 		
 		return list;
 	}
