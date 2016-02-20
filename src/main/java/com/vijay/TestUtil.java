@@ -15,6 +15,7 @@ public class TestUtil {
 		list.add("Issues");
 		list.add("Support");
 		list.add("Payment");
+		list.add("Mobiles");
 		
 		return list;
 	}
