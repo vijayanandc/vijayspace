@@ -29,7 +29,7 @@
     			className = "active";
     		}
     %>
-      <li class="<%=className%>"><a href="#" onclick="alert('<%=tabName%> :)')"><%=tabName%></a></li>
+      <li class="<%=className%>"><a href="#" onclick="alert('<%=tabName%>')"><%=tabName%></a></li>
       <%
     	}      
       %>
