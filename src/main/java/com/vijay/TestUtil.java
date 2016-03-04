@@ -18,6 +18,7 @@ public class TestUtil {
 		list.add("Mobiles");
 		list.add("Videos");
 		list.add("Invoice");
+		list.add("Books");
 		
 		return list;
 	}
