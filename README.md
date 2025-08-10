@@ -19,8 +19,6 @@ mvn spring-boot:run -Pdev
 
 Then open [http://localhost:8080/index.html](http://localhost:8080/index.html) to use a lightweight Vue-based admin UI for creating modules, fields, layouts and records.
 
-### Example
-
 Create a record in the seeded `contacts` module:
 
 ```bash
