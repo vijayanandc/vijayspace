@@ -17,7 +17,7 @@ The `dev` profile uses an in‑memory H2 database with Flyway migrations. A samp
 mvn spring-boot:run -Pdev
 ```
 
-### Example
+Then open [http://localhost:8080/index.html](http://localhost:8080/index.html) to use a lightweight Vue-based admin UI for creating modules, fields, layouts and records.
 
 Create a record in the seeded `contacts` module:
 
