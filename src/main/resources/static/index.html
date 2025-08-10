@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Meta-Driven Admin</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    section { margin-bottom: 40px; }
+    label { display: block; margin-top: 8px; }
+    input, select, textarea { width: 300px; }
+    ul { list-style: none; padding: 0; }
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <section>
+    <h2>Create Module</h2>
+    <label>Name <input v-model="newModule.name" /></label>
+    <label>Label <input v-model="newModule.label" /></label>
+    <label>Slug <input v-model="newModule.slug" /></label>
+    <button @click="addModule">Add Module</button>
+  </section>
+
+  <section>
+    <h2>Modules</h2>
+    <ul>
+      <li v-for="m in modules" :key="m.id">
+        <a href="#" @click.prevent="selectModule(m)">{{ m.name }}</a>
+      </li>
+    </ul>
+  </section>
+
+  <section v-if="selectedModule">
+    <h2>Module: {{ selectedModule.name }}</h2>
+    <h3>Add Field</h3>
+    <label>Name <input v-model="newField.name" /></label>
+    <label>Label <input v-model="newField.label" /></label>
+    <label>Data Type
+      <select v-model="newField.dataType">
+        <option>STRING</option>
+        <option>INT</option>
+        <option>BOOL</option>
+        <option>DATE</option>
+        <option>TEXT</option>
+      </select>
+    </label>
+    <label><input type="checkbox" v-model="newField.required" /> Required</label>
+    <button @click="addField">Add Field</button>
+
+    <h3>Fields</h3>
+    <ul>
+      <li v-for="f in fields" :key="f.id">{{ f.name }} ({{ f.dataType }})</li>
+    </ul>
+
+    <h3>Add Layout</h3>
+    <label>Name <input v-model="newLayout.name" /></label>
+    <label>Type
+      <select v-model="newLayout.type">
+        <option>FORM</option>
+        <option>LIST</option>
+        <option>DETAIL</option>
+      </select>
+    </label>
+    <label>Definition JSON
+      <textarea v-model="newLayout.definitionJson"></textarea>
+    </label>
+    <button @click="addLayout">Add Layout</button>
+
+    <h3>Layouts</h3>
+    <ul>
+      <li v-for="l in layouts" :key="l.id">{{ l.name }} ({{ l.type }})</li>
+    </ul>
+
+    <h3>Create Record (JSON payload)</h3>
+    <textarea v-model="recordPayload" rows="4" cols="50"></textarea>
+    <button @click="createRecord">Create</button>
+    <div v-if="createdRecord">Created ID: {{ createdRecord.id }}</div>
+  </section>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
