@@ -8,6 +8,9 @@ const d0: FlowDefinition = { schema_version: 1, trigger: { type: 'manual' }, ste
 const d1: FlowDefinition = { ...d0, steps: [{ key: 'a', type: 'stop' }] };
 const d2: FlowDefinition = { ...d0, steps: [{ key: 'b', type: 'stop' }] };
 
+const isValidate = (url: string) => url.endsWith('/validate');
+const noIssues = () => new Response(JSON.stringify({ issues: [] }), { status: 200 });
+
 describe('useAutosave', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => {
@@ -17,7 +20,8 @@ describe('useAutosave', () => {
 
   it('debounces saves, sends the revision and adopts the new one', async () => {
     const bodies: unknown[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (isValidate(url)) return noIssues();
       bodies.push(JSON.parse(String(init?.body)));
       return new Response(JSON.stringify({ revision: bodies.length + 1, issues: [] }), { status: 200 });
     }));
@@ -38,7 +42,7 @@ describe('useAutosave', () => {
   });
 
   it('returns to saved when edits are undone before saving', () => {
-    vi.stubGlobal('fetch', vi.fn());
+    vi.stubGlobal('fetch', vi.fn(async () => noIssues()));
     const { result, rerender } = renderHook(({ def }) => useAutosave('flw_1', def, 1), { initialProps: { def: d0 } });
     rerender({ def: d1 });
     rerender({ def: d0 });
@@ -46,7 +50,9 @@ describe('useAutosave', () => {
   });
 
   it('detects conflicts and stops saving until reset', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ code: 'flow.revision_conflict', title: 'Conflict' }), { status: 409 }));
+    const fetchMock = vi.fn(async (url: string) =>
+      isValidate(url) ? noIssues() : new Response(JSON.stringify({ code: 'flow.revision_conflict', title: 'Conflict' }), { status: 409 }),
+    );
     vi.stubGlobal('fetch', fetchMock);
     const { result, rerender } = renderHook(({ def }) => useAutosave('flw_1', def, 1), { initialProps: { def: d0 } });
     rerender({ def: d1 });
@@ -57,8 +63,23 @@ describe('useAutosave', () => {
     await act(async () => {
       expect(await result.current.flush()).toBe(false);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.filter(([url]) => !isValidate(url))).toHaveLength(1);
     act(() => result.current.reset(d1, 5));
     expect(result.current.status).toBe('saved');
+  });
+
+  it('asks the server for issues when a flow is opened, before any edit', async () => {
+    const issue = { severity: 'error', path: '/trigger/input/project_id', code: 'field.required', message: '`project_id` is required' };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (isValidate(url)) return new Response(JSON.stringify({ issues: [issue] }), { status: 200 });
+      throw new Error(`unexpected ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useAutosave('flw_1', d0, 1));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.issues).toEqual([issue]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

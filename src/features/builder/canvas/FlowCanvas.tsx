@@ -12,15 +12,17 @@ function Canvas() {
   const { def, select, selected, deleteStep, setActivePoint } = useBuilder();
   const { nodes, edges } = useMemo(() => layoutDefinition(def), [def]);
   const { fitView } = useReactFlow();
-  const stepCount = useRef(def.steps.length);
+  const nodeCount = useRef(nodes.length);
 
   useEffect(() => {
-    // Re-fit when steps are added at the top level, so new nodes stay visible.
-    if (def.steps.length !== stepCount.current) {
-      stepCount.current = def.steps.length;
-      window.requestAnimationFrame(() => void fitView({ padding: 0.2, duration: 200, maxZoom: 1 }));
-    }
-  }, [def.steps.length, fitView]);
+    // Re-fit when steps are added or removed anywhere (including inside branches),
+    // so new nodes stay visible.
+    if (nodes.length === nodeCount.current) return undefined;
+    nodeCount.current = nodes.length;
+    // Wait until React Flow has measured the new nodes; fitting earlier ignores them.
+    const timer = window.setTimeout(() => void fitView({ padding: 0.2, duration: 200, maxZoom: 1 }), 80);
+    return () => window.clearTimeout(timer);
+  }, [nodes.length, fitView]);
 
   const onKeyDown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement;

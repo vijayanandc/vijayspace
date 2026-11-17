@@ -60,6 +60,23 @@ export function useAutosave(flowId: string, def: FlowDefinition, initialRevision
   }, [save]);
 
   useEffect(() => {
+    // Seed issues from the server on open: a draft (e.g. from a recipe) can be invalid before
+    // anyone edits it, and the panel must not claim "no issues" until it has asked.
+    let live = true;
+    endpoints
+      .validate(flowId)
+      .then((res) => {
+        if (live) setIssues(res.issues);
+      })
+      .catch(() => {
+        /* the next save or publish reports issues */
+      });
+    return () => {
+      live = false;
+    };
+  }, [flowId]);
+
+  useEffect(() => {
     if (JSON.stringify(def) === savedJson.current) {
       // e.g. undo back to the saved state: nothing to save.
       window.clearTimeout(timer.current);
