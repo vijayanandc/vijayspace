@@ -1,6 +1,8 @@
 //! The paging cursor of `RecordObjects::changed_since` (used by backfill): records sorted by
-//! modified time, read from `since` with an offset, re-anchored on a later modified time before
-//! the app's offset limit. Ties (many records with one modified time) never stall the cursor.
+//! modified time, read from `since` with an offset. Connectors re-anchor on the last modified time
+//! after every page (`max_skip = 0`), so the offset only walks through a group of records sharing
+//! one time: such ties never stall the cursor, and records edited between pages (which move to
+//! the end) cannot shift unread records past it.
 
 use serde_json::{Value, json};
 
@@ -144,5 +146,31 @@ mod tests {
         };
         assert_eq!(ListCursor::parse(Some(&c.to_value())), c);
         assert_eq!(ListCursor::parse(None), ListCursor::default());
+    }
+
+    #[test]
+    fn reanchoring_every_page_cannot_skip_records_shifted_by_edits() {
+        // Page 1 ends at t3: the next page starts at t3 (skipping the one t3 already read), not at
+        // "offset 3", so records edited meanwhile (now at the end) cannot shift unread ones away.
+        let next = ListCursor::default().next(&times(&["t1", "t2", "t3"]), 0, true);
+        assert_eq!(
+            next,
+            ListCursor {
+                since: Some("t3".into()),
+                skip: 1
+            }
+        );
+        // A whole page inside one group of equal times keeps walking that group.
+        let in_group = ListCursor {
+            since: Some("t3".into()),
+            skip: 1,
+        };
+        assert_eq!(
+            in_group.next(&times(&["t3", "t3"]), 0, true),
+            ListCursor {
+                since: Some("t3".into()),
+                skip: 3
+            }
+        );
     }
 }

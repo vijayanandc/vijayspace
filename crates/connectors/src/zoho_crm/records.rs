@@ -347,8 +347,10 @@ impl RecordObjects for ZohoCrmConnector {
         let records: Vec<Record> = rows.iter().filter_map(to_record).collect();
         let full = u32::try_from(rows.len()).unwrap_or(u32::MAX) >= limit;
         let times: Vec<Option<String>> = records.iter().map(|r| r.modified_at.clone()).collect();
-        // Zoho pages by number (up to 2,000 records); restart from the last time before that.
-        let next_cursor = full.then(|| at.next(&times, 2_000 - limit, false).to_value());
+        // Re-anchor on every page (page numbers only inside a group of equal times): a record
+        // edited between pages moves to the end, and a plain page number would skip unread ones.
+        // Records at the anchor time are read again and deduplicated downstream.
+        let next_cursor = full.then(|| at.next(&times, 0, false).to_value());
         Ok(Page {
             records,
             next_cursor,

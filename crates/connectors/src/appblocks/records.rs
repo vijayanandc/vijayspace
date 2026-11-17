@@ -297,8 +297,9 @@ impl RecordObjects for AppblocksConnector {
         let records: Vec<Record> = rows.iter().filter_map(to_record).collect();
         let full = u32::try_from(rows.len()).unwrap_or(u32::MAX) >= limit;
         let times: Vec<Option<String>> = records.iter().map(|r| r.modified_at.clone()).collect();
-        // Appblocks accepts offsets up to 10,000.
-        let next_cursor = full.then(|| at.next(&times, 10_000 - limit, true).to_value());
+        // Re-anchor on every page (offsets only inside a group of equal times): a record edited
+        // between pages moves to the end, and a plain offset would then skip unread records.
+        let next_cursor = full.then(|| at.next(&times, 0, true).to_value());
         Ok(Page {
             records,
             next_cursor,
