@@ -1,35 +1,22 @@
-import { NavLink, Outlet } from 'react-router-dom';
+// App shell: global header, collapsible left rail (hidden in the builder) and the routed page.
 
-import { useOrg } from '../../api/hooks';
+import { Outlet, useMatch } from 'react-router-dom';
 
-const NAV = [
-  { to: '/flows', label: 'Flows', icon: '⇄' },
-  { to: '/recipes', label: 'Recipes', icon: '✦' },
-  { to: '/connections', label: 'Connections', icon: '🔗' },
-  { to: '/history', label: 'History', icon: '☰' },
-];
+import { useStoredChoice } from '../../lib/storage';
+import { GlobalHeader } from './GlobalHeader';
+import { NavRail } from './NavRail';
+
+const NAV_STATES = ['expanded', 'collapsed'] as const;
 
 export function Layout() {
-  const { data: org } = useOrg();
+  const inBuilder = useMatch('/flows/:flowId') !== null;
+  const [nav, setNav] = useStoredChoice('weft.nav', 'expanded', NAV_STATES);
   return (
     <div className="app">
-      <nav className="sidebar" aria-label="Main">
-        <div className="brand">
-          <span className="brand-mark">W</span> Weft
-        </div>
-        {NAV.map((item) => (
-          <NavLink key={item.to} to={item.to} className={({ isActive }) => `nav-link${isActive ? ' nav-active' : ''}`}>
-            <span aria-hidden="true" className="nav-icon">{item.icon}</span>
-            {item.label}
-          </NavLink>
-        ))}
-      </nav>
-      <div className="main">
-        <header className="topbar">
-          <span className="topbar-org">{org?.name ?? 'Workspace'}</span>
-          {org?.timezone && <span className="muted"> · {org.timezone}</span>}
-        </header>
-        <main className="content">
+      <GlobalHeader />
+      <div className="app-body">
+        {!inBuilder && <NavRail collapsed={nav === 'collapsed'} onToggle={() => setNav(nav === 'collapsed' ? 'expanded' : 'collapsed')} />}
+        <main className={`content${inBuilder ? ' content-builder' : ''}`}>
           <Outlet />
         </main>
       </div>

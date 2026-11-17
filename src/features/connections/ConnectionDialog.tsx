@@ -1,16 +1,19 @@
 // Creates a connection: a credentials form for `fields` auth, or the OAuth redirect for `oauth2`.
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { CircleCheck, ExternalLink, Lock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { errorMessage } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
 import { qk, useConnectors } from '../../api/hooks';
 import type { Connection, JsonObject } from '../../api/types';
+import { AppIcon } from '../../components/AppIcon';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { ErrorBox } from '../../components/Empty';
 import { Field } from '../../components/Field';
+import { MessageBar } from '../../components/MessageBar';
 import { DynamicForm } from '../builder/forms/DynamicForm';
 
 interface Props {
@@ -63,29 +66,37 @@ export function ConnectionDialog({ open, onClose, connector, onCreated }: Props)
   return (
     <Dialog
       title="New connection"
+      subtitle="Connect an app account once and reuse it in any flow."
       open={open}
       onClose={onClose}
+      wide
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!manifest || create.isPending} onClick={() => create.mutate()}>
-            {isOauth ? `Connect to ${manifest?.name ?? 'app'} →` : 'Save and test'}
+          <Button variant="primary" icon={isOauth ? ExternalLink : undefined} disabled={!manifest || create.isPending} onClick={() => create.mutate()}>
+            {isOauth ? `Connect to ${manifest?.name ?? 'app'}` : 'Save and test'}
           </Button>
         </>
       }
     >
-      <Field label="App" required>
-        {(id) => (
-          <select id={id} className="input" value={key} disabled={Boolean(connector)} onChange={(e) => { setKey(e.target.value); setFields({}); }}>
-            <option value="">Select an app…</option>
-            {choices.map((m) => (
-              <option key={m.key} value={m.key}>
-                {m.icon} {m.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
+      <fieldset className="app-picker" disabled={Boolean(connector)}>
+        <legend className="field-label">
+          App<span className="required" aria-hidden="true"> *</span>
+        </legend>
+        {choices
+          .filter((m) => !connector || m.key === connector)
+          .map((m) => (
+            <label key={m.key} className={`app-choice${key === m.key ? ' choice-active' : ''}`}>
+              <input type="radio" name="connection-app" value={m.key} checked={key === m.key} onChange={() => { setKey(m.key); setFields({}); }} />
+              <AppIcon app={m.key} size={32} decorative />
+              <span className="choice-text">
+                <strong>{m.name}</strong>
+                <span className="choice-desc">{m.auth.kind === 'oauth2' ? 'Sign in with OAuth' : 'API credentials'}</span>
+              </span>
+              {key === m.key && <CircleCheck size={18} className="choice-check" aria-hidden="true" />}
+            </label>
+          ))}
+      </fieldset>
       <Field label="Connection name" help="Shown when choosing a connection in a flow">
         {(id) => <input id={id} className="input" value={name} placeholder={manifest?.name ?? ''} onChange={(e) => setName(e.target.value)} />}
       </Field>
@@ -97,7 +108,12 @@ export function ConnectionDialog({ open, onClose, connector, onCreated }: Props)
           env={{ connector: manifest.key, connectionId: null, requiresConnection: false, variables: [] }}
         />
       )}
-      {isOauth && <p className="muted small">You will be redirected to {manifest?.name} to sign in and approve access.</p>}
+      {isOauth && <MessageBar intent="info">You will be redirected to {manifest?.name} to sign in and approve access.</MessageBar>}
+      {manifest && !isOauth && (
+        <p className="field-help with-icon">
+          <Lock size={12} aria-hidden="true" /> Credentials are encrypted on the server and never shown again.
+        </p>
+      )}
       {create.error && <ErrorBox message={errorMessage(create.error)} />}
     </Dialog>
   );

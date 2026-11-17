@@ -1,0 +1,62 @@
+/* Builder forms: mapping inputs, variable picker, condition rows, branch cards, key/value rows, assignments. */
+
+.copy-row { display: flex; gap: 6px; }
+.instructions { white-space: pre-wrap; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-subtle); border: 1px solid var(--stroke); font: 12px/18px var(--mono); }
+.inline-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.radio-row, .days { border: none; padding: 0; margin: 0 0 12px; }
+.days { display: flex; flex-wrap: wrap; }
+.select-row { display: flex; gap: 4px; align-items: center; }
+.multi-select { display: flex; flex-wrap: wrap; gap: 4px 0; }
+.object-fields { padding: 12px 0 2px 12px; border-left: 3px solid var(--brand-tint-2); }
+.test-result .btn { margin-top: 8px; }
+
+/* ---------- Mapping inputs and variable picker ---------- */
+.mapping { position: relative; }
+.mapping-row { display: flex; gap: 4px; align-items: flex-start; }
+.map-btn { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border: 1px solid var(--stroke-strong); border-radius: var(--radius); background: var(--surface-subtle); color: var(--brand); cursor: pointer; }
+.map-btn:hover { border-color: var(--brand); background: var(--brand-tint); }
+.mapping-preview { margin-top: 4px; color: var(--text-2); font-size: 12px; line-height: 18px; word-break: break-word; }
+.token { padding: 1px 4px; border-radius: 3px; background: var(--brand-tint); color: var(--brand-pressed); border: 1px solid var(--brand-stroke); font-family: var(--mono); font-size: 11px; }
+.var-picker { position: absolute; z-index: 50; right: 0; top: calc(100% + 4px); width: 360px; max-height: 380px; display: flex; flex-direction: column; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-16); animation: pop-in 0.12s ease-out; }
+.var-picker-header { display: flex; gap: 4px; align-items: center; padding: 8px; border-bottom: 1px solid var(--stroke); }
+.var-tree, .var-tree ul { list-style: none; margin: 0; padding: 0; }
+.var-tree { overflow: auto; padding: 4px; }
+.var-row { display: flex; align-items: center; gap: 4px; min-height: 28px; padding-right: 6px; border-radius: var(--radius); }
+.var-row:hover { background: var(--surface-hover); }
+.var-toggle { display: grid; place-items: center; width: 20px; height: 20px; border: none; background: none; cursor: pointer; color: var(--text-2); flex: none; padding: 0; }
+.var-pick { border: none; background: none; cursor: pointer; color: var(--brand); padding: 2px 0; font: 13px/18px var(--font); text-align: left; }
+.var-pick:hover { text-decoration: underline; }
+.var-group { font-weight: 600; font-size: 13px; }
+.var-sample { margin-left: auto; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font: 11px var(--mono); }
+
+/* ---------- Conditions ---------- */
+.cond { display: flex; flex-direction: column; gap: 8px; }
+.cond-mode { width: auto; align-self: flex-start; min-height: 28px; padding-top: 3px; padding-bottom: 3px; font-size: 13px; }
+.cond-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto 24px; grid-template-areas: 'left left remove' 'op op op' 'right case case';
+  gap: 6px; align-items: center; padding: 10px; border: 1px solid var(--stroke); border-radius: var(--radius-lg); background: var(--surface-subtle);
+}
+.cond-row > :nth-child(1) { grid-area: left; }
+.cond-row > :nth-child(2) { grid-area: op; }
+.cond-row > :nth-child(3) { grid-area: right; }
+.cond-row > :nth-child(4) { grid-area: case; margin: 0 0 0 4px; color: var(--text-2); font-size: 12px; }
+.cond-row > :nth-child(5) { grid-area: remove; }
+.cond-op { font-size: 13px; }
+.cond-group { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px dashed var(--stroke-strong); border-radius: var(--radius-lg); background: var(--surface); }
+.cond-group-header { display: flex; justify-content: space-between; align-items: center; }
+.cond-actions { display: flex; gap: 16px; }
+
+/* ---------- Decision branches ---------- */
+.branch-card { margin: 12px 0; padding: 12px; border: 1px solid var(--stroke); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-2); }
+.branch-header { display: flex; gap: 4px; align-items: center; margin-bottom: 10px; }
+.branch-header .input { font-weight: 600; }
+.branch-num { display: grid; place-items: center; flex: none; width: 22px; height: 22px; margin-right: 4px; border-radius: 50%; background: #8764b8; color: #fff; font: 600 12px/1 var(--font); }
+.branch-otherwise { display: flex; align-items: center; gap: 8px; background: var(--surface-subtle); box-shadow: none; border-style: dashed; color: var(--text-2); font-size: 13px; }
+.branch-otherwise .branch-num { background: var(--text-3); }
+.branch-otherwise strong { color: var(--text); }
+
+/* ---------- Key/value rows and assignments ---------- */
+.kv-row { display: grid; grid-template-columns: 36% 1fr 24px; gap: 6px; margin-bottom: 6px; align-items: start; }
+.kv-row .icon-btn, .assignment .icon-btn { margin-top: 4px; }
+.assignment { display: grid; grid-template-columns: 120px 14px 1fr 24px; gap: 6px; align-items: start; margin: 12px 0 8px; }
+.assignment > span { line-height: 32px; text-align: center; color: var(--text-2); }

@@ -1,3 +1,6 @@
+// Variable picker popover: a searchable tree of trigger, step and variable outputs with sample values.
+
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import type { VarNode } from '../model/variables';
@@ -21,7 +24,7 @@ function NodeRow({ node, depth, q, onPick }: { node: VarNode; depth: number; q: 
       <div className="var-row" style={{ paddingLeft: depth * 12 }}>
         {hasChildren ? (
           <button type="button" className="var-toggle" aria-label={expanded ? 'Collapse' : 'Expand'} onClick={() => setOpen(!expanded)}>
-            {expanded ? '▾' : '▸'}
+            {expanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
           </button>
         ) : (
           <span className="var-toggle" />
@@ -57,8 +60,8 @@ export function VariablePicker({ tree, onPick, onClose }: { tree: VarNode[]; onP
     <div className="var-picker" role="dialog" aria-label="Insert variable" onKeyDown={(e) => e.key === 'Escape' && onClose()}>
       <div className="var-picker-header">
         <input className="input" autoFocus placeholder="Search variables" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search variables" />
-        <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
-          ×
+        <button type="button" className="icon-btn icon-btn-sm" aria-label="Close" onClick={onClose}>
+          <X size={14} aria-hidden="true" />
         </button>
       </div>
       <ul className="var-tree">

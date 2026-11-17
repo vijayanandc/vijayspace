@@ -1,52 +1,81 @@
+// Right panel for the selected node: header, then Configure | Settings | Test tabs.
+
+import { useState } from 'react';
+
+import { type Tab, Tabs } from '../../../components/Tabs';
 import { useBuilder } from '../BuilderContext';
-import { stepLabel } from '../canvas/nodes';
+import { stepLabel, triggerLabel } from '../canvas/labels';
 import { TRIGGER_ID } from '../model/paths';
 import { findStep } from '../model/tree';
 import { ActionPanel } from './ActionPanel';
 import { DecisionPanel } from './DecisionPanel';
 import { DelayPanel, SetVariablePanel, StopPanel } from './LogicPanels';
-import { StepHeader } from './StepHeader';
+import { NodeIssues, PanelHeader } from './PanelHeader';
+import { StepSettings } from './StepSettings';
+import { TestStepBox } from './TestStepBox';
+import { TriggerSettings, TriggerTest } from './TriggerExtras';
 import { TriggerPanel } from './TriggerPanel';
+
+type PanelTab = 'configure' | 'settings' | 'test';
+
+const ALL_TABS: Tab<PanelTab>[] = [
+  { key: 'configure', label: 'Configure' },
+  { key: 'settings', label: 'Settings' },
+  { key: 'test', label: 'Test' },
+];
 
 export function SidePanel() {
   const { selected, def, manifests, select } = useBuilder();
-  if (!selected) {
-    return (
-      <aside className="side-panel side-panel-empty" aria-label="Step settings">
-        <p className="muted">Select the trigger or a step to configure it.</p>
-        <p className="muted small">Drag steps from the palette onto a + on the canvas. Drag a step onto another + to move it.</p>
-      </aside>
-    );
-  }
+  // The tab belongs to the node it was chosen on: selecting another node (or none) starts again on Configure.
+  // A key rename keeps the tab because StepSettings reports the new key before selecting it.
+  const [state, setState] = useState<{ id: string | null; tab: PanelTab }>({ id: selected, tab: 'configure' });
+  if (state.id !== selected) setState({ id: selected, tab: 'configure' });
+  if (!selected) return null;
+  const tab = state.id === selected ? state.tab : 'configure';
+  const setTab = (t: PanelTab) => setState({ id: selected, tab: t });
+  const close = () => select(null);
+
   if (selected === TRIGGER_ID) {
     return (
       <aside className="side-panel" aria-label="Trigger settings">
-        <div className="side-panel-title">
-          <h2>Trigger</h2>
-          <button type="button" className="icon-btn" aria-label="Close panel" onClick={() => select(null)}>
-            ×
-          </button>
+        <PanelHeader label={triggerLabel(def.trigger, manifests)} onClose={close} />
+        <Tabs label="Trigger panel" tabs={ALL_TABS} value={tab} onChange={setTab} className="panel-tabs" />
+        <div className="panel-scroll">
+          {tab === 'configure' && (
+            <>
+              <NodeIssues id={TRIGGER_ID} />
+              <TriggerPanel />
+            </>
+          )}
+          {tab === 'settings' && <TriggerSettings />}
+          {tab === 'test' && <TriggerTest />}
         </div>
-        <TriggerPanel />
       </aside>
     );
   }
+
   const step = findStep(def, selected);
   if (!step) return null;
+  const tabs = step.type === 'action' ? ALL_TABS : ALL_TABS.filter((t) => t.key !== 'test');
+  const shown = tabs.some((t) => t.key === tab) ? tab : 'configure';
   return (
     <aside className="side-panel" aria-label="Step settings">
-      <div className="side-panel-title">
-        <h2>{stepLabel(step, manifests).title}</h2>
-        <button type="button" className="icon-btn" aria-label="Close panel" onClick={() => select(null)}>
-          ×
-        </button>
+      <PanelHeader label={stepLabel(step, manifests)} step={step} onClose={close} />
+      <Tabs label="Step panel" tabs={tabs} value={shown} onChange={setTab} className="panel-tabs" />
+      <div className="panel-scroll">
+        {shown === 'configure' && (
+          <>
+            <NodeIssues id={step.key} />
+            {step.type === 'action' && <ActionPanel step={step} />}
+            {step.type === 'decision' && <DecisionPanel step={step} />}
+            {step.type === 'delay' && <DelayPanel step={step} />}
+            {step.type === 'set_variable' && <SetVariablePanel step={step} />}
+            {step.type === 'stop' && <StopPanel step={step} />}
+          </>
+        )}
+        {shown === 'settings' && <StepSettings key={step.key} step={step} onRenamed={(key) => setState({ id: key, tab: 'settings' })} />}
+        {shown === 'test' && step.type === 'action' && <TestStepBox stepKey={step.key} />}
       </div>
-      <StepHeader key={step.key} step={step} />
-      {step.type === 'action' && <ActionPanel step={step} />}
-      {step.type === 'decision' && <DecisionPanel step={step} />}
-      {step.type === 'delay' && <DelayPanel step={step} />}
-      {step.type === 'set_variable' && <SetVariablePanel step={step} />}
-      {step.type === 'stop' && <StopPanel step={step} />}
     </aside>
   );
 }

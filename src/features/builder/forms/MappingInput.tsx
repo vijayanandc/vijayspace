@@ -1,5 +1,6 @@
 // A text input (or textarea) that accepts `{{ variables }}` inserted from the picker.
 
+import { Braces } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import type { VarNode } from '../model/variables';
@@ -41,7 +42,7 @@ export function MappingInput({ id, value, onChange, variables, multiline, placeh
           <input id={id} ref={ref} className="input mapping-input" value={value} placeholder={placeholder} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value)} />
         )}
         <button type="button" className="map-btn" title="Insert variable" aria-label="Insert variable" onClick={() => setPicking(!picking)}>
-          {'{ }'}
+          <Braces size={14} aria-hidden="true" />
         </button>
       </div>
       {hasTokens && (

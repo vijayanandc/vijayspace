@@ -1,4 +1,7 @@
+// Execution history: filters in a command bar, a dense table of runs and "Load more".
+
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { ChevronRight, History, RefreshCw } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { errorMessage } from '../../api/client';
@@ -7,9 +10,19 @@ import { qk } from '../../api/hooks';
 import { Badge, StatusBadge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { EmptyState, ErrorBox, Loading } from '../../components/Empty';
-import { formatDuration, formatTime } from '../../lib/format';
+import { PageHeader } from '../../components/PageHeader';
+import { formatDuration, formatTime, relativeTime } from '../../lib/format';
+import { MODE_LABELS } from './labels';
 
-const STATUSES = ['', 'queued', 'running', 'waiting', 'succeeded', 'failed', 'cancelled'];
+const STATUSES: { value: string; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'succeeded', label: 'Succeeded' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'running', label: 'Running' },
+  { value: 'waiting', label: 'Waiting' },
+  { value: 'queued', label: 'Queued' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
 
 export function HistoryPage() {
   const [params, setParams] = useSearchParams();
@@ -31,80 +44,115 @@ export function HistoryPage() {
     setParams(next);
   };
   const items = executions.data?.pages.flatMap((p) => p.items) ?? [];
+  const count = `${items.length}${executions.hasNextPage ? '+' : ''} run${items.length === 1 ? '' : 's'}`;
+
   return (
     <div className="page">
-      <div className="page-header">
-        <h1>History</h1>
-      </div>
-      <div className="filters">
-        <label>
-          Flow{' '}
-          <select className="input" value={flowId} onChange={(e) => setFilter('flow_id', e.target.value)}>
-            <option value="">All flows</option>
-            {flows.data?.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Status{' '}
-          <select className="input" value={status} onChange={(e) => setFilter('status', e.target.value)}>
+      <section className="list-card">
+        <PageHeader
+          icon={History}
+          tone="#ca5010"
+          label="History"
+          title="Execution history"
+          meta={executions.data ? `${count} · Refreshes every 5 seconds` : 'Loading…'}
+          actions={
+            <Button icon={RefreshCw} onClick={() => void executions.refetch()} disabled={executions.isFetching}>
+              Refresh
+            </Button>
+          }
+        />
+        <div className="command-bar">
+          <label className="cb-field">
+            <span className="cb-label">Flow</span>
+            <select className="input" value={flowId} onChange={(e) => setFilter('flow_id', e.target.value)}>
+              <option value="">All flows</option>
+              {flows.data?.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="chip-group" role="group" aria-label="Status">
             {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s || 'Any status'}
-              </option>
+              <button key={s.value || 'all'} type="button" className={`chip${status === s.value ? ' chip-active' : ''}`} aria-pressed={status === s.value} onClick={() => setFilter('status', s.value)}>
+                {s.label}
+              </button>
             ))}
-          </select>
-        </label>
-        <span className="muted small">Refreshes every 5 s</span>
-      </div>
-      {executions.isLoading && <Loading />}
-      {executions.error && <ErrorBox message={errorMessage(executions.error)} />}
-      {!executions.isLoading && items.length === 0 && <EmptyState title="No executions">Runs appear here when flows are triggered or tested.</EmptyState>}
-      {items.length > 0 && (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Status</th>
-              <th>Flow</th>
-              <th>Mode</th>
-              <th>Started</th>
-              <th>Duration</th>
-              <th>Tasks</th>
-              <th>Error</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((e) => (
-              <tr key={e.id}>
-                <td>
-                  <Link to={`/history/${e.id}`}>
-                    <StatusBadge status={e.status} />
-                  </Link>
-                  {e.possible_duplicate && <Badge tone="warning" title="An action may have run twice after a crash">dup?</Badge>}
-                </td>
-                <td>
-                  <Link to={`/history/${e.id}`}>{e.flow_name}</Link>
-                </td>
-                <td>
-                  <Badge tone="muted">{e.mode}</Badge>
-                </td>
-                <td className="small">{formatTime(e.started_at ?? e.queued_at)}</td>
-                <td className="small">{formatDuration(e.started_at, e.finished_at)}</td>
-                <td>{e.task_count}</td>
-                <td className="small error-text">{e.error_message ? `${e.failed_step_key ? `${e.failed_step_key}: ` : ''}${e.error_message}` : ''}</td>
+          </div>
+        </div>
+        {executions.isLoading && <Loading />}
+        {executions.error && (
+          <div className="card-pad">
+            <ErrorBox message={errorMessage(executions.error)} />
+          </div>
+        )}
+        {!executions.isLoading && !executions.error && items.length === 0 && (
+          <EmptyState title="No runs yet">Runs appear here when flows are triggered, tested or run manually.</EmptyState>
+        )}
+        {items.length > 0 && (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Flow</th>
+                <th>Run type</th>
+                <th>Started</th>
+                <th className="num">Duration</th>
+                <th className="num">Tasks</th>
+                <th>Details</th>
+                <th className="col-actions">
+                  <span className="sr-only">Open</span>
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {executions.hasNextPage && (
-        <Button onClick={() => void executions.fetchNextPage()} disabled={executions.isFetchingNextPage}>
-          {executions.isFetchingNextPage ? 'Loading…' : 'Load more'}
-        </Button>
-      )}
+            </thead>
+            <tbody>
+              {items.map((e) => (
+                <tr key={e.id}>
+                  <td>
+                    <span className="pill-stack">
+                      <StatusBadge status={e.status} />
+                      {e.possible_duplicate && (
+                        <Badge tone="warning" title="An action may have run twice after a crash">
+                          Possible duplicate
+                        </Badge>
+                      )}
+                    </span>
+                  </td>
+                  <td className="col-name">
+                    <Link to={`/history/${e.id}`} className="row-title">
+                      {e.flow_name}
+                    </Link>
+                    <div className="row-sub mono">{e.id}</div>
+                  </td>
+                  <td>
+                    <Badge tone="muted">{MODE_LABELS[e.mode] ?? e.mode}</Badge>
+                  </td>
+                  <td title={formatTime(e.started_at ?? e.queued_at)}>
+                    {relativeTime(e.started_at ?? e.queued_at)}
+                    <div className="row-sub">{formatTime(e.started_at ?? e.queued_at)}</div>
+                  </td>
+                  <td className="num">{formatDuration(e.started_at, e.finished_at)}</td>
+                  <td className="num">{e.task_count}</td>
+                  <td className="cell-error">{e.error_message ? `${e.failed_step_key ? `${e.failed_step_key}: ` : ''}${e.error_message}` : ''}</td>
+                  <td className="col-actions">
+                    <Link to={`/history/${e.id}`} className="icon-btn icon-btn-sm" aria-label={`Open run of ${e.flow_name}`} title="Open run">
+                      <ChevronRight size={16} aria-hidden="true" />
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {executions.hasNextPage && (
+          <div className="table-foot">
+            <Button onClick={() => void executions.fetchNextPage()} disabled={executions.isFetchingNextPage}>
+              {executions.isFetchingNextPage ? 'Loading…' : 'Load more'}
+            </Button>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

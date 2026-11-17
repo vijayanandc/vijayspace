@@ -1,0 +1,96 @@
+/* Page-specific pieces: app icons and chains, flow cards, gallery, install wizard, execution record and timeline. */
+
+/* ---------- App icon tiles ---------- */
+.app-icon {
+  display: inline-grid; place-items: center; flex: none; color: #fff;
+  font-family: var(--font); font-weight: 700; letter-spacing: -0.02em; line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08); user-select: none;
+}
+.app-chain { display: inline-flex; align-items: center; gap: 4px; }
+.app-chain-arrow { color: var(--text-3); }
+.app-chain-more { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px; border-radius: 4px; background: var(--surface-sunken); color: var(--text-2); font: 600 11px/1 var(--font); }
+
+/* ---------- Flow cards (grid view) ---------- */
+.flow-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.flow-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-4); transition: box-shadow 0.15s; min-width: 0; }
+.flow-card:hover { box-shadow: var(--shadow-8); }
+.flow-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.flow-card-title { font-size: 15px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-card-desc { margin: 0; min-height: 32px; color: var(--text-2); font-size: 12px; line-height: 16px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.flow-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--surface-sunken); }
+
+/* ---------- Gallery ---------- */
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.recipe-card { display: flex; flex-direction: column; padding: 16px; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-4); transition: box-shadow 0.15s, transform 0.15s; min-width: 0; }
+.recipe-card:hover { box-shadow: var(--shadow-16); transform: translateY(-1px); }
+.recipe-apps { display: flex; align-items: center; gap: 8px; }
+.recipe-arrow { color: var(--text-3); }
+.recipe-app-names { margin-top: 10px; color: var(--text-2); font: 600 11px/16px var(--font); text-transform: uppercase; letter-spacing: 0.04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recipe-title { margin-top: 4px; font-size: 15px; line-height: 21px; }
+.recipe-desc { margin: 6px 0 14px; color: var(--text-2); font-size: 13px; line-height: 19px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.recipe-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--surface-sunken); }
+.recipe-count { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 13px; }
+
+/* ---------- Install wizard ---------- */
+.wizard-summary { display: flex; align-items: center; gap: 16px; padding: 12px 16px; margin-bottom: 16px; border-radius: var(--radius-lg); background: var(--surface-subtle); border: 1px solid var(--stroke); }
+.wizard-summary p { margin: 0; color: var(--text-2); font-size: 13px; line-height: 18px; }
+.wizard-step { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
+.wizard-num { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 12px; }
+.slot-list { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 8px; }
+.slot { padding: 12px 14px; border: 1px solid var(--stroke); border-radius: var(--radius-lg); }
+.slot-done { border-color: var(--success-stroke); background: #fbfefb; }
+.slot-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.slot-check { margin-left: auto; color: var(--success); }
+.slot .field { margin-bottom: 0; }
+.wizard-flows { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.wizard-flows li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 18px; }
+.wizard-flows svg { color: var(--brand); margin-top: 1px; }
+
+/* ---------- Execution record ---------- */
+.record-head { display: flex; align-items: center; gap: 12px; padding: 16px; }
+.record-title { gap: 12px; }
+.highlights { display: flex; flex-wrap: wrap; row-gap: 8px; margin: 0; padding: 12px 16px; border-top: 1px solid var(--stroke); background: var(--surface-subtle); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.highlight { flex: 1 1 auto; min-width: 0; padding: 2px 16px 2px 0; }
+.highlight + .highlight { padding-left: 16px; border-left: 1px solid var(--stroke); }
+.highlight dt { color: var(--text-2); font-size: 12px; line-height: 16px; }
+.highlight dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.exec-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 16px; align-items: start; }
+
+/* ---------- Timeline ---------- */
+.timeline { list-style: none; margin: 0; padding: 0; }
+.tl-item { position: relative; display: flex; gap: 12px; padding-bottom: 12px; }
+.tl-item:not(:last-child)::before { content: ''; position: absolute; left: 13px; top: 30px; bottom: 0; width: 2px; background: var(--stroke); }
+.tl-icon { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--surface); color: var(--text-3); }
+.tl-succeeded .tl-icon { color: var(--success); }
+.tl-failed .tl-icon { color: var(--danger); }
+.tl-running .tl-icon { color: var(--brand); }
+.tl-retry_scheduled .tl-icon, .tl-unknown_outcome .tl-icon { color: var(--warning); }
+.tl-card { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--stroke); border-radius: var(--radius-lg); background: var(--surface); }
+.tl-failed .tl-card { border-color: var(--danger-stroke); }
+.tl-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tl-key { font-size: 13px; }
+.tl-kind { color: var(--text-2); font-size: 12px; text-transform: capitalize; }
+.tl-time { margin-left: auto; color: var(--text-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.tl-run { margin-top: 6px; }
+.tl-run + .tl-run { padding-top: 8px; border-top: 1px dashed var(--stroke); }
+.tl-run-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; line-height: 16px; margin-bottom: 4px; }
+.tl-attempt { font-weight: 600; }
+
+/* ---------- JSON view ---------- */
+.json-view { margin: 6px 0; border: 1px solid var(--stroke); border-radius: var(--radius); background: var(--surface); }
+.json-view-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 8px 0 4px; min-height: 30px; }
+.json-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px; border: none; background: none; cursor: pointer; color: var(--text); font: 600 13px/18px var(--font); }
+.json-toggle svg { color: var(--text-2); }
+.json-summary { color: var(--text-3); font-weight: 400; font-size: 12px; }
+.json-copy { font-size: 12px; }
+.json-view-body { max-height: 360px; overflow: auto; padding: 8px 12px; border-top: 1px solid var(--stroke); background: #fbfbfb; color: #1f3a5f; font: 12px/18px var(--mono); border-radius: 0 0 var(--radius) var(--radius); }
+
+/* ---------- OAuth result ---------- */
+.result-card { align-self: center; display: flex; flex-direction: column; align-items: center; gap: 8px; width: min(480px, 100%); margin-top: 40px; padding: 32px; text-align: center; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-8); }
+.result-ok svg { color: var(--success); }
+.result-error svg { color: var(--danger); }
+.result-card p { color: var(--text-2); }
+
+@media (max-width: 1200px) {
+  .exec-grid { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,3 +1,7 @@
+// Key → value rows (headers, query parameters, free-form objects).
+
+import { X } from 'lucide-react';
+
 import type { JsonObject, JsonValue } from '../../../api/types';
 import type { VarNode } from '../model/variables';
 import { MappingInput } from './MappingInput';
@@ -32,8 +36,8 @@ export function KeyValueInput({ value, onChange, variables, label }: { value: Js
         <div className="kv-row" key={i}>
           <input className="input kv-key" aria-label={`${label} key ${i + 1}`} value={k} onChange={(e) => emit(pairs.map((p, j) => (j === i ? [e.target.value, p[1]] : p)))} />
           <MappingInput ariaLabel={`${label} value ${i + 1}`} value={v} variables={variables} onChange={(nv) => emit(pairs.map((p, j) => (j === i ? [p[0], nv] : p)))} />
-          <button type="button" className="icon-btn" aria-label={`Remove ${label} row ${i + 1}`} onClick={() => emit(pairs.filter((_, j) => j !== i))}>
-            ×
+          <button type="button" className="icon-btn icon-btn-sm" aria-label={`Remove ${label} row ${i + 1}`} onClick={() => emit(pairs.filter((_, j) => j !== i))}>
+            <X size={14} aria-hidden="true" />
           </button>
         </div>
       ))}

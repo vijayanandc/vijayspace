@@ -1,18 +1,74 @@
-// The flow canvas: React Flow rendering of the layout computed from the definition.
+// The flow canvas: React Flow rendering of the layout computed from the definition (dotted background,
+// zoom controls, drop targets highlighted while a palette item or step is being dragged).
 
-import { Background, Controls, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
-import { type KeyboardEvent, useEffect, useMemo, useRef } from 'react';
+import { Background, BackgroundVariant, Controls, Panel, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
+import { MousePointerClick } from 'lucide-react';
+import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef } from 'react';
 
 import { useBuilder } from '../BuilderContext';
-import { layoutDefinition } from '../model/layout';
+import { isWeftDrag } from '../model/factories';
+import { layoutDefinition, stepNodeId } from '../model/layout';
 import { TRIGGER_ID } from '../model/paths';
+import { edgeTypes } from './edges';
 import { nodeTypes } from './nodes';
+import { CARD_WIDTH, toViewEdges, toViewNodes } from './viewLayout';
+
+/** Adds `canvas-dragging` to the canvas while a Weft drag is in progress (no re-render needed). */
+function useDragHighlight(ref: RefObject<HTMLDivElement>) {
+  useEffect(() => {
+    const on = (e: DragEvent) => {
+      if (e.dataTransfer && isWeftDrag(e.dataTransfer)) ref.current?.classList.add('canvas-dragging');
+    };
+    const off = () => ref.current?.classList.remove('canvas-dragging');
+    document.addEventListener('dragstart', on);
+    document.addEventListener('dragend', off);
+    document.addEventListener('drop', off);
+    return () => {
+      document.removeEventListener('dragstart', on);
+      document.removeEventListener('dragend', off);
+      document.removeEventListener('drop', off);
+    };
+  }, [ref]);
+}
+
+/** Pans (without zooming) so the selected card is not hidden behind the side panel or the canvas edges. */
+function useKeepSelectionVisible(selected: string | null, ref: RefObject<HTMLDivElement>) {
+  const { getNode, getViewport, setViewport } = useReactFlow();
+  useEffect(() => {
+    if (!selected) return undefined;
+    const timer = window.setTimeout(() => {
+      const node = getNode(selected === TRIGGER_ID ? TRIGGER_ID : stepNodeId(selected));
+      const el = ref.current;
+      if (!node || !el) return;
+      const { x, y, zoom } = getViewport();
+      const left = node.position.x * zoom + x;
+      const top = node.position.y * zoom + y;
+      const right = left + (node.measured?.width ?? CARD_WIDTH) * zoom;
+      const bottom = top + (node.measured?.height ?? 64) * zoom;
+      const margin = 32;
+      let dx = 0;
+      let dy = 0;
+      if (right > el.clientWidth - margin) dx = el.clientWidth - margin - right;
+      if (left + dx < margin) dx = margin - left;
+      if (bottom > el.clientHeight - margin) dy = el.clientHeight - margin - bottom;
+      if (top + dy < margin) dy = margin - top;
+      if (dx !== 0 || dy !== 0) void setViewport({ x: x + dx, y: y + dy, zoom }, { duration: 200 });
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [selected, ref, getNode, getViewport, setViewport]);
+}
 
 function Canvas() {
   const { def, select, selected, deleteStep, setActivePoint } = useBuilder();
-  const { nodes, edges } = useMemo(() => layoutDefinition(def), [def]);
+  const { nodes, edges } = useMemo(() => {
+    const model = layoutDefinition(def);
+    return { nodes: toViewNodes(model.nodes), edges: toViewEdges(model.edges) };
+  }, [def]);
   const { fitView } = useReactFlow();
   const nodeCount = useRef(nodes.length);
+  const ref = useRef<HTMLDivElement>(null);
+  useDragHighlight(ref);
+  useKeepSelectionVisible(selected, ref);
 
   useEffect(() => {
     // Re-fit when steps are added or removed anywhere (including inside branches),
@@ -38,11 +94,12 @@ function Canvas() {
   };
 
   return (
-    <div className="canvas" onKeyDown={onKeyDown} tabIndex={-1}>
+    <div className="canvas" ref={ref} onKeyDown={onKeyDown} tabIndex={-1}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable
@@ -61,8 +118,14 @@ function Canvas() {
         }}
         proOptions={{ hideAttribution: true }}
       >
-        <Background gap={20} />
-        <Controls showInteractive={false} />
+        <Background variant={BackgroundVariant.Dots} gap={18} size={1.4} color="#c2c2c2" />
+        {def.steps.length === 0 && (
+          <Panel position="top-center" className="canvas-hint">
+            <MousePointerClick size={16} aria-hidden="true" />
+            Drag an app action or a logic step onto the <strong>+</strong> to add your first step.
+          </Panel>
+        )}
+        <Controls showInteractive={false} position="bottom-right" />
       </ReactFlow>
     </div>
   );

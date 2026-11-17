@@ -1,5 +1,6 @@
 // Visual condition editor: AND/OR rows with one level of sub-groups (JSON fallback otherwise).
 
+import { X } from 'lucide-react';
 import { useState } from 'react';
 
 import type { Condition, JsonValue, Op } from '../../../api/types';
@@ -35,8 +36,8 @@ function RowEditor({ row, onChange, onRemove, variables, n }: { row: Row; onChan
         <input type="checkbox" checked={row.case_insensitive} onChange={(e) => onChange({ ...row, case_insensitive: e.target.checked })} />
         Aa
       </label>
-      <button type="button" className="icon-btn" aria-label={`Remove condition ${n}`} onClick={onRemove}>
-        ×
+      <button type="button" className="icon-btn icon-btn-sm" aria-label={`Remove condition ${n}`} title="Remove condition" onClick={onRemove}>
+        <X size={14} aria-hidden="true" />
       </button>
     </div>
   );

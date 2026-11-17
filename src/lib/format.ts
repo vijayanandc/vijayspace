@@ -1,4 +1,4 @@
-// Display helpers.
+// Display helpers: times, durations and relative phrases.
 
 export function formatTime(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -31,4 +31,15 @@ export function relativeTime(iso: string | null | undefined, now: number = Date.
 
 export function isTerminal(status: string): boolean {
   return status === 'succeeded' || status === 'failed' || status === 'cancelled';
+}
+
+/** Long relative phrase for page meta lines ("Updated a few seconds ago"). */
+export function updatedAgo(at: number, now: number = Date.now()): string {
+  const s = Math.max(0, Math.round((now - at) / 1000));
+  if (s < 45) return 'a few seconds ago';
+  if (s < 90) return 'a minute ago';
+  if (s < 2700) return `${Math.round(s / 60)} minutes ago`;
+  if (s < 5400) return 'an hour ago';
+  if (s < 86_400) return `${Math.round(s / 3600)} hours ago`;
+  return `${Math.round(s / 86_400)} days ago`;
 }

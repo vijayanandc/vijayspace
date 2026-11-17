@@ -7,7 +7,7 @@ The React web client for Weft, a Zoho Flow–style integration platform. This is
 - **Plan:** the backend's `docs/plan/` (doc 10 covers client UX intent; doc 13 is the current MVP).
 
 ## Stack
-React 18 + TypeScript (strict, `noUncheckedIndexedAccess`), Vite, React Router 6, TanStack Query 5, React Flow (`@xyflow/react` 12) for the canvas, plain CSS with variables (`src/styles.css`). Tests: Vitest + Testing Library (jsdom).
+React 18 + TypeScript (strict, `noUncheckedIndexedAccess`), Vite, React Router 6, TanStack Query 5, React Flow (`@xyflow/react` 12) for the canvas, `lucide-react` icons, plain CSS with design tokens as variables (`src/styles.css` imports one file per area from `src/styles/`). Tests: Vitest + Testing Library (jsdom).
 
 ## Commands
 ```
@@ -22,8 +22,9 @@ npm run check      # typecheck + lint + tests + build — MUST pass before you f
 | Call an endpoint | `src/api/endpoints.ts` (one function per contract row), `src/api/client.ts` (fetch wrapper, `ApiError`) |
 | Shared queries | `src/api/hooks.ts` (`qk` query keys, connectors, connections, org) |
 | Contract types | `src/api/types.ts` — change only when the backend contract changes |
-| UI primitives | `src/components/` (Button, Dialog, Field, Badge, JsonView, Tabs, Toast, Empty) |
-| Flow builder | `src/features/builder/` — `model/` (pure: tree ops, keys, layout, variables, conditions, schedule, history), `canvas/` (React Flow nodes), `panel/` (side panels), `forms/` (dynamic FieldSpec forms, mapping input, variable picker), `condition/` |
+| UI primitives | `src/components/` (Button, Dialog, Field, Badge, JsonView, Tabs, Toast, Empty, MessageBar, PageHeader, SearchBox, Switch, Popover/OverflowMenu, Table sort header, AppIcon monogram tiles) |
+| App shell | `src/features/shell/` (global header, global search, collapsible nav rail) |
+| Flow builder | `src/features/builder/` — `model/` (pure: tree ops, keys, layout, variables, conditions, schedule, history), `canvas/` (React Flow nodes and edges; `viewLayout.ts` spaces the model layout out for the wider cards, presentation only), `panel/` (Configure / Settings / Test tabs) (side panels), `forms/` (dynamic FieldSpec forms, mapping input, variable picker), `condition/` |
 | Flows list / history / connections / recipes | `src/features/{flows,history,connections,recipes}/` |
 
 ## Rules

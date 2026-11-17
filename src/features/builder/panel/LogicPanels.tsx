@@ -1,3 +1,7 @@
+// "Configure" tabs of the delay, set-variable and stop steps.
+
+import { Plus, X } from 'lucide-react';
+
 import type { DelayStep, SetVariableStep, StopStep } from '../../../api/types';
 import { Field } from '../../../components/Field';
 import { useBuilder } from '../BuilderContext';
@@ -58,7 +62,7 @@ export function DelayPanel({ step }: { step: DelayStep }) {
           {(id) => <MappingInput id={id} value={step.until ?? ''} onChange={(until) => set({ ...base, until }, `delay:${step.key}`)} variables={variables} placeholder="{{ trigger.body.due_at }}" />}
         </Field>
       )}
-      <p className="muted small">Delays are durable: the run sleeps without holding a worker, up to 30 days.</p>
+      <p className="field-help">Delays are durable: the run sleeps without holding a worker, up to 30 days.</p>
     </div>
   );
 }
@@ -85,15 +89,16 @@ export function SetVariablePanel({ step }: { step: SetVariableStep }) {
             onChange={(value) => setAssignments(step.assignments.map((x, j) => (j === i ? { ...x, value } : x)), `var:${step.key}`)}
             variables={variables}
           />
-          <button type="button" className="icon-btn" aria-label={`Remove variable ${i + 1}`} onClick={() => setAssignments(step.assignments.filter((_, j) => j !== i))}>
-            ×
+          <button type="button" className="icon-btn icon-btn-sm" aria-label={`Remove variable ${i + 1}`} onClick={() => setAssignments(step.assignments.filter((_, j) => j !== i))}>
+            <X size={14} aria-hidden="true" />
           </button>
         </div>
       ))}
-      <button type="button" className="link-btn" onClick={() => setAssignments([...step.assignments, { name: `value_${step.assignments.length + 1}`, value: '' }])}>
-        + Add variable
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAssignments([...step.assignments, { name: `value_${step.assignments.length + 1}`, value: '' }])}>
+        <Plus size={14} aria-hidden="true" />
+        Add variable
       </button>
-      <p className="muted small">Later steps read these as {'{{ vars.<name> }}'}.</p>
+      <p className="field-help">Later steps read these as {'{{ vars.<name> }}'}.</p>
     </div>
   );
 }

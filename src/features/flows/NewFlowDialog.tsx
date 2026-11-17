@@ -1,4 +1,7 @@
+// "New flow" dialog: a name and the trigger, chosen from four tiles.
+
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { CircleCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -6,6 +9,7 @@ import { errorMessage } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
 import { qk } from '../../api/hooks';
 import type { TriggerType } from '../../api/types';
+import { AppIcon } from '../../components/AppIcon';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { ErrorBox } from '../../components/Empty';
@@ -35,6 +39,7 @@ export function NewFlowDialog({ open, onClose }: { open: boolean; onClose: () =>
   return (
     <Dialog
       title="New flow"
+      subtitle="Name your flow and choose what starts it. You can change the trigger later."
       open={open}
       onClose={onClose}
       footer={
@@ -47,15 +52,30 @@ export function NewFlowDialog({ open, onClose }: { open: boolean; onClose: () =>
       }
     >
       <Field label="Name" required>
-        {(id) => <input id={id} className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Deal won → FSM request" />}
+        {(id) => (
+          <input
+            id={id}
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && name.trim() && !create.isPending && create.mutate()}
+            placeholder="e.g. Deal won → FSM request"
+          />
+        )}
       </Field>
       <fieldset className="choice-grid">
-        <legend className="field-label">Trigger</legend>
+        <legend className="field-label">
+          Trigger<span className="required" aria-hidden="true"> *</span>
+        </legend>
         {TRIGGER_CHOICES.map((c) => (
           <label key={c.type} className={`choice${trigger === c.type ? ' choice-active' : ''}`}>
             <input type="radio" name="trigger" value={c.type} checked={trigger === c.type} onChange={() => setTrigger(c.type)} />
-            <strong>{c.label}</strong>
-            <span className="muted small">{c.description}</span>
+            <AppIcon app={`trigger:${c.type}`} size={32} decorative />
+            <span className="choice-text">
+              <strong>{c.label}</strong>
+              <span className="choice-desc">{c.description}</span>
+            </span>
+            {trigger === c.type && <CircleCheck size={18} className="choice-check" aria-hidden="true" />}
           </label>
         ))}
       </fieldset>

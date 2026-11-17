@@ -1,17 +1,22 @@
+// Execution detail (Lightning record page): header with actions, highlights panel, step timeline, trigger data.
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Activity, ChevronRight, ExternalLink, RotateCcw, Square, StepForward } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { errorMessage } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
 import { qk } from '../../api/hooks';
 import type { ExecutionDetail } from '../../api/types';
-import { Badge, StatusBadge } from '../../components/Badge';
-import { Button } from '../../components/Button';
+import { StatusBadge } from '../../components/Badge';
+import { Button, LinkButton } from '../../components/Button';
 import { ErrorBox, Loading } from '../../components/Empty';
 import { JsonView } from '../../components/JsonView';
+import { MessageBar } from '../../components/MessageBar';
 import { useToast } from '../../components/Toast';
 import { formatDuration, formatTime, isTerminal } from '../../lib/format';
-import { describeRun, groupRuns } from './timeline';
+import { MODE_LABELS } from './labels';
+import { StepTimeline } from './StepTimeline';
 
 export function ExecutionPage() {
   const { executionId = '' } = useParams();
@@ -21,9 +26,36 @@ export function ExecutionPage() {
     refetchInterval: (q) => (q.state.data && isTerminal(q.state.data.status) ? false : 2000),
   });
   if (exec.isLoading) return <Loading />;
-  if (exec.error) return <ErrorBox message={errorMessage(exec.error)} />;
+  if (exec.error) {
+    return (
+      <div className="page">
+        <ErrorBox message={errorMessage(exec.error)} />
+      </div>
+    );
+  }
   if (!exec.data) return null;
   return <ExecutionView e={exec.data} />;
+}
+
+function Highlights({ e }: { e: ExecutionDetail }) {
+  const facts: [string, string][] = [
+    ['Started', formatTime(e.started_at ?? e.queued_at)],
+    ['Finished', formatTime(e.finished_at)],
+    ['Duration', formatDuration(e.started_at, e.finished_at)],
+    ['Tasks', String(e.task_count)],
+    ['Trigger', MODE_LABELS[e.mode] ?? e.mode],
+  ];
+  if (e.waiting_until) facts.push(['Waiting until', formatTime(e.waiting_until)]);
+  return (
+    <dl className="highlights">
+      {facts.map(([label, value]) => (
+        <div key={label} className="highlight">
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 function ExecutionView({ e }: { e: ExecutionDetail }) {
@@ -38,88 +70,69 @@ function ExecutionView({ e }: { e: ExecutionDetail }) {
     onSuccess: (res) => navigate(`/history/${res.execution_id}`),
     onError: (err) => toast.show('error', errorMessage(err)),
   });
-  const groups = groupRuns(e.steps);
   return (
     <div className="page">
-      <div className="page-header">
-        <div>
-          <Link to="/history" className="muted">
-            ← History
-          </Link>
-          <h1>
-            {e.flow_name} <StatusBadge status={e.status} /> <Badge tone="muted">{e.mode}</Badge>
-          </h1>
-          <div className="muted small mono">{e.id}</div>
+      <nav className="breadcrumb" aria-label="Breadcrumb">
+        <Link to="/history">History</Link>
+        <ChevronRight size={12} aria-hidden="true" />
+        <span className="mono">{e.id}</span>
+      </nav>
+      <section className="record-card">
+        <div className="record-head">
+          <span className="page-header-icon" style={{ background: '#ca5010' }} aria-hidden="true">
+            <Activity size={22} />
+          </span>
+          <div className="page-header-text">
+            <div className="page-header-label">Execution</div>
+            <h1 className="page-header-title record-title">
+              {e.flow_name} <StatusBadge status={e.status} />
+            </h1>
+          </div>
+          <div className="page-header-actions">
+            <LinkButton to={`/flows/${e.flow_id}`} icon={ExternalLink}>
+              Open flow
+            </LinkButton>
+            {e.status === 'failed' && (
+              <Button icon={StepForward} onClick={() => retry.mutate()} disabled={retry.isPending} title="Continue from the failed step on the same version">
+                Retry from failed step
+              </Button>
+            )}
+            {isTerminal(e.status) && (
+              <Button icon={RotateCcw} onClick={() => rerun.mutate()} disabled={rerun.isPending} title="Start again with the same trigger data on the latest published version">
+                Re-run
+              </Button>
+            )}
+            {!isTerminal(e.status) && (
+              <Button variant="danger" icon={Square} onClick={() => cancel.mutate()} disabled={cancel.isPending}>
+                Cancel run
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="actions">
-          <Link to={`/flows/${e.flow_id}`}>Open flow</Link>
-          {e.status === 'failed' && (
-            <Button onClick={() => retry.mutate()} disabled={retry.isPending} title="Continue from the failed step on the same version">
-              Retry from failed step
-            </Button>
-          )}
-          {isTerminal(e.status) && (
-            <Button onClick={() => rerun.mutate()} disabled={rerun.isPending} title="Start again with the same trigger data on the latest published version">
-              Re-run
-            </Button>
-          )}
-          {!isTerminal(e.status) && (
-            <Button variant="danger" onClick={() => cancel.mutate()} disabled={cancel.isPending}>
-              Cancel
-            </Button>
-          )}
-        </div>
-      </div>
-      <dl className="facts">
-        <dt>Queued</dt>
-        <dd>{formatTime(e.queued_at)}</dd>
-        <dt>Started</dt>
-        <dd>{formatTime(e.started_at)}</dd>
-        <dt>Finished</dt>
-        <dd>{formatTime(e.finished_at)}</dd>
-        <dt>Duration</dt>
-        <dd>{formatDuration(e.started_at, e.finished_at)}</dd>
-        <dt>Tasks</dt>
-        <dd>{e.task_count}</dd>
-        {e.waiting_until && (
-          <>
-            <dt>Waiting until</dt>
-            <dd>{formatTime(e.waiting_until)}</dd>
-          </>
-        )}
-      </dl>
-      {e.possible_duplicate && <div className="banner banner-warning">A worker stopped mid-step; one action may have run twice. Check the target app.</div>}
+        <Highlights e={e} />
+      </section>
+      {e.possible_duplicate && <MessageBar intent="warning">A worker stopped mid-step; one action may have run twice. Check the target app.</MessageBar>}
       {e.error_message && (
-        <div className="error-box" role="alert">
-          <strong>{e.error_code}</strong> {e.failed_step_key && <>in <span className="mono">{e.failed_step_key}</span>: </>}
+        <MessageBar intent="error" role="alert" title={e.error_code ?? 'Error'}>
+          {e.failed_step_key && (
+            <>
+              in <span className="mono">{e.failed_step_key}</span>:{' '}
+            </>
+          )}
           {e.error_message}
-        </div>
+        </MessageBar>
       )}
-      <JsonView label="Trigger data" value={e.trigger_data} collapsed />
-      <h2>Steps</h2>
-      {groups.length === 0 && <p className="muted">No steps have run yet.</p>}
-      <ol className="timeline">
-        {groups.map((g) => (
-          <li key={g.stepKey} className={`timeline-item timeline-${g.status}`}>
-            <div className="timeline-head">
-              <StatusBadge status={g.status} /> <strong className="mono">{g.stepKey}</strong> <span className="muted small">{g.kind}</span>
-              {g.runs.length > 1 && <Badge tone="muted">{g.runs.length} attempts</Badge>}
-            </div>
-            {g.runs.map((run) => (
-              <div key={run.id} className="timeline-run">
-                <div className="small">
-                  {g.runs.length > 1 && <>Attempt {run.attempt} · </>}
-                  <StatusBadge status={run.status} /> {describeRun(run)} <span className="muted">{formatTime(run.started_at)} · {formatDuration(run.started_at, run.finished_at)}</span>
-                </div>
-                {run.warnings.length > 0 && <div className="warning-text small">⚠ {run.warnings.join('; ')}</div>}
-                {run.input !== null && <JsonView label="Input" value={run.input} collapsed />}
-                {run.output !== null && <JsonView label="Output" value={run.output} collapsed={run.kind !== 'action'} />}
-                {run.error !== null && <JsonView label="Error" value={run.error} />}
-              </div>
-            ))}
-          </li>
-        ))}
-      </ol>
+      <div className="exec-grid">
+        <section className="card">
+          <h2 className="card-title">Steps · {new Set(e.steps.map((s) => s.step_key)).size}</h2>
+          <StepTimeline steps={e.steps} />
+        </section>
+        <section className="card">
+          <h2 className="card-title">Trigger data</h2>
+          <JsonView label="Payload" value={e.trigger_data} />
+          <p className="field-help">Queued {formatTime(e.queued_at)}</p>
+        </section>
+      </div>
     </div>
   );
 }

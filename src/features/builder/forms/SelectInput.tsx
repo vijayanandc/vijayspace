@@ -1,6 +1,7 @@
 // Select with static or dynamic (`options_from`) options; mappable selects can switch to a custom value.
 
 import { useQuery } from '@tanstack/react-query';
+import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
 import { errorMessage } from '../../../api/client';
@@ -81,7 +82,7 @@ export function SelectInput({ id, field, value, onChange, env, siblings }: Props
         </select>
         {field.options_from && (
           <button type="button" className="icon-btn" title="Reload options" aria-label="Reload options" onClick={() => void dynamic.refetch()}>
-            ↻
+            <RefreshCw size={14} className={dynamic.isFetching ? 'spin' : undefined} aria-hidden="true" />
           </button>
         )}
       </div>

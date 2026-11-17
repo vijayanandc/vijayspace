@@ -1,11 +1,24 @@
+// Fluent-style tab list with a brand indicator under the selected tab.
+
 export interface Tab<K extends string> {
   key: K;
   label: string;
+  /** Optional count shown after the label. */
+  count?: number;
 }
 
-export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: Tab<K>[]; value: K; onChange: (k: K) => void }) {
+interface Props<K extends string> {
+  tabs: Tab<K>[];
+  value: K;
+  onChange: (k: K) => void;
+  className?: string;
+  /** Accessible name of the tab list. */
+  label?: string;
+}
+
+export function Tabs<K extends string>({ tabs, value, onChange, className, label }: Props<K>) {
   return (
-    <div className="tabs" role="tablist">
+    <div className={`tabs${className ? ` ${className}` : ''}`} role="tablist" aria-label={label}>
       {tabs.map((t) => (
         <button
           key={t.key}
@@ -16,6 +29,7 @@ export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: Tab<K>
           onClick={() => onChange(t.key)}
         >
           {t.label}
+          {t.count !== undefined && <span className="tab-count">{t.count}</span>}
         </button>
       ))}
     </div>

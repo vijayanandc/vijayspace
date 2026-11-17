@@ -1,4 +1,4 @@
-// The flow builder: palette | canvas | side panel, with autosave and undo/redo.
+// The flow builder: top bar, then palette | canvas | side panel, with autosave and undo/redo.
 
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
@@ -10,6 +10,7 @@ import { qk, useConnectors } from '../../api/hooks';
 import type { ConnectorManifest, Flow, FlowDefinition } from '../../api/types';
 import { Button } from '../../components/Button';
 import { ErrorBox, Loading } from '../../components/Empty';
+import { MessageBar } from '../../components/MessageBar';
 import { BuilderContext, type BuilderCtx } from './BuilderContext';
 import { FlowCanvas } from './canvas/FlowCanvas';
 import { IssuesPanel } from './IssuesPanel';
@@ -26,8 +27,14 @@ export function BuilderPage() {
   const { flowId = '' } = useParams();
   const flowQ = useQuery({ queryKey: qk.flow(flowId), queryFn: () => endpoints.flow(flowId) });
   const connectors = useConnectors();
-  if (flowQ.isLoading || connectors.isLoading) return <Loading />;
-  if (flowQ.error) return <ErrorBox message={errorMessage(flowQ.error)} />;
+  if (flowQ.isLoading || connectors.isLoading) return <Loading label="Opening the builder…" />;
+  if (flowQ.error) {
+    return (
+      <div className="page">
+        <ErrorBox message={errorMessage(flowQ.error)} />
+      </div>
+    );
+  }
   if (!flowQ.data) return null;
   return <LoadedBuilder key={flowId} flow={flowQ.data} manifests={connectors.data ?? []} refetch={() => flowQ.refetch()} />;
 }
@@ -121,7 +128,8 @@ function LoadedBuilder({ flow, manifests, refetch }: LoadedProps) {
           canRedo={history.future.length > 0}
           onUndo={() => dispatch({ type: 'undo' })}
           onRedo={() => dispatch({ type: 'redo' })}
-          issueCount={autosave.issues.length}
+          issues={autosave.issues}
+          issuesOpen={showIssues}
           onToggleIssues={() => setShowIssues((v) => !v)}
           onIssues={(list) => {
             autosave.setIssues(list);
@@ -129,17 +137,18 @@ function LoadedBuilder({ flow, manifests, refetch }: LoadedProps) {
           }}
         />
         {autosave.status === 'conflict' && (
-          <div className="banner banner-warning" role="alert">
+          <MessageBar intent="warning" role="alert" className="builder-banner" actions={<Button size="sm" onClick={() => void reload()}>Reload the latest version</Button>}>
             This flow was changed somewhere else, so your latest edits were not saved.
-            <Button onClick={() => void reload()}>Reload the latest version</Button>
-          </div>
+          </MessageBar>
         )}
         <div className="builder-body">
           <Palette />
-          <FlowCanvas />
+          <div className="builder-stage">
+            <FlowCanvas />
+            {showIssues && <IssuesPanel issues={autosave.issues} onClose={() => setShowIssues(false)} />}
+          </div>
           <SidePanel />
         </div>
-        {showIssues && <IssuesPanel issues={autosave.issues} onClose={() => setShowIssues(false)} />}
       </div>
     </BuilderContext.Provider>
   );
