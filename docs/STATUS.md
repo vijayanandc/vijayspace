@@ -25,7 +25,7 @@ What is built on the `backend` and `client` branches, how it deviates from the p
 
 ### Integrations (doc 13)
 - Connectors: core HTTP, Formatter (11 actions), Email, **Zoho CRM**, **Appblocks** (FSM, HMS and any Appblocks app) and **Autodesk Forma**.
-- **Sync layer** (`core.sync`). If a sync step is re-pointed at a different target connection or module, its existing links are ignored, so without a match field the records are created again: `upsert_linked_record` (lease, lookups through links, hash-skip of unchanged data, RecoverCreate by match field), `resolve_link`, `find_linked_record`, `save_link`, backfill, plus pickers for the builder.
+- **Sync layer** (`core.sync`): `upsert_linked_record` (lease, lookups through links, hash-skip of unchanged data, RecoverCreate by match field), `resolve_link`, `find_linked_record`, `save_link`, backfill, plus pickers for the builder. If a sync step is re-pointed at a different target connection or module, its existing links are ignored, so without a match field the records are created again.
 - **Recipes R1–R9**, installed as drafts once every connection slot has been checked:
   - R1–R5: Zoho CRM ↔ FSM;
   - R6: HMS → CRM, consent-gated and limited to allowlisted fields;
