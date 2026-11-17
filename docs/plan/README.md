@@ -20,6 +20,7 @@
 
 | # | Document | What it covers |
 |---|---|---|
+| **13** | **[The MVP: Zoho CRM ↔ Appblocks (FSM, HMS), then Autodesk](13-mvp-zoho-crm-appblocks.md)** | **Start here for the current MVP**: recipes, sync layer, connectors, Logto multi-tenancy, backlog M01–M39 |
 | 01 | [Product scope](01-product-scope.md) | What Zoho Flow does, which features we clone and in what order, the MVP |
 | 02 | [Architecture](02-architecture.md) | System shape, Cargo workspace, crate boundaries, canonical code shapes |
 | 03 | [AI-friendly engineering](03-ai-friendly-engineering.md) | How to keep AI-written code from rotting: docs, recipes, guardrails, prompts |
@@ -74,17 +75,13 @@ The two branches share no history. Feature work branches off one of them and mer
    - connector tests against `wiremock`
    - deterministic end-to-end runs driven by a manual clock and a `drain()` call instead of sleeps
    - fuzzing, and mutation testing to catch weak AI-written tests
-7. **The MVP (Phase 1)** includes:
-   - webhook, schedule and manual triggers
-   - HTTP, email, formatter, Slack and Telegram actions
-   - decision, if-else, delay and set-variable steps
-   - encrypted connections, including OAuth2
-   - versioned flows
-   - durable execution with automatic retry
-   - history with each step's inputs and outputs, plus retry and re-run
-   - a Flutter flow builder
+7. **The MVP (Phase 1; doc 13)** is an integration hub for Appblocks apps. It replaces today's Zoho Flow setup with **Zoho CRM ↔ Appblocks FSM/HMS** syncs, delivered as recipes:
+   - Deal won → FSM request.
+   - Job done → Deal updated.
+   - Accounts, contacts and products synced into FSM.
+   - HMS patients with consent → CRM contacts.
 
-   Phases 2–4 add app triggers, declarative and user-defined connectors, loops, scripts, teams, templates, subflows, a public API, an on-prem agent and AI-assisted flow building.
+   It is multi-tenant from day one, with Logto (single sign-on with Appblocks) and `X-Org-ID` orgs. It adds metadata-driven record connectors and a sync layer: links, no duplicates, no loops, backfill, reconciliation. **MVP 1.1** adds Autodesk (BuildingConnected / ACC ↔ Zoho CRM). Phases 2–4 add more apps, custom apps, loops, Rhai scripts, templates, subflows, a public API, the on-prem agent and AI-assisted building.
 
 ---
 
@@ -107,7 +104,7 @@ The two branches share no history. Feature work branches off one of them and mer
 
 ## Assumptions I made (if any is wrong, parts of the plan change)
 
-- The product is a **multi-tenant SaaS** with organisations, and it should also be **self-hostable** as one binary plus MySQL.
+- The product is a **multi-tenant SaaS** with organisations, and it should also be **self-hostable** as one binary plus MySQL. It sits beside the **Appblocks** platform and uses its Logto tenant for identity.
 - The **web client is the main place to build flows**. Mobile is mainly for monitoring, toggling flows and handling failures.
 - One region. The UI is English first but ready for i18n.
 - A team of 1–3 humans reviews and steers, and AI agents write most of the code.
@@ -116,6 +113,9 @@ The two branches share no history. Feature work branches off one of them and mer
 - Billing and payments are not part of the MVP; usage is counted from day one.
 
 ## Open questions for you
+
+> The questions specific to the new MVP (Autodesk scope, Zoho editions, Logto tenant, HMS consent, client choice) are in **doc 13 §13**.
+
 
 1. Product name and branding. This decides the crate prefix and domain names.
 2. SaaS only, or self-hosted / on-prem distribution as well? This affects licensing, telemetry and the upgrade path.

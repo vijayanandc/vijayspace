@@ -46,6 +46,8 @@ erDiagram
 Each block below is its own migration file, named `YYYYMMDDHHMMSS_<name>.sql`.
 
 ### 3.1 Identity
+> **Superseded for the MVP by doc 13 §7.** Logto owns credentials, so `users` becomes `logto_subject`-based, `invitations` is added, and `refresh_tokens` and `user_tokens` are dropped. `orgs` and `org_members` below still apply. The sync tables (`record_links`, `sync_leases`, `app_subscriptions`, `backfills`, `connection_usage`) are also defined in doc 13 §7.
+
 ```sql
 CREATE TABLE users (
   id                BINARY(16)   NOT NULL,
@@ -326,7 +328,6 @@ CREATE TABLE usage_counters (
 | `custom_connectors` (org_id, key, version, spec JSON, status) | P2 | User-defined declarative connectors |
 | `trigger_seen_items` (registration_id, item_key, seen_at) | P2 | Poll deduplication when there is no cursor |
 | `notifications` (user_id, kind, payload, read_at) | P2 | In-app notifications |
-| `invitations` (org_id, email, role, token_hash, expires_at) | P3 | Team invites |
 | `audit_logs` (org_id, actor, action, target_type, target_id, metadata, ip, created_at) | P3 | Audit trail |
 | `api_keys` (org_id, name, prefix, hash, scopes, last_used_at) | P3 | Public API |
 | `templates` (key, name, category, definition, required_connectors) | P3 | Templates gallery |

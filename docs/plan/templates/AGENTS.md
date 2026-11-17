@@ -5,6 +5,7 @@
 Weft is a Zoho Flow–style integration platform. Users build **flows**: one trigger (webhook, schedule, app, manual) followed by steps (actions, decision, delay, set variable, …). Every run is an **execution** with step-by-step history.
 - Backend: Rust workspace (`crates/`) with MySQL 8.4, which is also the job queue.
 - Client: Flutter, on the separate **`client` branch** of this repository. It is not in this tree. The backend publishes the API contract in `openapi/` and `fixtures/`, and the client syncs it.
+- **Current MVP:** Zoho CRM ↔ Appblocks apps (FSM, HMS) with a sync layer and Logto multi-tenancy: `docs/plan/13-mvp-zoho-crm-appblocks.md`, backlog M01–M39.
 - Plan and architecture: `docs/plan/`. Inventory of routes, use cases, connectors, error codes and tables: `docs/generated/map.md` (**read this before searching**).
 
 ## Map
@@ -17,6 +18,8 @@ Weft is a Zoho Flow–style integration platform. Users build **flows**: one tri
 | Add a port method | `crates/app/src/ports/` + `crates/db/src/` + `crates/testkit/src/fakes/` + `crates/testkit/src/contracts/` |
 | Add or modify an endpoint | `crates/api/src/routes/<feature>/<use_case>.rs` (same file stem as the use case) |
 | Add a connector | `crates/connectors/src/<app>/` (native) or `crates/connectors/src/declarative/specs/<app>.yaml` |
+| Sync (record links, upsert-linked-record, backfill) | `crates/app/src/sync/` and the `core.sync` connector (doc 13 §4) |
+| Logto identity, orgs, members, `X-Org-ID` | `crates/app/src/tenancy/`, `crates/infra/src/auth/logto/` (doc 13 §6) |
 | Background loops | `crates/worker/` |
 | Wiring and config | `crates/server/` |
 | Test helpers | `crates/testkit/` |
@@ -46,7 +49,7 @@ On the `client` branch: `just sync-contract` and `just flutter-check`.
 7. Report: what changed, the tests added, any deviations from the spec, and follow-ups.
 
 ## Must
-- Check permissions first in every use case (`actor.require(...)`), and scope every query by `org_id`.
+- Check permissions first in every use case (`actor.require(...)`), and scope every query by `org_id`. The org comes from the `X-Org-ID` header via the tenancy middleware, and identity from the Logto JWT; never trust an org ID in a request body.
 - Use `deps.clock.now()` and `deps.ids.*`. Bind time into SQL (`?`); never use `NOW()`.
 - Make two writes atomic by adding **one** repository method named for the business operation.
 - Return typed errors with stable codes from `crates/domain/src/error_codes.rs`.

@@ -36,8 +36,8 @@ The legend for the **Phase** column:
 | Webhook payload that is an array becomes one run per entry | Zoho | **MVP** | Configurable, capped at 100 entries per request |
 | Schedule trigger: one-time | Zoho | **MVP** | Time zone aware |
 | Schedule trigger: recurring daily/weekly/monthly/yearly with time zone | Zoho | **MVP** | Plus every N minutes/hours, and cron in advanced mode |
-| App trigger, polling (e.g. "new row in Sheet") | Zoho | P2 | Baseline on the first poll; deduplication |
-| App trigger, instant (subscribe a webhook at the source app) | Zoho | P2 | Subscribe on enable, unsubscribe on disable |
+| App trigger, polling (e.g. "new row in Sheet") | Zoho | **MVP** (Zoho CRM, Appblocks) | Baseline on the first poll; deduplication; also used for reconciliation |
+| App trigger, instant (subscribe a webhook at the source app) | Zoho | **MVP** (Zoho CRM notifications, Appblocks workflow webhooks) | Subscribe on enable, renew, unsubscribe on disable |
 | Manual trigger ("Run now" with a payload) | Extra | **MVP** | Also used for testing |
 | Webhook signature verification (HMAC or shared secret) | Extra | P2 | |
 | Email-in trigger (a unique inbox address) | Extra | P4 | Needs an inbound mail service |
@@ -64,8 +64,8 @@ The legend for the **Phase** column:
 
 | Feature | Source | Phase | Notes |
 |---|---|---|---|
-| App actions: create, update, send | Zoho | **MVP** (Slack, Telegram, email); P2 adds more apps | |
-| **Fetch** (search) actions, optionally creating the record when it is not found | Zoho | P2 | A manifest flag connects the search action to its create action |
+| App actions: create, update, send | Zoho | **MVP** (Zoho CRM, Appblocks, email); 1.1 Autodesk; P2 adds more apps | |
+| **Fetch** (search) actions, optionally creating the record when it is not found | Zoho | **MVP** for record connectors (`find_by` + `upsert_linked_record`) | |
 | Outgoing webhook / generic HTTP request | Zoho | **MVP** | `core.http.request`, with SSRF protection |
 | Formatter: text, number, date utilities | Extra (common) | **MVP** | `core.formatter.*` |
 | Send email through the platform mailer | Extra | **MVP** | `core.email.send` |
@@ -117,8 +117,8 @@ The legend for the **Phase** column:
 
 | Feature | Source | Phase |
 |---|---|---|
-| Sign-up, login, password reset, email verification | — | **MVP** |
-| Organisations, invitations, roles (owner/admin/member/viewer) | Zoho | P3 (MVP creates one org per user) |
+| Sign-in via **Logto** (SSO with Appblocks; Logto handles sign-up, reset and MFA) | — | **MVP** |
+| Organisations, invitations, roles (owner/admin/member/viewer) | Zoho | **MVP** (multi-tenant from day one) |
 | Sharing flows and connections inside an org | Zoho | P3 |
 | Audit log | Zoho | P3 |
 | Security settings (2FA, SSO/OIDC, IP allowlist for the UI) | Zoho | P3 |
@@ -133,6 +133,8 @@ The legend for the **Phase** column:
 ---
 
 ## 3. MVP definition (Phase 1)
+
+> **Superseded by [doc 13](13-mvp-zoho-crm-appblocks.md).** The MVP is now Zoho CRM ↔ Appblocks apps (FSM, HMS), multi-tenant with Logto, with Autodesk in MVP 1.1. The generic stories below remain the long-term scope; Slack and Telegram move to P2.
 
 ### Personas
 - **Builder**: an ops, marketing or support person, or a developer, who automates work between apps.

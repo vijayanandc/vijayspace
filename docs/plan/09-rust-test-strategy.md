@@ -307,17 +307,17 @@ Other cases:
 ## 7. HTTP API tests (`crates/server/tests/http/`)
 
 ### 7.1 Harness
-`TestApp::spawn(pool)` builds the **real** router with real MySQL adapters, plus a `ManualClock`, `SequentialIds`, `FakeMailer`, and an HTTP policy that allows `127.0.0.1` so wiremock is reachable. It also starts an in-process worker that does nothing until `drain()` is called. Requests go through `tower::ServiceExt::oneshot`, with no socket. Helpers: `signup()`, `login()`, `create_flow()`, `publish_and_enable()`, `post_webhook()`.
+`TestApp::spawn(pool)` builds the **real** router with real MySQL adapters, plus a `ManualClock`, `SequentialIds`, `FakeMailer`, an HTTP policy that allows `127.0.0.1` so wiremock is reachable, and an **in-process fake Logto IdP**. The fake IdP serves its own JWKS and mints JWTs with any `sub`, `email` and audience, which is also how the token-rejection cases in §10 are produced (the same pattern as Appblocks' `e2e/finance/harness_test.go`). It also starts an in-process worker that does nothing until `drain()` is called. Requests go through `tower::ServiceExt::oneshot`, with no socket. Helpers: `signup()`, `login()`, `create_flow()`, `publish_and_enable()`, `post_webhook()`.
 
 ```rust
 #[sqlx::test(migrations = "../../migrations")]
 async fn publish_flow_returns_version(pool: MySqlPool) {
     let app = TestApp::spawn(pool).await;
-    let owner = app.signup("owner@example.com").await;
+    let owner = app.sign_in_new_user("owner@example.com").await;
     let flow = app.create_flow(&owner, fixtures::flow("webhook_to_http.json")).await;
 
-    let res = app.post(&format!("/api/v1/orgs/{}/flows/{}/publish", owner.org_id, flow.id))
-        .bearer(&owner.token).header("If-Match", "\"1\"").send().await;
+    let res = app.post(&format!("/api/v1/flows/{}/publish", flow.id))
+        .bearer(&owner.token).org(owner.org_id).header("If-Match", "\"1\"").send().await;
 
     assert_eq!(res.status(), 200);
     insta::assert_json_snapshot!("publish_flow_ok", res.json());   // deterministic ids/clock ⇒ no redactions
@@ -408,7 +408,7 @@ async fn order_alert_demo(pool: MySqlPool) {
     slack.fail_once_then_ok("/api/chat.postMessage", 500, fixture("slack/post_message_ok.json")).await;
     let reviews = app.mock_host("reviews.example.com").await; // test HttpSender rewrites this host → wiremock
     reviews.ok("/api/requests", json!({ "id": "r1" })).await;
-    let owner = app.signup("owner@example.com").await;
+    let owner = app.sign_in_new_user("owner@example.com").await;
     let hook = app.publish_and_enable(&owner, fixtures::flow("order_alert.json")).await;
 
     app.post_webhook(&hook, json!([{ "amount": 250, "email": "a@x.io", "name": "ann lee" },
@@ -444,6 +444,15 @@ async fn order_alert_demo(pool: MySqlPool) {
 - The quota is exceeded.
 - A test run uses the draft snapshot.
 - Editing the draft does not affect a running execution.
+- **Sync scenarios (doc 13 §4, §12):**
+  - no duplicate creates under racing events, using leases and link unique keys;
+  - a crash between the target create and saving the link is recovered by match;
+  - an echo is skipped as unchanged;
+  - debounce collapses a notification burst;
+  - reconciliation catches a lost webhook;
+  - backfill respects the connection budget;
+  - Zoho channel renewal works, and a lapsed channel falls back to polling;
+  - the HMS guard blocks clinical fields and patients without consent.
 
 ### 9.1 Fault injection (crash safety)
 `weft-app` defines `FaultPoint`s that are compiled in only with `feature = "fault-injection"`, which only the test harness enables: `BeforeStepStart`, `AfterActionBeforeCheckpoint`, `AfterCheckpointBeforeReschedule`, `DuringFinish`. Scenario tests trigger a "crash" (the handler future is aborted and the lease left in place), advance the clock past the lease, then `reap_and_drain()`. They assert that:

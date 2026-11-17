@@ -54,7 +54,7 @@ This generates `docs/generated/map.md`, an index agents read *instead of* greppi
 ```markdown
 ## HTTP routes
 | Method | Path | Handler | Use case |
-| POST | /api/v1/orgs/{org_id}/flows/{flow_id}/publish | crates/api/src/routes/flows/publish_flow.rs | crates/app/src/flows/publish_flow.rs |
+| POST | /api/v1/flows/{flow_id}/publish | crates/api/src/routes/flows/publish_flow.rs | crates/app/src/flows/publish_flow.rs |
 ## Error codes
 | flow.revision_conflict | Conflict | crates/domain/src/error_codes.rs:41 |
 ## Connectors

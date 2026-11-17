@@ -9,17 +9,23 @@ An iPaaS holds **other systems' credentials** and makes **outbound requests on u
 | SSRF | An HTTP action calls `169.254.169.254` or internal services | A DNS-resolving IP filter in the HTTP client; redirect checks |
 | Webhook abuse | Flooding a flow; guessing tokens | 256-bit tokens, rate limits, size limits, optional HMAC |
 | Script escape | A custom function reads files or the network | Rhai sandbox: only registered functions exist; operation, depth and size limits |
-| Account takeover | Credential stuffing; stolen refresh tokens | argon2id, login rate limits, refresh rotation with reuse detection, 2FA (P3) |
+| Account takeover | Credential stuffing; stolen tokens | Logto owns credentials, MFA and SSO; Weft accepts only short-lived (15 min) JWTs for its API resource |
 | Template injection | User data rendered as template code | Templates come only from the definition; payload values are data, never templates |
 | Supply chain | A malicious crate | cargo-deny (advisories, licenses, sources), lockfile, minimal dependencies |
 
-## 1. Authentication
-- Passwords: **argon2id** (default parameters, tuned so hashing takes about 50 ms), 12 characters minimum, checked against a top-10k breached-password list.
-- **Access token:** a JWT (HS256 with a server secret, or EdDSA) with a **15-minute** TTL. Claims: `sub` (user), `sid` (session family), `iat`, `exp`. No roles in the token: the role is loaded per request through a cached membership lookup, so revoking a role takes effect quickly.
-- **Refresh token:** opaque, 32 random bytes, stored as a SHA-256 hash, valid 30 days, **rotated on every use**. Re-using a rotated token revokes the whole family (theft detection).
-- Web client: the refresh token lives in an `HttpOnly; Secure; SameSite=Strict` cookie scoped to `/api/v1/auth`. Native clients use platform secure storage. CSRF is not a concern for bearer-authenticated APIs; the cookie is only sent to the refresh endpoint, which also requires an `X-Requested-With` header.
-- Rate limits: login is limited to 5 attempts per minute per IP+email, with exponential lockout. Forgot-password always returns 202.
-- P3: TOTP 2FA, OIDC SSO (Google and Microsoft), session list with "log out everywhere".
+## 1. Authentication (Logto; details in doc 13 §6)
+- **Weft stores no passwords.** Sign-in, MFA, social and enterprise SSO, password reset and email verification are all Logto's job. Weft uses the **same Logto tenant as Appblocks**, so users get single sign-on across products.
+- **Access tokens:** clients request a token for the Weft API resource (`resource=https://api.<weft-domain>`), and Logto issues a **JWT** with a 15-minute TTL. Weft checks it locally:
+  - the signature against the JWKS from `{endpoint}/oidc/jwks` (cached; refetched on an unknown `kid`);
+  - `iss = {endpoint}/oidc`;
+  - `aud` = the Weft resource;
+  - `exp`/`nbf` with 60 s leeway;
+  - the algorithm against an allowlist (ES384/ES256/RS256).
+
+  Opaque tokens are rejected. This is unlike Appblocks today, which introspects them.
+- **Claims used:** `sub` (→ `users.logto_subject`), plus custom claims `email`, `email_verified` and `name`. Roles are **never** taken from the token. They come from Weft's `org_members` (cached for 60 s), so removing a member takes effect within a minute.
+- **Client storage:** the Logto SDK's own storage (secure storage on native; on web the SDK's session handling with refresh tokens, `offline_access`). Weft never sees refresh tokens.
+- All of this sits behind the `IdentityVerifier` port. Tests use an in-process fake IdP (doc 09 §7.1).
 
 ## 2. Authorization: RBAC as a pure, exhaustively tested function
 
@@ -136,8 +142,8 @@ Custom functions run in **[Rhai](https://rhai.rs)**, an embedded scripting langu
 - [ ] The SSRF guard is checked across every blocked range, IPv6 forms, redirects to private IPs, a DNS rebinding simulation, and non-HTTP schemes.
 - [ ] Ciphertext with a wrong AAD fails; key rotation round-trips.
 - [ ] `Debug` and log output of structures holding credentials contain no secret.
-- [ ] JWTs that are expired, have a wrong signature, `alg: none` or a tampered `sub` are rejected.
-- [ ] Refresh token reuse revokes the family.
+- [ ] JWTs that are expired, not yet valid, from the wrong issuer, for the wrong audience, have a wrong signature, `alg: none`, an unknown `kid` (after one JWKS refresh) or a tampered `sub` are rejected; opaque tokens are rejected.
+- [ ] Pending invitations bind only to a token whose `email_verified` is true.
 - [ ] Webhook body limit, rate limit and HMAC verification (P2) are enforced.
 - [ ] Script limits are enforced: infinite loops, deep recursion, string and array growth bombs, `eval`, `import`, calls to unregistered functions, print flooding; the `unchecked` feature is banned (P2).
 - [ ] Template sandbox: fuel exhaustion and recursion are handled, and a payload that contains `{{ }}` is **not** evaluated.

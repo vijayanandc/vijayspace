@@ -5,8 +5,8 @@
 | Topic | Rule |
 |---|---|
 | Base path | `/api/v1`. A breaking change means `/api/v2`; additive changes stay in v1. |
-| Tenancy in the path | `/api/v1/orgs/{org_id}/…` for anything owned by an org. The `Actor` extractor checks membership; a non-member gets **404**, so the org's existence isn't leaked. |
-| Auth | `Authorization: Bearer <access JWT>` (15 min). P3 adds API keys: `Authorization: Bearer wk_live_…`. |
+| Tenancy | **`X-Org-ID: org_…` header** on every tenant-scoped request (the Appblocks convention). The tenancy middleware checks membership and builds the `Actor`; a non-member gets **404**, so the org's existence isn't leaked. Only `/api/v1/me` and `GET/POST /api/v1/orgs` work without the header. |
+| Auth | `Authorization: Bearer <Logto-issued JWT for the Weft API resource>` (15 min; doc 13 §6). Weft has no login endpoints. P2 adds API keys: `Authorization: Bearer wft_…`. |
 | JSON | snake_case fields; RFC 3339 UTC timestamps; prefixed IDs (`flw_…`); absent optional fields are omitted, not `null` |
 | DTOs | Separate request/response structs in `routes/<feature>/dto.rs`; never serialize domain types directly, **except `FlowDefinition`**, which is itself a versioned contract |
 | Validation | 422 with field-level issues (JSON Pointer paths) |
@@ -55,21 +55,19 @@ The client switches on `code`, never on `title` or `detail`. The code catalog is
 
 ## 3. Endpoint catalog
 
-**Phase:** M = MVP, then P2, P3. "org" stands for `/api/v1/orgs/{org_id}`.
+**Phase:** M = MVP, then P2, P3. Paths written `org/…` are tenant-scoped: they mean `/api/v1/…` **plus the `X-Org-ID` header**.
 
-### 3.1 Auth and session
+### 3.1 Identity, orgs and members (Logto handles sign-in; doc 13 §6)
 | Method | Path | Phase | Notes |
 |---|---|---|---|
-| POST | `/api/v1/auth/signup` | M | Creates the user and a personal org; sends a verification email |
-| POST | `/api/v1/auth/login` | M | Returns `{access_token, expires_in}`; the refresh token goes in an httpOnly cookie (web) or the body (native) |
-| POST | `/api/v1/auth/refresh` | M | Rotates the refresh token; reuse detection revokes the whole family |
-| POST | `/api/v1/auth/logout` | M | Revokes the refresh family |
-| POST | `/api/v1/auth/email/verify` | M | `{token}` |
-| POST | `/api/v1/auth/password/forgot` | M | Always 202 (no account enumeration) |
-| POST | `/api/v1/auth/password/reset` | M | `{token, new_password}` |
-| GET | `/api/v1/me` | M | The user plus memberships `[{org, role}]` |
-| POST | `/api/v1/auth/oidc/{provider}/start` and `/callback` | P3 | Google/Microsoft SSO |
-| POST | `/api/v1/me/2fa/*` | P3 | TOTP enrol, verify, disable |
+| GET | `/api/v1/me` | M | Creates the user just in time from the Logto token; returns the user plus memberships `[{org, role}]`. Accepts pending invitations whose email matches a verified token email. |
+| GET | `/api/v1/orgs` | M | The user's orgs (no `X-Org-ID` needed) |
+| POST | `/api/v1/orgs` | M | `{name, timezone}`; the caller becomes owner |
+| PATCH | `org/settings` | M | Name, time zone, `max_concurrent_executions` (owner) |
+| GET | `org/members` | M | |
+| PATCH, DELETE | `org/members/{user_id}` | M | Change a role or remove a member (admin); the last owner cannot be removed |
+| GET, POST | `org/invitations` | M | `{email, role}`; an email with a link to the Weft app |
+| DELETE | `org/invitations/{id}` | M | Revoke |
 
 ### 3.2 Folders and flows
 | Method | Path | Phase | Notes |
@@ -122,14 +120,14 @@ The client switches on `code`, never on `title` or `detail`. The code catalog is
 | GET | `org/executions/{id}/events` | P2 | SSE live updates |
 | GET | `org/usage?period=YYYY-MM` | M | |
 
-### 3.5 Teams and platform (P3)
-`org/members`, `org/invitations`, `org/audit-logs`, `org/api-keys`, `/api/v1/templates`, `/api/v1/templates/{key}/use`, `org/settings` (retention, security, notifications).
+### 3.5 Platform (P2/P3)
+`org/audit-logs`, `org/api-keys`, `/api/v1/templates`, `/api/v1/templates/{key}/use`, `org/settings` (retention, security, notifications).
 
 ### 3.6 Public ingress and operations
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | ANY | `/hooks/{token}` | None (token = capability) | See doc 04 §7.1. Separate rate limits. |
-| GET | `/oauth/callback` | State parameter | |
+| GET | `/oauth/callback` | State parameter | Also handles Zoho's `location` / `accounts-server` parameters (doc 13 §5.2) |
 | GET | `/healthz` | None | Liveness |
 | GET | `/readyz` | None | DB ping and migration version check |
 | GET | `/metrics` | Internal port only | Prometheus |

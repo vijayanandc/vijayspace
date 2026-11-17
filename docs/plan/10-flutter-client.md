@@ -22,7 +22,7 @@ The client lives on its own `client` branch, separate from the Rust `backend` br
 │       ├── app/                 # router.dart, theme.dart, bootstrap.dart, env.dart
 │       ├── core/                # api_provider.dart, session/, errors/ (code→message), widgets/, utils/
 │       ├── features/
-│       │   ├── auth/            # login, signup, verify, reset
+│       │   ├── auth/            # Logto sign-in/out (logto_dart_sdk), org switcher, invitations
 │       │   ├── flows/           # flow list, create, folders
 │       │   ├── builder/         # canvas, step panel, variable picker, condition builder, test runner
 │       │   ├── connections/     # list, create (form/OAuth), reconnect
@@ -53,7 +53,7 @@ features/<feature>/
 | Code generation | `build_runner`; **generated files are committed**; `just flutter-gen` regenerates; CI checks drift | Agents can analyze the code without running codegen first |
 | Errors | `ApiFailure { code, message, issues }` parsed from problem+json; `code` maps exhaustively to localized text | The same codes as the backend |
 | Lints | `flutter_lints` plus stricter rules (`always_use_package_imports`, `avoid_dynamic_calls`, `prefer_final_locals`, `public_member_api_docs` for packages) | |
-| Auth storage | Web: the refresh token stays in the httpOnly cookie and the access token in memory. Native: `flutter_secure_storage`. | Doc 08 §1 |
+| Auth | **Logto Flutter SDK**, same Logto tenant as Appblocks (SSO). It requests access tokens for the Weft API resource (JWT). An interceptor adds `Authorization` and `X-Org-ID` (the selected org, persisted per user) and retries once on 401 with a fresh token. Endpoint and app ID come from runtime config, never hard-coded. | Doc 13 §6 |
 
 ## 4. The flow builder (the hardest UI)
 

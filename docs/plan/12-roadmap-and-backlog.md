@@ -5,7 +5,8 @@
 | Phase | Theme | Rough duration (1–2 engineers driving agents) | Exit demo |
 |---|---|---|---|
 | **P0** Foundations | Scaffold, guardrails, golden slice | 2 weeks | Folders CRUD works end to end (API, DB, Flutter), CI green, recipes written |
-| **P1** MVP | Webhook/schedule → logic → 5 connectors, durable engine, history | 8–10 weeks | The "Order alert" demo (doc 01 §3) with retries, delay and worker crash recovery |
+| **P1** MVP | Zoho CRM ↔ Appblocks (FSM, HMS): multi-tenant with Logto, record connectors, sync layer, recipes R1–R6 (**doc 13**) | 10–12 weeks | Doc 13 §12: Deal won → FSM request, job done → Deal updated, backfill with no duplicates, no loops, crash-safe, two isolated tenants |
+| **P1.1** Autodesk | APS OAuth, BuildingConnected and ACC connectors, recipe R7 | 3–4 weeks | BuildingConnected opportunity → Zoho Deal; Deal won → ACC project |
 | **P2** Connect apps | App triggers, declarative and custom connectors, loops, scripts | 8 weeks | "New Google Sheet row → loop line items → Airtable upsert → Slack summary"; a custom app built in the UI |
 | **P3** Teams and scale | Orgs and roles, audit, public API, templates, subflows, billing, mobile | 8 weeks | A team of 3 shares connections; a subflow is reused by 2 flows; the public API creates a flow; a mobile push arrives on failure |
 | **P4** Advanced | On-prem agent, AI building, MCP, approvals, environments | Ongoing | "Describe your flow" produces a valid draft; an on-prem MySQL query through the agent |
@@ -31,78 +32,18 @@ Sizes in the backlog: **S** fits one agent session (≤ ~400 changed lines), **M
 | T09 | **Golden slice: Folders CRUD**. Migration, domain, port, MySQL repository, fake, **contract suite**, 4 use cases, 4 endpoints, HTTP tests (with RBAC and isolation harness skeletons), Flutter list and create screen | T05–T08 | L 🔒 | Exemplary code, reviewed line by line by a human |
 | T10 | Write the recipes (doc 03 §2.2) and ADRs 001–013 *from* the golden slice | T09 | M | Recipes reference real files |
 
-### P1: MVP
-**Identity**
-| ID | Task | Depends | Size |
-|---|---|---|---|
-| T11 | Signup, login, refresh (rotation and reuse detection), logout, `Actor` extractor; personal org created on signup | T09 | M 🔒 |
-| T12 | Email verification and password reset (`user_tokens`, Mailpit tests) | T11 | S |
-| T13 | Permissions matrix (domain) plus `actor.require`; `ROUTE_PERMISSIONS` table; RBAC sweep and tenant isolation sweep tests | T11 | M 🔒 |
-| T14 | Flutter: auth screens, session management (web cookie refresh, native secure storage), route guards | T11, T08 | M |
-
-**Flow model and expressions**
-| ID | Task | Depends | Size |
-|---|---|---|---|
-| T15 | `weft-expr`: template parsing and rendering (typed passthrough, lenient/strict), sandbox limits, the MVP filter set; tables, property tests, fuzz target | T05 | L 🔒 |
-| T16 | `weft-expr`: condition tree and operators with coercion rules | T15 | M |
-| T17 | `FlowDefinition` v1 types, JSON Schema export, canonical JSON, `fixtures/flows/`, validation and scope analysis (`validate_for_publish`) | T16 | L 🔒 |
-| T18 | `weft_flow_model` (Dart) plus shared-fixture round-trip tests | T17 | M |
-| T19 | `ScheduleSpec` with `next_after` (time zones, DST, cron via croner) plus exhaustive tests | T05 | M |
-
-**Flows**
-| ID | Task | Depends | Size |
-|---|---|---|---|
-| T20 | Flow migrations; create, get, list, update and delete; draft save with revision and `If-Match` | T17, T13 | M |
-| T21 | Publish (versions), enable and disable, versions list; trigger registration sync | T20 | M |
-| T22 | `GET /variables` (variable tree from samples and output schemas) | T21, T25 | S |
-
-**Engine and runtime**
-| ID | Task | Depends | Size |
-|---|---|---|---|
-| T23 | `weft-engine` compiler (IR) plus plan snapshots | T17 | M 🔒 |
-| T24 | `weft-engine` interpreter (`advance`, `record_result`, retry policy), the `Simulator`, invariant property tests I1–I5 | T23 | L 🔒 |
-| T25 | Connector SDK: traits, manifest, field schema, `ConnectorError` with `from_http`, registry, conformance suite | T05 | M 🔒 |
-| T26 | `weft-infra` HTTP sender with the SSRF resolver, plus the security test table | T25 | M 🔒 |
-| T27 | Job queue (MySQL): enqueue, claim, lease, heartbeat, reap, reschedule, dead; concurrency tests | T06 | M 🔒 |
-| T28 | Execution persistence: executions and step runs repositories, atomic methods, contract suites | T27 | M |
-| T29 | Runner `run_slice` plus `weft-worker` loops (queues, semaphores, drain, shutdown); fault-injection points | T24, T28 | L 🔒 |
-| T30 | Usage counters and quota check; failure notification job and email | T29 | S |
-
-**Connectors and connections**
-| ID | Task | Depends | Size |
-|---|---|---|---|
-| T31 | `core.http.request`, `core.formatter.*` (text, number, date), `core.email.send` (lettre, Mailpit) | T25, T26 | M |
-| T32 | Connections: CRUD, `SecretBox` (AES-GCM with AAD, key rotation), test connection, API key/basic/bearer auth | T25 | M 🔒 |
-| T33 | OAuth2 framework (start, callback, PKCE, state, refresh with row lock, `needs_reauth`) | T32 | L 🔒 |
-| T34 | Slack connector (post message, list channels option source) with wiremock tests | T33 | M |
-| T35 | Telegram connector (send message, bot token) | T32 | S |
-
-**Triggers and executions**
-| ID | Task | Depends | Size |
-|---|---|---|---|
-| T36 | Webhook ingress: content types, normalization, array split, idempotency key, limits, listening mode and sample | T21, T29 | M |
-| T37 | Scheduler loop: due registrations, slot dedupe, misfire policy | T19, T29 | M |
-| T38 | Manual run, test run (draft snapshot), single-step test | T29, T31 | M |
-| T39 | History API: list and filter, detail with timeline; retry-from-failed, re-run, cancel; retention sweep | T29 | M |
-| T40 | Scenario test suite covering the doc 09 §9 catalogue, including the **Order alert** demo | T36–T39, T34 | L |
-
-**Flutter MVP**
-| ID | Task | Depends | Size |
-|---|---|---|---|
-| T41 | Flows list: create, rename, delete, toggle, folders | T20, T14 | M |
-| T42 | Builder canvas: spine, cards, insert, delete, move, decision branches; immutable model with undo/redo; autosave and conflict banner | T18, T41 | L |
-| T43 | Dynamic form renderer (all MVP field types) plus golden tests | T25 | L |
-| T44 | Mapping field with chips, variable picker, condition builder | T22, T43 | L |
-| T45 | Step panel: app, action, connection, fields, test step; trigger panels (webhook listen, schedule editor) | T42–T44, T36–T38 | L |
-| T46 | Connections screens: forms, OAuth web redirect, reconnect | T33 | M |
-| T47 | History list and detail (timeline, JSON viewer, retry, re-run, cancel); usage widget | T39 | M |
-| T48 | E2E: the `e2e/` crate plus a Flutter integration smoke test; load test baseline (`bench-worker`, k6) | T40, T47 | M |
+### P1: MVP (re-planned)
+**The Phase 1 backlog is now tasks M01–M39 in [doc 13 §11](13-mvp-zoho-crm-appblocks.md).** The generic T11–T48 tasks from the first plan are folded in, renumbered, or deferred:
+- Identity (T11, T12, T14) is replaced by Logto: M01, M02, M04.
+- The engine tasks (T15–T30) become M05–M16.
+- The Slack and Telegram connectors (T34, T35) move to P2.
+- Polling and instant trigger frameworks (from T49 and T50) move into the MVP as M20.
 
 ### P2: Connect apps
 | ID | Task | Size |
 |---|---|---|
-| T49 | Polling trigger framework (baseline, cursor, dedupe, backoff, `needs_reauth`) plus the RSS connector | L 🔒 |
-| T50 | Instant trigger framework (subscribe/unsubscribe jobs, verify, parse) plus GitHub (HMAC) | L |
+| T49 | RSS connector on the polling framework (the framework itself moved to MVP M20) | S |
+| T50 | GitHub connector (HMAC-verified instant trigger) on the M20 framework; Slack and Telegram connectors (from the original MVP) | M |
 | T51 | Declarative YAML runtime (requests, auth injection, pagination, error mapping, option sources, polling triggers) plus conformance | L 🔒 |
 | T52 | YAML connectors, one prompt each: Trello, Airtable, Notion, Stripe, Twilio, Mailchimp, HubSpot, Jira, Asana, ClickUp | S each |
 | T53 | Google OAuth plus Sheets (row added trigger, add/update/find rows) and Gmail (send, new email trigger) native connectors | L |
@@ -119,16 +60,16 @@ Sizes in the backlog: **S** fits one agent session (≤ ~400 changed lines), **M
 ### P3: Teams and scale
 | ID | Task | Size |
 |---|---|---|
-| T63 | Invitations, members, role management UI; sharing connections | L 🔒 |
+| T63 | Sharing connections and flows between members; fine-grained per-connection permissions (members and invitations moved to MVP M02) | M 🔒 |
 | T64 | Audit log (write points plus UI) | M |
-| T65 | API keys plus the public API (same endpoints, scoped keys), docs site | M 🔒 |
+| T65 | API keys (`wft_…`, Appblocks-style: SHA-256 hash, scopes, expiry, rate limit) plus the public API and a docs site; Appblocks-embedded mode (SSO, org auto-link) | M 🔒 |
 | T66 | Subflows: `CallSubflow` (wait or don't wait), `Return data`, recursion guard | L 🔒 |
 | T67 | Templates gallery (seeded templates, "use template" wizard mapping connections) | M |
 | T68 | Plans, quotas and billing (Stripe), usage dashboard, 80%/100% alerts | L |
-| T69 | Per-org fairness and concurrency caps, per-flow `concurrency: 1`, rate limits | M 🔒 |
+| T69 | Distributed (cross-worker) exact rate limiting, per-flow `concurrency: 1`, weighted fair scheduling (basic per-org caps moved to MVP M15/M16) | M 🔒 |
 | T70 | OpenTelemetry, dashboards, alert rules; partitioning ADR and migration; read replica for history | L 🔒 |
 | T71 | Mobile app (monitoring, toggle, rerun) plus push notifications on failure | L |
-| T72 | 2FA (TOTP), OIDC SSO, session management; payload masking; retention settings; org export and delete | L 🔒 |
+| T72 | Payload masking for all flows, retention settings, org export and delete (2FA and SSO come from Logto) | M 🔒 |
 | T73 | Version diff and restore UI; synchronous webhook response step; error-handler paths; reusable org-level custom functions (Rhai) with a guarded `http_request` helper | M |
 
 ### P4: Advanced
@@ -146,17 +87,18 @@ Sizes in the backlog: **S** fits one agent session (≤ ~400 changed lines), **M
 ---
 
 ## 3. Critical path for the MVP
+See doc 13 §11. In short:
 ```
-T00 → T05 → T06 → T09 (golden slice) → T11 → T13
-            ↘ T15 → T16 → T17 → T23 → T24 ─┐
-            T25 → T26 → T31 ───────────────┤
-            T27 → T28 ─────────────────────┴→ T29 → T36/T37/T38/T39 → T40 (demo)
-            T32 → T33 → T34 ───────────────────────────────────────↗
-Flutter: T08 → T14 → T41 → T42 → T43 → T44 → T45 → T47 → T48
+T00–T10 → M01 → M02 → M03
+M05 → M06 → M09 → M10
+M13 → M14 → M15 → M16 → M20 → M22 / M23 → M24 → M25 → M26 → M27 → M35
+M18 → M19 → M23
 ```
-**Parallel work:** after T09, the engine track (T15–T24), the connector track (T25–T35) and the Flutter track (T41–T44 using fixtures) can run as **independent agent sessions** in separate branches. Crate boundaries keep their conflicts small.
-
----
+**Parallel work:**
+- Engine: M05–M10.
+- Connectors: M11, M12, M17–M19.
+- Flutter, against fixtures: M04, M30, M31.
+- The Appblocks-side changes AB-1 to AB-9, in their own repos.
 
 ## 4. Risk register
 | Risk | Likelihood | Impact | Mitigation |

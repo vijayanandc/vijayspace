@@ -123,7 +123,7 @@ weft/
 | `weft-script` (P2) | The Rhai engine for custom functions: sandbox limits, registered helpers, JSON ↔ `Dynamic`, AST cache (doc 08 §7) | expr | tokio, sqlx, reqwest, axum, any IO |
 | `weft-app` | Use cases, ports (traits), `Deps`, `Actor`, `AppError`, the execution **runner** that drives the engine | domain, expr, engine, connector-sdk | sqlx, axum, reqwest, lettre |
 | `weft-db` | MySQL implementations of the repository ports, the job queue, migration embedding, a `testing` feature with fixtures | app, domain | axum, reqwest |
-| `weft-infra` | Crypto (AES-GCM), argon2, JWT, mailer (lettre), the SSRF-guarded HTTP sender (reqwest), system clock, ID generator, the pooled `ScriptRunner` (P2, wraps `weft-script`) | app, domain, connector-sdk, script | sqlx, axum |
+| `weft-infra` | Crypto (AES-GCM, per-org HKDF keys), Logto JWT verification (JWKS), mailer (lettre), the SSRF-guarded HTTP sender (reqwest), system clock, ID generator, the pooled `ScriptRunner` (P2, wraps `weft-script`) | app, domain, connector-sdk, script | sqlx, axum |
 | `weft-api` | axum router, handlers, DTOs, extractors (auth, pagination, If-Match), the problem+json mapping, OpenAPI | app, domain | sqlx, db, infra |
 | `weft-worker` | Job claim loop, scheduler, poller, reaper, retention sweeper, graceful shutdown | app, domain | sqlx, axum |
 | `weft-server` | Configuration, the **composition root**, CLI (clap), telemetry setup | everything | — |
@@ -162,10 +162,11 @@ crates/app/src/
 ├── error.rs            # AppError { kind, code, message, fields }
 ├── ports/              # one trait per file
 │   ├── mod.rs
-│   ├── clock.rs  id_gen.rs  secret_box.rs  password_hasher.rs  token_issuer.rs  mailer.rs
+│   ├── clock.rs  id_gen.rs  secret_box.rs  identity_verifier.rs  mailer.rs
 │   ├── flow_repo.rs  execution_repo.rs  connection_repo.rs  trigger_repo.rs
 │   ├── user_repo.rs  usage_repo.rs  job_queue.rs
-├── auth/               # signup.rs login.rs refresh.rs logout.rs reset_password.rs
+├── tenancy/            # me.rs list_orgs.rs create_org.rs members/ invitations/  (Logto identity, doc 13 §6)
+├── sync/               # upsert_linked_record.rs resolve_link.rs backfill.rs reconcile.rs  (doc 13 §4)
 ├── flows/              # create_flow.rs get_flow.rs list_flows.rs save_draft.rs publish_flow.rs
 │                       # set_enabled.rs delete_flow.rs draft_variables.rs test_step.rs
 ├── connections/        # create_connection.rs oauth_start.rs oauth_callback.rs test_connection.rs …
@@ -283,16 +284,15 @@ There is no HTTP, SQL or `tokio::spawn` inside a use case.
 ### 6.3 HTTP handler (thin: parse, call one use case, map the result)
 
 ```rust
-#[utoipa::path(post, path = "/api/v1/orgs/{org_id}/flows/{flow_id}/publish", tag = "flows",
-    params(("If-Match" = String, Header, description = "Draft revision")),
+#[utoipa::path(post, path = "/api/v1/flows/{flow_id}/publish", tag = "flows",
+    params(("X-Org-ID" = String, Header), ("If-Match" = String, Header, description = "Draft revision")),
     responses((status = 200, body = FlowVersionDto), (status = 409, body = Problem), (status = 422, body = Problem)))]
 pub async fn publish_flow(
     State(state): State<ApiState>,
-    actor: Actor,
-    Path((org_id, flow_id)): Path<(OrgId, FlowId)>,
+    actor: Actor,                          // from the Logto JWT + X-Org-ID membership (tenancy middleware)
+    Path(flow_id): Path<FlowId>,
     IfMatch(expected_revision): IfMatch,
 ) -> Result<Json<FlowVersionDto>, ApiError> {
-    let actor = actor.in_org(org_id)?;
     let out = weft_app::flows::publish_flow::publish_flow(
         &state.deps, &actor, PublishFlowInput { flow_id, expected_revision }).await?;
     Ok(Json(out.version.into()))
@@ -314,8 +314,7 @@ pub struct Deps {
     pub usage: Arc<dyn UsageRepo>,
     pub jobs: Arc<dyn JobQueue>,
     pub secrets: Arc<dyn SecretBox>,
-    pub passwords: Arc<dyn PasswordHasher>,
-    pub tokens: Arc<dyn TokenIssuer>,
+    pub identity: Arc<dyn IdentityVerifier>,
     pub mailer: Arc<dyn Mailer>,
     pub http: Arc<dyn HttpSender>,
     pub connectors: Arc<ConnectorRegistry>,
@@ -415,8 +414,8 @@ sequenceDiagram
   participant C as Flutter
   participant API as weft api
   participant DB as MySQL
-  participant P as Provider (e.g. Slack)
-  C->>API: POST /orgs/{org}/connections/oauth/start {connector:"slack"}
+  participant P as Provider (e.g. Zoho accounts server)
+  C->>API: POST /api/v1/connections/oauth/start {connector:"zoho_crm"} (X-Org-ID)
   API->>DB: INSERT oauth_state(hash(state), pkce_verifier enc, ttl 10m)
   API-->>C: {authorize_url}
   C->>P: open authorize_url (browser)
