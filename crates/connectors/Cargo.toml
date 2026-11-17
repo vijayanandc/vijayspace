@@ -1,6 +1,6 @@
 [package]
 name = "weft-connectors"
-description = "Built-in connectors (native Rust and declarative YAML) and the declarative runtime."
+description = "Built-in connectors: core utilities, Zoho CRM, Appblocks, Autodesk Forma."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,6 +10,24 @@ publish.workspace = true
 weft-connector-sdk.workspace = true
 weft-domain.workspace = true
 weft-expr.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+regex.workspace = true
+urlencoding.workspace = true
+sha2.workspace = true
+hex.workspace = true
+hmac.workspace = true
+base64.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+weft-connector-sdk = { workspace = true, features = ["testing"] }
+weft-http.workspace = true
+tokio.workspace = true
+wiremock.workspace = true
 
 [lints]
 workspace = true

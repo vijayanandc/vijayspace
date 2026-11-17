@@ -22,6 +22,7 @@ weft-infra = { path = "crates/infra" }
 weft-api = { path = "crates/api" }
 weft-worker = { path = "crates/worker" }
 weft-testkit = { path = "crates/testkit" }
+weft-http = { path = "crates/http" }
 
 # External crates (major versions pinned; see docs/dependencies.md)
 serde = { version = "1", features = ["derive"] }
