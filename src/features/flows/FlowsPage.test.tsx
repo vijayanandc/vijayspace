@@ -16,10 +16,11 @@ const summary = (over: Partial<FlowSummary>): FlowSummary => ({
   draft_revision: 3,
   updated_at: '2026-01-01T00:00:00Z',
   last_execution: null,
+  apps: ['core.email'],
   ...over,
 });
 
-const flows = [summary({}), summary({ id: 'flw_2', name: 'Sync deals', is_enabled: false, trigger_type: 'app', published_version: null })];
+const flows = [summary({}), summary({ id: 'flw_2', name: 'Sync deals', is_enabled: false, trigger_type: 'app', published_version: null, apps: ['zoho_crm', 'appblocks'] })];
 
 function detail(id: string): Flow {
   const base = flows.find((f) => f.id === id) ?? summary({ id });
@@ -60,6 +61,9 @@ describe('FlowsPage', () => {
     expect(within(row).getByRole('checkbox', { name: 'Disable Order alert' })).toBeChecked();
     await waitFor(() => expect(within(row).getByRole('img', { name: 'core.email' })).toBeInTheDocument());
     expect(screen.getByRole('checkbox', { name: 'Enable Sync deals' })).toBeDisabled();
+    // The chain comes from the list's `apps`: no request per flow.
+    const urls = vi.mocked(fetch).mock.calls.map(([input]) => String(input));
+    expect(urls.filter((u) => u.includes('/api/v1/flows/'))).toEqual([]);
   });
 
   it('filters by state and search text, and opens the New flow dialog', async () => {

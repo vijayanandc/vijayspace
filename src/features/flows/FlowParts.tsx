@@ -1,29 +1,20 @@
 // Shared pieces of the flows list: app-icon chain, publish status pills and the last-run cell.
 
-import { useQuery } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { Fragment } from 'react';
 import { Link } from 'react-router-dom';
 
-import { endpoints } from '../../api/endpoints';
 import { useConnectors } from '../../api/hooks';
 import type { FlowSummary } from '../../api/types';
 import { AppIcon, TILE_NAMES } from '../../components/AppIcon';
 import { Badge, StatusBadge } from '../../components/Badge';
 import { formatTime, relativeTime } from '../../lib/format';
-import { appChain, splitChain, triggerTypeIconKey } from './appChain';
+import { splitChain, summaryChain } from './appChain';
 
-/** Trigger app → action apps. The definition is read once per draft revision; until then only the trigger type shows. */
+/** Trigger app → action apps, from the list row's `apps`. */
 export function AppChain({ flow, size = 24 }: { flow: FlowSummary; size?: number }) {
-  const detail = useQuery({
-    queryKey: ['flow-apps', flow.id, flow.draft_revision],
-    queryFn: () => endpoints.flow(flow.id),
-    select: (f) => appChain(f.draft),
-    staleTime: Infinity,
-    retry: false,
-  });
   const { data: manifests = [] } = useConnectors();
-  const chain = detail.data ?? [triggerTypeIconKey(flow.trigger_type)];
+  const chain = summaryChain(flow);
   const { shown, extra } = splitChain(chain);
   const name = (key: string) => manifests.find((m) => m.key === key)?.name ?? TILE_NAMES[key] ?? key;
   return (

@@ -120,6 +120,8 @@ export interface FlowSummary {
   draft_revision: number;
   updated_at: string;
   last_execution?: { id: string; status: ExecutionStatus; queued_at: string } | null;
+  /** Connector keys the draft uses: an app trigger's connector first, then actions in order, each once. */
+  apps: string[];
 }
 
 export interface TriggerInfo {
@@ -135,7 +137,7 @@ export interface TriggerInfo {
   verify_token?: string | null;
 }
 
-export interface Flow extends FlowSummary {
+export interface Flow extends Omit<FlowSummary, 'apps'> {
   draft: FlowDefinition;
   published_version_id: string | null;
   created_at: string;

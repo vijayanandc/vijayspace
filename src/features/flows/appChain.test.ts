@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FlowDefinition } from '../../api/types';
-import { appChain, splitChain, triggerIconKey } from './appChain';
+import { appChain, splitChain, summaryChain, triggerIconKey } from './appChain';
 
 const action = (key: string, connector: string) => ({ key, type: 'action' as const, connector, action: 'x', input: {} });
 
@@ -31,5 +31,12 @@ describe('appChain', () => {
   it('caps the chain and counts the rest', () => {
     expect(splitChain(['a', 'b', 'c'])).toEqual({ shown: ['a', 'b', 'c'], extra: 0 });
     expect(splitChain(['a', 'b', 'c', 'd', 'e', 'f'])).toEqual({ shown: ['a', 'b', 'c'], extra: 3 });
+  });
+
+  it('builds a list row chain from the server apps without the definition', () => {
+    expect(summaryChain({ trigger_type: 'app', apps: ['zoho_crm', 'core.sync', 'appblocks'] })).toEqual(['zoho_crm', 'core.sync', 'appblocks']);
+    expect(summaryChain({ trigger_type: 'webhook', apps: ['core.formatter'] })).toEqual(['trigger:webhook', 'core.formatter']);
+    expect(summaryChain({ trigger_type: 'app', apps: [] })).toEqual(['trigger:app']);
+    expect(summaryChain({ trigger_type: 'manual' })).toEqual(['trigger:manual']);
   });
 });
