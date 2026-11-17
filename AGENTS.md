@@ -21,7 +21,7 @@ Weft is a Zoho Flow–style integration platform. Users build **flows**: one tri
 | Change templates or conditions | `crates/expr/` (pure) |
 | Change how flows execute | `crates/engine/` (pure, 🔒 human review) and `crates/app/src/runner/` |
 | Add or modify a use case | `crates/app/src/<feature>/` (grouped by feature) |
-| Add a port method | `crates/app/src/ports.rs` + `crates/db/src/` (in-memory fakes and contract suites in `crates/testkit/` are planned) |
+| Add a port method | `crates/app/src/ports/<area>.rs` + `crates/db/src/` (in-memory fakes and contract suites in `crates/testkit/` are planned) |
 | Add or modify an endpoint | `crates/api/src/routes/<feature>.rs`, then update `docs/api/README.md` (the contract the client follows) |
 | Add a connector | `crates/connectors/src/<app>/` (native; register in `builtin_connectors()`). Declarative YAML specs are planned. |
 | Sync (record links, upsert-linked-record, backfill) | `crates/app/src/sync/` and the `core.sync` connector (doc 13 §4) |

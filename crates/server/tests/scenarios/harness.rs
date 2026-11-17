@@ -66,7 +66,14 @@ impl TestApp {
             config: Arc::new(AppConfig {
                 public_url: "http://weft.test".into(),
                 default_org_id: OrgId::from_uuid(weft_server::wiring::DEFAULT_ORG),
-                oauth_clients: std::collections::HashMap::default(),
+                oauth_clients: std::collections::HashMap::from([(
+                    "zoho_crm".to_owned(),
+                    weft_connector_sdk::oauth::OAuthClient {
+                        client_id: "test-client".into(),
+                        client_secret: "test-secret".into(),
+                        redirect_uri: "http://weft.test/oauth/callback".into(),
+                    },
+                )]),
             }),
             plans: Arc::new(PlanCache::default()),
             wake: Arc::new(Notify::new()),

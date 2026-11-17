@@ -10,7 +10,7 @@ use weft_domain::{
 };
 
 use super::{
-    ingress::start_items,
+    items::start_items,
     registration::{DEFAULT_POLL_SECS, DEFAULT_RECONCILE_SECS},
 };
 use crate::{
@@ -28,7 +28,6 @@ pub async fn enqueue_due_polls(deps: &Deps) -> Result<usize, AppError> {
         .await?;
     let mut n = 0;
     for reg in due {
-        let slot = reg.next_fire_at.unwrap_or(now).timestamp();
         let job = NewJob {
             id: deps.new_job_id(),
             queue: "triggers".into(),
@@ -36,7 +35,9 @@ pub async fn enqueue_due_polls(deps: &Deps) -> Result<usize, AppError> {
             org_id: Some(reg.org_id),
             payload: json!({"registration_id": reg.id}),
             run_at: now,
-            dedupe_key: Some(format!("poll:{}:{slot}", reg.id)),
+            // One poll job per registration at a time (doc 04): a slow or retrying poll is never
+            // overlapped by the next interval's.
+            dedupe_key: Some(format!("poll:{}", reg.id)),
         };
         if deps.store.enqueue(&job, now).await? {
             n += 1;

@@ -7,6 +7,8 @@
     clippy::too_many_lines
 )]
 
+mod app_events;
+mod connections;
 mod harness;
 mod lifecycle;
 mod order_alert;

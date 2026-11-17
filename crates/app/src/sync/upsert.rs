@@ -110,6 +110,11 @@ async fn apply_lookups(
 }
 
 /// Creates or updates the target record linked to the source record.
+/// How long one sync of a record holds its lease. It must outlast the slowest path
+/// (update → not found → find → create, each up to a 30 s call, plus lookups), or a second
+/// sync of the same record could start and create a duplicate.
+const LEASE_SECS: i64 = 300;
+
 pub(crate) async fn upsert_linked_record(
     deps: &Deps,
     org: OrgId,
@@ -142,7 +147,13 @@ pub(crate) async fn upsert_linked_record(
     let now = deps.clock.now();
     let leased = deps
         .store
-        .acquire_lease(org, &lease_key, &holder, now + Duration::seconds(60), now)
+        .acquire_lease(
+            org,
+            &lease_key,
+            &holder,
+            now + Duration::seconds(LEASE_SECS),
+            now,
+        )
         .await
         .map_err(|e| ConnectorError::transient(e.to_string()))?;
     if !leased {
@@ -189,9 +200,11 @@ async fn upsert_locked(
         .find_link_by_a(org, set, source)
         .await
         .map_err(|e| ConnectorError::transient(e.to_string()))?;
+    // A link that points at another connection or module (the flow was re-pointed) is stale:
+    // never write the old record ID into the new target.
+    let link = link.filter(|l| l.b.connection_id == target_conn && l.b.object == target_object);
     if let Some(l) = &link
         && l.b_hash.as_deref() == Some(hash.as_slice())
-        && l.b.object == target_object
     {
         return Ok(
             json!({"action": "skipped", "reason": "unchanged", "target_id": l.b.record_id, "link_set": set}),
@@ -215,7 +228,22 @@ async fn upsert_locked(
         }
     }
     if written.is_none() {
-        written = Some(create_or_recover(target, &ctx, input, target_object, values).await?);
+        let linked_elsewhere = |candidate: String| async move {
+            let side = RecordSide {
+                connection_id: target_conn,
+                object: target_object.to_owned(),
+                record_id: candidate,
+            };
+            let owner = deps
+                .store
+                .find_link_by_b(org, set, &side)
+                .await
+                .map_err(|e| ConnectorError::transient(e.to_string()))?;
+            Ok::<bool, ConnectorError>(owner.is_some_and(|l| l.a != *source))
+        };
+        written = Some(
+            create_or_recover(target, &ctx, input, target_object, values, linked_elsewhere).await?,
+        );
     }
     let (target_id, action) = written.unwrap_or_default();
     let new_link = RecordLink {
@@ -234,18 +262,37 @@ async fn upsert_locked(
     deps.store
         .upsert_link(&new_link, deps.clock.now())
         .await
-        .map_err(|e| ConnectorError::invalid(e.message))?;
+        .map_err(|e| link_save_error(&e))?;
     Ok(json!({"action": action, "target_id": target_id, "link_set": set}))
 }
 
+/// A conflict (side B taken by another source record) is permanent; anything else may pass.
+fn link_save_error(e: &crate::AppError) -> ConnectorError {
+    match e.kind {
+        crate::ErrorKind::Conflict => ConnectorError::invalid(e.message.clone()),
+        crate::ErrorKind::Validation
+        | crate::ErrorKind::NotFound
+        | crate::ErrorKind::Unauthorized
+        | crate::ErrorKind::BadGateway
+        | crate::ErrorKind::Internal => ConnectorError::transient(e.message.clone()),
+    }
+}
+
 /// `RecoverCreate`: search by the match field first, so a crash after "create" never duplicates.
-async fn create_or_recover(
+/// `linked_elsewhere(id)` tells whether a matched record already belongs to another source record
+/// in this link set; such a match is refused before anything is written.
+async fn create_or_recover<F, Fut>(
     target: &dyn RecordObjects,
     ctx: &weft_connector_sdk::ActionCtx,
     input: &Value,
     object: &str,
     values: &Map<String, Value>,
-) -> Result<(String, &'static str), ConnectorError> {
+    linked_elsewhere: F,
+) -> Result<(String, &'static str), ConnectorError>
+where
+    F: FnOnce(String) -> Fut,
+    Fut: std::future::Future<Output = Result<bool, ConnectorError>>,
+{
     let match_field = input
         .get("match_field")
         .and_then(Value::as_str)
@@ -259,6 +306,12 @@ async fn create_or_recover(
             0 => {}
             1 => {
                 let id = found[0].id.clone();
+                if linked_elsewhere(id.clone()).await? {
+                    return Err(ConnectorError::invalid(format!(
+                        "{}: the record matching {field} = {value} is already linked to another source record",
+                        error_codes::SYNC_AMBIGUOUS_MATCH
+                    )));
+                }
                 let r = target.update(ctx, object, &id, values).await?;
                 return Ok((r.id, "updated"));
             }

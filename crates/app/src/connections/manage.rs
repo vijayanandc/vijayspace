@@ -31,7 +31,8 @@ fn connector(deps: &Deps, key: &str) -> Result<Arc<dyn Connector>, AppError> {
 type SplitFields = (Map<String, Value>, Map<String, Value>);
 
 /// Splits submitted auth fields into (config, secrets) by the manifest; checks required ones.
-fn split_fields(
+/// Undeclared keys are dropped, and a select with fixed options only accepts those options.
+pub(super) fn split_fields(
     connector: &dyn Connector,
     fields: &Map<String, Value>,
     partial: bool,
@@ -47,6 +48,7 @@ fn split_fields(
                 secrets.insert(spec.key.clone(), v.clone());
             }
             Some(v) => {
+                check_option(spec, v)?;
                 config.insert(spec.key.clone(), v.clone());
             }
             None if spec.required && !partial => {
@@ -63,6 +65,25 @@ fn split_fields(
         }
     }
     Ok((config, secrets))
+}
+
+/// A select with a fixed option list must hold one of its options.
+fn check_option(spec: &FieldSpec, value: &Value) -> Result<(), AppError> {
+    let allowed = |v: &str| spec.options.iter().any(|o| o.value == v);
+    let ok = spec.options.is_empty()
+        || match value {
+            Value::String(v) => allowed(v),
+            Value::Array(items) => items.iter().all(|i| i.as_str().is_some_and(allowed)),
+            Value::Null | Value::Bool(_) | Value::Number(_) | Value::Object(_) => false,
+        };
+    if ok {
+        Ok(())
+    } else {
+        Err(AppError::validation(
+            error_codes::VALIDATION_FAILED,
+            format!("`{}` is not one of the allowed values", spec.label),
+        ))
+    }
 }
 
 /// Creates a connection from form fields (auth kind `fields`) and tests it.

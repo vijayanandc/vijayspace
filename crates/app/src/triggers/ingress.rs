@@ -2,9 +2,8 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Duration, Utc};
 use serde_json::{Map, Value, json};
-use weft_connector_sdk::{ConnectorError, EventItem, InboundRequest};
+use weft_connector_sdk::{ConnectorError, InboundRequest};
 use weft_domain::{
     error_codes,
     flow::TriggerNode,
@@ -12,6 +11,7 @@ use weft_domain::{
     model::{ExecutionMode, Flow, FlowVersion, RegistrationKind, TriggerRegistration},
 };
 
+use super::items::{bounded_key, start_items};
 use crate::{
     AppError, Deps,
     executions::start::new_execution,
@@ -191,7 +191,7 @@ pub async fn ingest_webhook(
         .clone()
         .unwrap_or_else(|| "idempotency-key".into())
         .to_lowercase();
-    let idem = req.headers.get(&idem_header).cloned();
+    let idem = req.headers.get(&idem_header).map(|k| bounded_key(k));
     let bodies: Vec<Value> = match (&data["body"], cfg.split_array) {
         (Value::Array(items), true) => items.iter().take(MAX_SPLIT).cloned().collect(),
         (other, _) => vec![other.clone()],
@@ -335,62 +335,6 @@ pub async fn ingest_app_event(
         executions,
         response: batch.response,
     })
-}
-
-/// Creates executions for trigger items (with optional debounce per record).
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn start_items(
-    deps: &Deps,
-    reg: &TriggerRegistration,
-    flow: &Flow,
-    version: &FlowVersion,
-    items: &[EventItem],
-    debounce_secs: Option<u32>,
-    mode: ExecutionMode,
-    now: DateTime<Utc>,
-) -> Result<Vec<ExecutionId>, AppError> {
-    let new: Vec<NewExecution> = items
-        .iter()
-        .map(|item| {
-            let (dedupe, run_at) = match (debounce_secs.filter(|s| *s > 0), &item.record_id) {
-                (Some(secs), Some(record)) => {
-                    let window = i64::from(secs);
-                    let bucket = now.timestamp().div_euclid(window) + 1;
-                    let run_at = DateTime::from_timestamp(bucket * window, 0).unwrap_or(now);
-                    (
-                        format!("rec:{record}:{bucket}"),
-                        run_at.max(now + Duration::seconds(1)),
-                    )
-                }
-                _ => (item.dedupe_key.clone(), now),
-            };
-            let event = NewTriggerEvent {
-                id: deps.new_event_id(),
-                registration_id: reg.id,
-                dedupe_key: Some(dedupe),
-                payload: item.data.clone(),
-            };
-            new_execution(
-                deps,
-                flow.org_id,
-                flow.id,
-                version.id,
-                mode,
-                item.data.clone(),
-                Some(event),
-                run_at,
-                None,
-            )
-        })
-        .collect();
-    let ids = deps
-        .store
-        .create_executions(flow.org_id, flow.id, &new, now)
-        .await?;
-    if !ids.is_empty() {
-        deps.wake.notify_one();
-    }
-    Ok(ids)
 }
 
 /// Constant-time string comparison for secrets.

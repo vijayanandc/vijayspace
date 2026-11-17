@@ -8,8 +8,9 @@ use std::{
 use async_trait::async_trait;
 use serde_json::{Map, Value, json};
 use weft_connector_sdk::{
-    ActionCtx, ActionSpec, AuthSpec, Connector, ConnectorError, ConnectorManifest, FieldKind,
-    FieldSpec, ObjectInfo, Page, Record, RecordObjects, RecordRef,
+    ActionCtx, ActionSpec, AuthSpec, Connector, ConnectorError, ConnectorManifest, EventBatch,
+    EventItem, FieldKind, FieldSpec, InboundRequest, ObjectInfo, Page, PollResult, Record,
+    RecordObjects, RecordRef, TriggerKind, TriggerSpec,
 };
 
 type Tables = BTreeMap<String, BTreeMap<String, Map<String, Value>>>;
@@ -20,6 +21,8 @@ pub struct MemoryRecordsConnector {
     manifest: ConnectorManifest,
     pub tables: Arc<Mutex<Tables>>,
     pub writes: Arc<Mutex<Vec<(String, String, String)>>>,
+    /// Events the next poll returns (same shape as an instant event body).
+    pub pending_poll: Arc<Mutex<Vec<Value>>>,
 }
 
 impl MemoryRecordsConnector {
@@ -39,13 +42,22 @@ impl MemoryRecordsConnector {
                     .field(FieldSpec::string("module", "Module").required())
                     .field(FieldSpec::new("values", "Values", FieldKind::Object)),
             ],
-            triggers: Vec::new(),
+            triggers: vec![
+                TriggerSpec::new(
+                    "record_event",
+                    "Record changed",
+                    "Instant: the test posts `{id, modified, record, deleted?}`; polling replays `pending_poll`.",
+                    TriggerKind::Instant,
+                )
+                .with_polling(),
+            ],
             docs_url: None,
         };
         Self {
             manifest,
             tables: Arc::new(Mutex::new(BTreeMap::new())),
             writes: Arc::new(Mutex::new(Vec::new())),
+            pending_poll: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -121,6 +133,51 @@ impl Connector for MemoryRecordsConnector {
 
     fn records(&self) -> Option<&dyn RecordObjects> {
         Some(self)
+    }
+
+    async fn handle_event(
+        &self,
+        _ctx: &ActionCtx,
+        _trigger: &str,
+        _input: &Value,
+        request: &InboundRequest,
+        _verify_token: &str,
+    ) -> Result<EventBatch, ConnectorError> {
+        Ok(EventBatch {
+            items: vec![event_item(&request.body)],
+            response: None,
+        })
+    }
+
+    async fn poll(
+        &self,
+        _ctx: &ActionCtx,
+        _trigger: &str,
+        _input: &Value,
+        _cursor: Option<&Value>,
+    ) -> Result<PollResult, ConnectorError> {
+        let events = std::mem::take(&mut *self.pending_poll.lock().unwrap());
+        Ok(PollResult {
+            items: events.iter().map(event_item).collect(),
+            cursor: None,
+        })
+    }
+}
+
+/// `{id, modified, record, deleted?}` → an item whose dedupe key is the record version, as real
+/// connectors do (`{id}:{modified}`).
+fn event_item(body: &Value) -> EventItem {
+    let id = body["id"].as_str().unwrap_or_default().to_owned();
+    let modified = body["modified"].as_str().unwrap_or_default();
+    let deleted = body["deleted"].as_bool().unwrap_or(false);
+    EventItem {
+        dedupe_key: if deleted {
+            format!("{id}:deleted")
+        } else {
+            format!("{id}:{modified}")
+        },
+        record_id: Some(id.clone()),
+        data: json!({"id": id, "operation": if deleted { "delete" } else { "edit" }, "record": body["record"]}),
     }
 }
 

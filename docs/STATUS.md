@@ -13,11 +13,14 @@ What is built on the `backend` and `client` branches, how it deviates from the p
 - Retries: per-step automatic retry with backoff (60 s → 6 h, 9 attempts) for transient errors. Executions can be retried from the failed step, re-run, or cancelled.
 
 ### Runtime
-- MySQL is the job queue: `FOR UPDATE SKIP LOCKED` claims, leases with heartbeat, a reaper for expired leases, and dead letters. Trigger event, execution and job are written in one transaction.
+- MySQL is the job queue: `FOR UPDATE SKIP LOCKED` claims, leases with heartbeat, and a reaper for expired leases. A job that keeps failing, or whose worker keeps dying, becomes dead after `max_attempts` and releases its dedupe key. Only the current lease holder can complete, reschedule or fail a job. Trigger event, execution and job are written in one transaction.
+- Polls: one poll job per registration at a time. A failed poll is not retried (the next interval polls again).
+- Subscription renewals run on their own loop and are claimed per worker, so slow provider APIs never delay schedules or lease recovery.
 - Webhook ingress: an array body can start one execution per element, plus idempotency-key dedupe, an optional shared secret header and a 6 MB limit.
-- App events: subscribe, renew and unsubscribe hooks; reconciliation polling; a 30 s debounce per record.
+- App events: subscribe, renew and unsubscribe hooks; reconciliation polling; a 30 s debounce per record. Every event version is recorded, so the reconciliation poll never re-runs a version already delivered. Within a debounce window the queued run takes the newest event (an edit followed by a delete runs once, as a delete).
 - Connections: secrets are encrypted with AES-256-GCM (AAD = org and connection, key ring with rotation). OAuth2 with PKCE, token refresh under a per-connection lock, and `needs_reauth` status.
-- Outbound HTTP goes through an SSRF guard (DNS resolver check, literal-IP check, redirect re-check).
+- Outbound HTTP goes through an SSRF guard: a DNS resolver check, a literal-IP check (including NAT64 and 6to4 addresses that embed IPv4), and a redirect re-check. Environment proxies (`HTTP(S)_PROXY`) are ignored on purpose, because a proxy would resolve hosts outside the guard.
+- OAuth: `oauth/start` keeps only the app's declared settings, and the Zoho accounts server is limited to Zoho's data centres. Both protect the token request, which carries the client secret.
 - Usage counters (tasks per month).
 
 ### Integrations (doc 13)
@@ -48,6 +51,10 @@ What is built on the `backend` and `client` branches, how it deviates from the p
 | `openapi/` + `fixtures/` generated contract, `just gen`, `cargo xtask` checks | Hand-written contract in `docs/api/README.md` | Backlog T01–T10. |
 | Rhai custom functions (doc 08 §7) | Not built | Next increment candidate. |
 | Per-connection rate limiter and budgets (doc 13 §4.3) | Not built; a 429 from an app is retried with backoff | Needed before large backfills against Zoho or Appblocks. |
+| Retention sweeps (doc 05 §4, M29) | Not built: `trigger_events`, `executions`, `step_runs`, dead `jobs` and test snapshots grow without limit | Add the sweep before production volumes. |
+| Backfill as a background job | One call backfills at most 2,000 records, inside the HTTP request | Move to a `sync_bulk` job with progress. |
+| OAuth refresh across processes | Refreshes are serialised per process. A forced refresh is skipped if the token already changed. Separate `weft api` and `weft worker` processes can still race on single-use refresh tokens. | Use a database lock (`GET_LOCK`) when running split processes. `weft serve` (one process) is not affected. |
+| Files ≤ 400 lines (AGENTS.md) | A few older files are over: `engine/interpreter.rs` and `domain/flow/validate.rs` (both including tests), `connectors/core/formatter.rs`, `app/runner/run.rs`, `connector-sdk/manifest.rs` and two connector test files | Split them in a refactor-only change. |
 
 ## Needs checking against live accounts
 - **Autodesk Forma:** request and response shapes marked `VERIFY (spike M37a)` in `crates/connectors/src/autodesk_forma/` (10 places):

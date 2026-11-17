@@ -85,5 +85,7 @@ pub fn new_execution(
         event,
         job: run_job(deps, org, id, mode, run_at),
         execution,
+        seen: None,
+        coalesce: false,
     }
 }

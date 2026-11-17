@@ -67,6 +67,9 @@ impl ReqwestSender {
             }
         });
         let client = reqwest::Client::builder()
+            // An HTTP(S)_PROXY from the environment would resolve hosts itself and bypass the
+            // guarded resolver below.
+            .no_proxy()
             .dns_resolver(Arc::new(GuardedResolver { policy }))
             .redirect(redirect_policy)
             .connect_timeout(Duration::from_secs(10))

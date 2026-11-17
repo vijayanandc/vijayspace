@@ -1,11 +1,12 @@
 //! `ExecutionRepo` for MySQL: executions, step runs, trigger events and usage counters.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Datelike as _, Utc};
+use chrono::{DateTime, Utc};
 use serde_json::{Map, Value, json};
 use sqlx::{FromRow, MySql, QueryBuilder, Transaction, types::Json};
 use weft_app::ports::{
-    Checkpoint, ExecutionFilter, ExecutionRepo, Finish, NewExecution, NewJob, Res, StepCompletion,
+    Checkpoint, ExecutionFilter, ExecutionRepo, Finish, NewExecution, NewJob, NewTriggerEvent, Res,
+    StepCompletion,
 };
 use weft_domain::{
     ids::{ExecutionId, FlowId, OrgId},
@@ -14,17 +15,15 @@ use weft_domain::{
 
 use crate::{
     MySqlStore,
-    codec::{db_err, enum_str, is_duplicate},
+    codec::{db_err, enum_str},
+    events::{coalesce_into_queued, insert_event},
     jobs::insert_job,
     rows::{ExecutionRow, StepRunRow},
+    usage::bump_usage,
 };
 
 const EXE_COLUMNS: &str = "e.id, e.org_id, e.flow_id, e.flow_version_id, e.trigger_event_id, e.mode, e.rerun_of, e.status, e.trigger_data, e.run_state, \
     e.waiting_until, e.task_count, e.error_code, e.error_message, e.failed_step_key, e.possible_duplicate, e.cancel_requested, e.queued_at, e.started_at, e.finished_at";
-
-fn period(now: DateTime<Utc>) -> String {
-    format!("{:04}-{:02}", now.year(), now.month())
-}
 
 #[derive(Debug, FromRow)]
 struct ExecutionListRow {
@@ -59,27 +58,6 @@ async fn insert_execution(
     .map(|_| ())
 }
 
-async fn bump_usage(
-    tx: &mut Transaction<'_, MySql>,
-    org: OrgId,
-    now: DateTime<Utc>,
-    tasks: u32,
-    executions: u32,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO usage_counters (org_id, period, tasks_used, executions, updated_at) VALUES (?, ?, ?, ?, ?) AS new \
-         ON DUPLICATE KEY UPDATE tasks_used = usage_counters.tasks_used + new.tasks_used, executions = usage_counters.executions + new.executions, updated_at = new.updated_at",
-    )
-    .bind(org.as_uuid())
-    .bind(period(now))
-    .bind(tasks)
-    .bind(executions)
-    .bind(now)
-    .execute(&mut **tx)
-    .await
-    .map(|_| ())
-}
-
 async fn write_checkpoint(
     tx: &mut Transaction<'_, MySql>,
     c: &Checkpoint,
@@ -107,23 +85,27 @@ impl ExecutionRepo for MySqlStore {
         let mut tx = self.pool.begin().await.map_err(db_err)?;
         let mut created = Vec::with_capacity(items.len());
         for item in items {
-            if let Some(ev) = &item.event {
-                let inserted = sqlx::query("INSERT INTO trigger_events (id, org_id, flow_id, registration_id, dedupe_key, status, payload, received_at) VALUES (?, ?, ?, ?, ?, 'accepted', ?, ?)")
-                    .bind(ev.id.as_uuid())
-                    .bind(org.as_uuid())
-                    .bind(item.execution.flow_id.as_uuid())
-                    .bind(ev.registration_id.as_uuid())
-                    .bind(&ev.dedupe_key)
-                    .bind(Json(&ev.payload))
-                    .bind(now)
-                    .execute(&mut *tx)
-                    .await;
-                match inserted {
-                    Ok(_) => {}
-                    // Already seen (dedupe): InnoDB rolled back only this statement; skip the item.
-                    Err(e) if is_duplicate(&e) => continue,
-                    Err(e) => return Err(db_err(e)),
+            if let Some(seen) = &item.seen
+                && !insert_event(&mut tx, org, item, seen, now).await?
+            {
+                continue; // this exact version was already delivered
+            }
+            if let Some(ev) = &item.event
+                && !insert_event(&mut tx, org, item, ev, now).await?
+            {
+                if !item.coalesce {
+                    continue; // already seen (dedupe)
                 }
+                if coalesce_into_queued(&mut tx, org, ev, &item.execution.trigger_data).await? {
+                    continue; // the burst's queued execution now carries the newest data
+                }
+                // The burst's execution already started: run this event on its own (the event
+                // keeps its ID, so the execution's `trigger_event_id` stays valid).
+                let unkeyed = NewTriggerEvent {
+                    dedupe_key: None,
+                    ..ev.clone()
+                };
+                insert_event(&mut tx, org, item, &unkeyed, now).await?;
             }
             insert_execution(&mut tx, &item.execution, now)
                 .await

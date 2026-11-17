@@ -188,3 +188,62 @@ async fn sync_pickers_list_record_connections_modules_and_fields() {
     assert_eq!(fields["fields"][0]["key"], "name");
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn a_target_linked_to_another_source_is_never_taken_over() {
+    let app = TestApp::spawn().await;
+    let src = app.connection("memsrc", "Source").await;
+    let dst = app.connection("memdst", "Target").await;
+    let flow = app
+        .live_flow(
+            "Contacts",
+            sync_flow(
+                &src,
+                &dst,
+                "contacts",
+                json!({"email": "{{ trigger.email }}", "name": "{{ trigger.name }}"}),
+                json!({"match_field": "email", "match_value": "{{ trigger.email }}"}),
+            ),
+        )
+        .await;
+    let flow_id = flow["id"].as_str().unwrap();
+    let first = run(
+        &app,
+        flow_id,
+        json!({"id": "A1", "email": "x@acme.io", "name": "Ann"}),
+    )
+    .await;
+    assert_eq!(output(&first)["action"], "created");
+    let target_id = output(&first)["target_id"].as_str().unwrap().to_owned();
+
+    // Another source record with the same email must not overwrite or steal A1's target.
+    let second = run(
+        &app,
+        flow_id,
+        json!({"id": "A2", "email": "x@acme.io", "name": "Bob"}),
+    )
+    .await;
+    assert_eq!(second["status"], "failed", "{second}");
+    assert!(
+        second["error_message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("sync.ambiguous_match"),
+        "{second}"
+    );
+    assert_eq!(
+        app.dst.get_record("contacts", &target_id).unwrap()["name"],
+        "Ann"
+    );
+    assert_eq!(app.dst.count("contacts"), 1);
+
+    // A1's link is intact: an unchanged re-sync is still skipped.
+    let again = run(
+        &app,
+        flow_id,
+        json!({"id": "A1", "email": "x@acme.io", "name": "Ann"}),
+    )
+    .await;
+    assert_eq!(output(&again)["action"], "skipped", "{again}");
+    app.cleanup().await;
+}

@@ -102,29 +102,56 @@ impl LinkRepo for MySqlStore {
     }
 
     async fn upsert_link(&self, l: &RecordLink, now: DateTime<Utc>) -> Res<()> {
-        let result = sqlx::query(
-            "INSERT INTO record_links (id, org_id, link_set, a_connection_id, a_object, a_record_id, b_connection_id, b_object, b_record_id, b_hash, b_written_at, created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) AS new \
-             ON DUPLICATE KEY UPDATE b_connection_id = new.b_connection_id, b_object = new.b_object, b_record_id = new.b_record_id, \
-             b_hash = new.b_hash, b_written_at = new.b_written_at, updated_at = new.updated_at",
+        // Not `INSERT … ON DUPLICATE KEY UPDATE`: with two unique keys MySQL would update the row
+        // that collides on side B (another source record's link) instead of failing.
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        let existing: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM record_links WHERE org_id = ? AND link_set = ? AND a_connection_id = ? AND a_object = ? AND a_record_id = ? FOR UPDATE",
         )
-        .bind(l.id.as_uuid())
         .bind(l.org_id.as_uuid())
         .bind(&l.link_set)
         .bind(l.a.connection_id.as_uuid())
         .bind(&l.a.object)
         .bind(&l.a.record_id)
-        .bind(l.b.connection_id.as_uuid())
-        .bind(&l.b.object)
-        .bind(&l.b.record_id)
-        .bind(&l.b_hash)
-        .bind(l.b_written_at)
-        .bind(now)
-        .bind(now)
-        .execute(&self.pool)
-        .await;
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        let result = match existing {
+            Some(id) => {
+                sqlx::query("UPDATE record_links SET b_connection_id = ?, b_object = ?, b_record_id = ?, b_hash = ?, b_written_at = ?, updated_at = ? WHERE id = ?")
+                    .bind(l.b.connection_id.as_uuid())
+                    .bind(&l.b.object)
+                    .bind(&l.b.record_id)
+                    .bind(&l.b_hash)
+                    .bind(l.b_written_at)
+                    .bind(now)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+            }
+            None => {
+                sqlx::query("INSERT INTO record_links (id, org_id, link_set, a_connection_id, a_object, a_record_id, b_connection_id, b_object, b_record_id, b_hash, b_written_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                    .bind(l.id.as_uuid())
+                    .bind(l.org_id.as_uuid())
+                    .bind(&l.link_set)
+                    .bind(l.a.connection_id.as_uuid())
+                    .bind(&l.a.object)
+                    .bind(&l.a.record_id)
+                    .bind(l.b.connection_id.as_uuid())
+                    .bind(&l.b.object)
+                    .bind(&l.b.record_id)
+                    .bind(&l.b_hash)
+                    .bind(l.b_written_at)
+                    .bind(now)
+                    .bind(now)
+                    .execute(&mut *tx)
+                    .await
+            }
+        };
         match result {
-            Ok(_) => Ok(()),
+            Ok(_) => tx.commit().await.map_err(db_err),
+            // Side B already belongs to another source record (or a concurrent insert of the same
+            // source won the race; the caller's retry then takes the update path).
             Err(e) if is_duplicate(&e) => Err(AppError::conflict(
                 error_codes::SYNC_AMBIGUOUS_MATCH,
                 "The target record is already linked to another source record",

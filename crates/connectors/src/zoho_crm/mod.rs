@@ -16,6 +16,19 @@ use weft_connector_sdk::{
 
 use crate::util::{list, object, opt_bool, opt_f64, opt_str, req_str};
 
+/// Zoho accounts servers (one per data centre). The first is the default (US).
+pub(crate) const ACCOUNTS_SERVERS: [&str; 9] = [
+    "https://accounts.zoho.com",
+    "https://accounts.zoho.eu",
+    "https://accounts.zoho.in",
+    "https://accounts.zoho.com.au",
+    "https://accounts.zoho.jp",
+    "https://accounts.zoho.com.cn",
+    "https://accounts.zohocloud.ca",
+    "https://accounts.zoho.sa",
+    "https://accounts.zoho.uk",
+];
+
 /// The Zoho CRM connector.
 #[derive(Debug)]
 pub struct ZohoCrmConnector {
@@ -293,12 +306,14 @@ impl Connector for ZohoCrmConnector {
     }
 
     fn oauth_callback_config(&self, query: &BTreeMap<String, String>) -> Value {
+        // The token request carries the platform's client secret, so the accounts server must
+        // be one of Zoho's own data centres, never whatever the callback URL says.
         let accounts = query
             .get("accounts-server")
-            .filter(|s| s.starts_with("https://"))
-            .cloned()
-            .unwrap_or_else(|| "https://accounts.zoho.com".into());
-        json!({"accounts_server": accounts.trim_end_matches('/'), "location": query.get("location")})
+            .map(|s| s.trim_end_matches('/'))
+            .filter(|s| ACCOUNTS_SERVERS.contains(s))
+            .unwrap_or(ACCOUNTS_SERVERS[0]);
+        json!({"accounts_server": accounts, "location": query.get("location")})
     }
 
     fn oauth_token_config(&self, token_response: &Value) -> Value {

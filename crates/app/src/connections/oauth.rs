@@ -12,7 +12,7 @@ use weft_domain::{
     model::{Connection, ConnectionStatus},
 };
 
-use super::{handle::encrypt, test_connection};
+use super::{handle::encrypt, manage::split_fields, test_connection};
 use crate::{
     AppError, Deps,
     ports::{OAuthState, StoredConnection},
@@ -75,8 +75,11 @@ pub async fn oauth_start(
         Some(v) => Some(deps.secrets.seal(v.as_bytes(), &state_aad(&hash))?.0),
         None => None,
     };
+    // Only the app's declared, non-secret settings (e.g. region) are kept: they feed the
+    // authorize/token URL templates, so arbitrary keys must not reach them.
+    let (declared, _secrets) = split_fields(c.as_ref(), config, true)?;
     let now = deps.clock.now();
-    let config = Value::Object(config.clone());
+    let config = Value::Object(declared);
     deps.store
         .insert_oauth_state(
             &OAuthState {

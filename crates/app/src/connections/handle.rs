@@ -7,7 +7,10 @@ use std::{
 
 use async_trait::async_trait;
 use serde_json::{Map, Value};
-use weft_connector_sdk::{ConnectionHandle, ConnectorError, oauth};
+use weft_connector_sdk::{
+    ConnectionHandle, Connector, ConnectorError, OAuth2Spec,
+    oauth::{self, OAuthClient},
+};
 use weft_domain::model::ConnectionStatus;
 
 use super::secret_aad;
@@ -67,6 +70,9 @@ impl DbConnectionHandle {
         let _guard = lock.lock().await;
         // Re-read under the lock: another task may have refreshed already.
         let mut stored = self.stored.lock().await;
+        let seen = decrypt(&self.deps, &stored)
+            .ok()
+            .and_then(|s| token_of(&s).ok());
         let conn = &stored.connection;
         let fresh = self
             .deps
@@ -80,33 +86,15 @@ impl DbConnectionHandle {
         *stored = fresh;
         let secrets = decrypt(&self.deps, &stored)?;
         let now = self.deps.clock.now();
-        if !force && !oauth::needs_refresh(&secrets, now) {
+        let current = token_of(&secrets).ok();
+        // A forced refresh (after a 401) is skipped when the token already changed since this
+        // handle read it: N concurrent 401s cause one refresh, not N (single-use refresh tokens
+        // would otherwise invalidate each other).
+        let refreshed_meanwhile = force && current.is_some() && current != seen;
+        if refreshed_meanwhile || (!force && !oauth::needs_refresh(&secrets, now)) {
             return token_of(&secrets);
         }
-        let connector_key = stored.connection.connector.clone();
-        let connector = self
-            .deps
-            .connectors
-            .get(&connector_key)
-            .cloned()
-            .ok_or_else(|| ConnectorError::permanent("unknown connector"))?;
-        let spec = connector
-            .manifest()
-            .auth
-            .oauth2
-            .clone()
-            .ok_or_else(|| ConnectorError::permanent("connector has no OAuth settings"))?;
-        let client = self
-            .deps
-            .config
-            .oauth_clients
-            .get(&connector_key)
-            .cloned()
-            .ok_or_else(|| {
-                ConnectorError::permanent(format!(
-                    "OAuth app for `{connector_key}` is not configured on this server"
-                ))
-            })?;
+        let (connector, spec, client) = oauth_setup(&self.deps, &stored.connection.connector)?;
         let refresh_token = secrets
             .get("refresh_token")
             .and_then(Value::as_str)
@@ -162,6 +150,35 @@ impl DbConnectionHandle {
             .map_err(|e| ConnectorError::transient(e.to_string()))?;
         token_of(&new_secrets)
     }
+}
+
+/// The connector, its OAuth settings and this server's OAuth app for it.
+fn oauth_setup(
+    deps: &Deps,
+    connector_key: &str,
+) -> Result<(Arc<dyn Connector>, OAuth2Spec, OAuthClient), ConnectorError> {
+    let connector = deps
+        .connectors
+        .get(connector_key)
+        .cloned()
+        .ok_or_else(|| ConnectorError::permanent("unknown connector"))?;
+    let spec = connector
+        .manifest()
+        .auth
+        .oauth2
+        .clone()
+        .ok_or_else(|| ConnectorError::permanent("connector has no OAuth settings"))?;
+    let client = deps
+        .config
+        .oauth_clients
+        .get(connector_key)
+        .cloned()
+        .ok_or_else(|| {
+            ConnectorError::permanent(format!(
+                "OAuth app for `{connector_key}` is not configured on this server"
+            ))
+        })?;
+    Ok((connector, spec, client))
 }
 
 fn token_of(secrets: &Value) -> Result<String, ConnectorError> {

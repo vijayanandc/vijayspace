@@ -5,6 +5,7 @@
 
 mod codec;
 mod connections;
+mod events;
 mod executions;
 mod flows;
 mod jobs;
@@ -12,6 +13,7 @@ mod links;
 mod orgs;
 mod rows;
 mod triggers;
+mod usage;
 
 use std::time::Duration;
 

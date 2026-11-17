@@ -207,16 +207,31 @@ impl TriggerRepo for MySqlStore {
         Ok(())
     }
 
-    async fn due_subscriptions(&self, now: DateTime<Utc>, limit: u32) -> Res<Vec<Subscription>> {
+    async fn claim_due_subscriptions(
+        &self,
+        now: DateTime<Utc>,
+        claim_until: DateTime<Utc>,
+        limit: u32,
+    ) -> Res<Vec<Subscription>> {
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
         let sql = format!(
-            "SELECT {SUB_COLUMNS} FROM app_subscriptions WHERE renew_after IS NOT NULL AND renew_after <= ? ORDER BY renew_after LIMIT ?"
+            "SELECT {SUB_COLUMNS} FROM app_subscriptions WHERE renew_after IS NOT NULL AND renew_after <= ? ORDER BY renew_after LIMIT ? FOR UPDATE SKIP LOCKED"
         );
         let rows: Vec<SubscriptionRow> = sqlx::query_as(&sql)
             .bind(now)
             .bind(limit)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *tx)
             .await
             .map_err(db_err)?;
+        for row in &rows {
+            sqlx::query("UPDATE app_subscriptions SET renew_after = ? WHERE id = ?")
+                .bind(claim_until)
+                .bind(row.id)
+                .execute(&mut *tx)
+                .await
+                .map_err(db_err)?;
+        }
+        tx.commit().await.map_err(db_err)?;
         Ok(rows.into_iter().map(Subscription::from).collect())
     }
 }

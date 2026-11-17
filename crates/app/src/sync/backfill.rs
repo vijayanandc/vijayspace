@@ -16,13 +16,19 @@ use crate::{
     triggers::ingress_items,
 };
 
-/// Pages through the trigger module's records (up to `limit`) and starts a backfill execution for each.
+/// Upper bound for one backfill call.
+pub const MAX_BACKFILL: u32 = 2_000;
+
+/// Pages through the trigger module's records (up to `limit`, at most [`MAX_BACKFILL`]) and starts a backfill execution for each.
 pub async fn backfill(
     deps: &Deps,
     org: OrgId,
     flow_id: FlowId,
     limit: u32,
 ) -> Result<usize, AppError> {
+    // Runs inside the HTTP request: keep one call bounded. For more records, call again; sync
+    // steps skip records whose data has not changed.
+    let limit = limit.min(MAX_BACKFILL);
     let flow = deps
         .store
         .get_flow(org, flow_id)

@@ -101,68 +101,80 @@ impl JobQueue for MySqlStore {
                 payload: r.payload.0,
                 attempts: r.attempts + 1,
                 max_attempts: r.max_attempts,
+                holder: worker.to_owned(),
             })
             .collect())
     }
 
-    async fn complete(&self, id: JobId) -> Res<()> {
-        sqlx::query("DELETE FROM jobs WHERE id = ?")
-            .bind(id.as_uuid())
-            .execute(&self.pool)
-            .await
-            .map_err(db_err)?;
-        Ok(())
+    async fn complete(&self, job: &ClaimedJob) -> Res<bool> {
+        let r =
+            sqlx::query("DELETE FROM jobs WHERE id = ? AND status = 'running' AND locked_by = ?")
+                .bind(job.id.as_uuid())
+                .bind(&job.holder)
+                .execute(&self.pool)
+                .await
+                .map_err(db_err)?;
+        Ok(r.rows_affected() > 0)
     }
 
-    async fn reschedule(&self, id: JobId, run_at: DateTime<Utc>, now: DateTime<Utc>) -> Res<()> {
+    async fn reschedule(
+        &self,
+        job: &ClaimedJob,
+        run_at: DateTime<Utc>,
+        now: DateTime<Utc>,
+    ) -> Res<bool> {
         // A deliberate reschedule (delay, retry backoff) is not a failure: reset the attempt count.
-        sqlx::query("UPDATE jobs SET status = 'ready', run_at = ?, locked_by = NULL, locked_until = NULL, attempts = 0, updated_at = ? WHERE id = ?")
+        let r = sqlx::query("UPDATE jobs SET status = 'ready', run_at = ?, locked_by = NULL, locked_until = NULL, attempts = 0, updated_at = ? WHERE id = ? AND status = 'running' AND locked_by = ?")
             .bind(run_at)
             .bind(now)
-            .bind(id.as_uuid())
+            .bind(job.id.as_uuid())
+            .bind(&job.holder)
             .execute(&self.pool)
             .await
             .map_err(db_err)?;
-        Ok(())
+        Ok(r.rows_affected() > 0)
     }
 
     async fn fail(
         &self,
-        id: JobId,
+        job: &ClaimedJob,
         error: &str,
         retry_at: DateTime<Utc>,
         now: DateTime<Utc>,
-    ) -> Res<bool> {
-        let result = sqlx::query(
-            "UPDATE jobs SET status = IF(attempts >= max_attempts, 'dead', 'ready'), run_at = ?, last_error = ?, locked_by = NULL, locked_until = NULL, updated_at = ? WHERE id = ?",
+    ) -> Res<Option<bool>> {
+        // A dead job releases its dedupe key so it never blocks a later job for the same work.
+        let r = sqlx::query(
+            "UPDATE jobs SET status = IF(attempts >= max_attempts, 'dead', 'ready'), dedupe_key = IF(attempts >= max_attempts, NULL, dedupe_key), run_at = ?, last_error = ?, locked_by = NULL, locked_until = NULL, updated_at = ? WHERE id = ? AND status = 'running' AND locked_by = ?",
         )
         .bind(retry_at)
         .bind(error.chars().take(4000).collect::<String>())
         .bind(now)
-        .bind(id.as_uuid())
+        .bind(job.id.as_uuid())
+        .bind(&job.holder)
         .execute(&self.pool)
         .await
         .map_err(db_err)?;
-        let dead: Option<String> = sqlx::query_scalar("SELECT status FROM jobs WHERE id = ?")
-            .bind(id.as_uuid())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(db_err)?;
-        Ok(result.rows_affected() > 0 && dead.as_deref() == Some("dead"))
+        if r.rows_affected() == 0 {
+            return Ok(None);
+        }
+        Ok(Some(job.attempts >= job.max_attempts))
     }
 
-    async fn heartbeat(&self, id: JobId, lease_until: DateTime<Utc>) -> Res<()> {
-        sqlx::query("UPDATE jobs SET locked_until = ? WHERE id = ? AND status = 'running'")
+    async fn heartbeat(&self, job: &ClaimedJob, lease_until: DateTime<Utc>) -> Res<bool> {
+        let r = sqlx::query("UPDATE jobs SET locked_until = ? WHERE id = ? AND status = 'running' AND locked_by = ?")
             .bind(lease_until)
-            .bind(id.as_uuid())
+            .bind(job.id.as_uuid())
+            .bind(&job.holder)
             .execute(&self.pool)
             .await
             .map_err(db_err)?;
-        Ok(())
+        Ok(r.rows_affected() > 0)
     }
 
     async fn reap(&self, now: DateTime<Utc>) -> Res<u64> {
-        let result = sqlx::query("UPDATE jobs SET status = 'ready', locked_by = NULL, locked_until = NULL, updated_at = ? WHERE status = 'running' AND locked_until < ?")
+        // A job whose worker keeps dying (crash, OOM, panic) is a poison job: dead after
+        // `max_attempts` claims instead of cycling forever.
+        let result = sqlx::query("UPDATE jobs SET status = IF(attempts >= max_attempts, 'dead', 'ready'), dedupe_key = IF(attempts >= max_attempts, NULL, dedupe_key), last_error = IF(attempts >= max_attempts, 'lease expired too many times', last_error), locked_by = NULL, locked_until = NULL, updated_at = ? WHERE status = 'running' AND locked_until < ?")
             .bind(now)
             .bind(now)
             .execute(&self.pool)

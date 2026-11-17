@@ -14,7 +14,10 @@ use crate::{
 /// Renews or retries due subscriptions; returns how many were processed.
 pub async fn renew_due_subscriptions(deps: &Deps) -> Result<usize, AppError> {
     let now = deps.clock.now();
-    let due = deps.store.due_subscriptions(now, 50).await?;
+    let due = deps
+        .store
+        .claim_due_subscriptions(now, now + Duration::minutes(10), 20)
+        .await?;
     let mut n = 0;
     for mut sub in due {
         n += 1;

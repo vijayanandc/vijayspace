@@ -41,6 +41,8 @@ chrono.workspace = true
 tower.workspace = true
 wiremock.workspace = true
 http-body-util = "0.1"
+sha2.workspace = true
+futures.workspace = true
 
 [lints]
 workspace = true

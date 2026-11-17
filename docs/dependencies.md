@@ -15,7 +15,7 @@ One line per third-party crate: what it is for. Add a line here in the same chan
 | rand | connector-sdk | Random tokens (OAuth state, PKCE verifier, webhook tokens) |
 | regex | expr, connectors | `regex_replace` filter, `matches_regex` operator, text extraction |
 | async-trait | app, connector-sdk, connectors, db | Object-safe async ports and connectors |
-| futures | worker | Declared for stream helpers in background loops (currently unused; remove if still unused at T01) |
+| futures | worker, server (tests) | `join_all` in concurrency tests; declared in the worker for stream helpers |
 | tokio, tokio-util | app, worker, server | Runtime, `Notify`/`Semaphore`; cancellation tokens for graceful shutdown |
 | axum, tower, tower-http | api | HTTP server, middleware (CORS, body limit, tracing) |
 | http-body-util | server (tests) | Reading response bodies in scenario tests |

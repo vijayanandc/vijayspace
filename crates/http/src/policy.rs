@@ -65,6 +65,17 @@ fn is_public_v4(ip: Ipv4Addr) -> bool {
 
 fn is_public_v6(ip: Ipv6Addr) -> bool {
     let seg = ip.segments();
+    // Translation prefixes embed an IPv4 address: judge that address instead.
+    // 64:ff9b::/96 (NAT64) carries it in the last 32 bits, 2002::/16 (6to4) in bits 16..48.
+    if seg[0] == 0x0064 && seg[1] == 0xff9b && seg[2..6] == [0, 0, 0, 0] {
+        let [.., a, b] = seg;
+        return is_public_v4(Ipv4Addr::from((u32::from(a) << 16) | u32::from(b)));
+    }
+    if seg[0] == 0x2002 {
+        return is_public_v4(Ipv4Addr::from(
+            (u32::from(seg[1]) << 16) | u32::from(seg[2]),
+        ));
+    }
     !(ip.is_loopback()
         || ip.is_unspecified()
         || ip.is_multicast()
@@ -96,6 +107,10 @@ mod tests {
             "fe80::1",
             "::ffff:127.0.0.1",
             "::ffff:10.0.0.1",
+            "64:ff9b::7f00:1",    // NAT64 of 127.0.0.1
+            "64:ff9b::a9fe:a9fe", // NAT64 of 169.254.169.254
+            "2002:a00:1::1",      // 6to4 of 10.0.0.1
+            "2002:c0a8:101::1",   // 6to4 of 192.168.1.1
         ] {
             assert!(
                 !p.allows(blocked.parse().unwrap()),
@@ -107,6 +122,7 @@ mod tests {
             "1.1.1.1",
             "2606:4700:4700::1111",
             "::ffff:8.8.8.8",
+            "64:ff9b::808:808", // NAT64 of 8.8.8.8
         ] {
             assert!(
                 p.allows(allowed.parse().unwrap()),

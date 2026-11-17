@@ -2,6 +2,7 @@
 //! and provider subscriptions.
 
 mod ingress;
+mod items;
 mod poll;
 mod registration;
 mod schedule;
@@ -18,7 +19,7 @@ pub async fn ingress_items(
     items: &[weft_connector_sdk::EventItem],
     mode: weft_domain::model::ExecutionMode,
 ) -> Result<Vec<weft_domain::ids::ExecutionId>, crate::AppError> {
-    ingress::start_items(
+    items::start_items(
         deps,
         reg,
         flow,
