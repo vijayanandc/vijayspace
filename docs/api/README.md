@@ -166,7 +166,7 @@ Secrets are never returned.
 ```json
 { "draft": FlowDefinition, "published_version_id": "fvr_…", "created_at": "…",
   "trigger": { "kind": "webhook|schedule|poll|instant|manual", "token": "…", "webhook_url": "http://host/hooks/<token>",
-               "app_event_url": "http://host/hooks/app/<token>", "is_active": true,
+               "app_event_url": "http://host/hooks/app/<token>", "verify_token": "<secret for X-Weft-Key / webhook secret header>", "is_active": true,
                "listening_until": null, "next_fire_at": null, "sample": { } } }
 ```
 

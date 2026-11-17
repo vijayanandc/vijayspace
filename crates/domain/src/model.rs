@@ -186,7 +186,10 @@ pub struct TriggerRegistration {
     pub org_id: OrgId,
     pub flow_id: FlowId,
     pub kind: RegistrationKind,
+    /// URL capability for `/hooks/{token}` and `/hooks/app/{token}`.
     pub token: String,
+    /// Verify token for app events (Zoho `token`, Appblocks `X-Weft-Key`, Autodesk hook attribute).
+    pub secret: String,
     pub is_active: bool,
     pub listening_until: Option<Timestamp>,
     pub next_fire_at: Option<Timestamp>,

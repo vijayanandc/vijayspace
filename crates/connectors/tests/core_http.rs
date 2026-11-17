@@ -42,7 +42,10 @@ async fn sends_json_with_headers_query_and_idempotency_key() {
         "headers": {"X-Api-Key": "k"}, "query": [{"key": "debug", "value": "1"}],
         "body": {"name": "Ann"}, "send_idempotency_key": true
     });
-    let out = HttpConnector::new().execute(&ctx(), "request", input).await.unwrap();
+    let out = HttpConnector::new()
+        .execute(&ctx(), "request", input)
+        .await
+        .unwrap();
     assert_eq!(out["status"], 201);
     assert_eq!(out["body"], json!({"id": "i1"}));
 }
@@ -50,12 +53,34 @@ async fn sends_json_with_headers_query_and_idempotency_key() {
 #[tokio::test]
 async fn error_statuses_map_to_connector_errors() {
     let server = MockServer::start().await;
-    Mock::given(method("GET")).and(path("/busy")).respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "12")).mount(&server).await;
-    Mock::given(method("GET")).and(path("/bad")).respond_with(ResponseTemplate::new(400).set_body_string("nope")).mount(&server).await;
+    Mock::given(method("GET"))
+        .and(path("/busy"))
+        .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "12"))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/bad"))
+        .respond_with(ResponseTemplate::new(400).set_body_string("nope"))
+        .mount(&server)
+        .await;
     let c = HttpConnector::new();
-    let busy = c.execute(&ctx(), "request", json!({"method": "GET", "url": format!("{}/busy", server.uri())})).await.unwrap_err();
+    let busy = c
+        .execute(
+            &ctx(),
+            "request",
+            json!({"method": "GET", "url": format!("{}/busy", server.uri())}),
+        )
+        .await
+        .unwrap_err();
     assert_eq!(busy.retry_after_secs(), Some(12));
-    let bad = c.execute(&ctx(), "request", json!({"method": "GET", "url": format!("{}/bad", server.uri())})).await.unwrap_err();
+    let bad = c
+        .execute(
+            &ctx(),
+            "request",
+            json!({"method": "GET", "url": format!("{}/bad", server.uri())}),
+        )
+        .await
+        .unwrap_err();
     assert!(matches!(bad, ConnectorError::InvalidInput { .. }));
     let tolerant = c.execute(&ctx(), "request", json!({"method": "GET", "url": format!("{}/bad", server.uri()), "fail_on_error_status": false})).await.unwrap();
     assert_eq!(tolerant["status"], 400);

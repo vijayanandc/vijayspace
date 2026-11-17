@@ -196,6 +196,53 @@ fn failed(code: &str, message: impl Into<String>, step: Option<&str>) -> Outcome
     }
 }
 
+/// Evaluates decision arms in order; returns the next program counter and the trace entry.
+fn decide(step: &str, arms: &[crate::plan::Arm], otherwise: Pc, sc: &Value) -> (Pc, TraceEntry) {
+    let mut warnings = Vec::new();
+    let mut chosen = None;
+    for arm in arms {
+        let res = eval_condition(&arm.condition, sc);
+        warnings.extend(res.warnings);
+        if res.matched {
+            chosen = Some(arm);
+            break;
+        }
+    }
+    let pc = chosen.map_or(otherwise, |a| a.target);
+    (
+        pc,
+        TraceEntry::Decision {
+            step: step.to_owned(),
+            branch: chosen.map(|a| a.branch.clone()),
+            warnings,
+        },
+    )
+}
+
+/// The trace entry and outcome of a stop step.
+fn stop_outcome(plan: &Plan, step: &str) -> Result<(TraceEntry, Outcome), EngineError> {
+    let s = step_of(plan, step)?;
+    let StepKind::Stop(spec) = &s.kind else {
+        return Err(EngineError::UnknownStep(step.to_owned()));
+    };
+    let entry = TraceEntry::Stopped {
+        step: step.to_owned(),
+        status: spec.status,
+        message: spec.message.clone(),
+    };
+    let outcome = match spec.status {
+        StopStatus::Succeeded => Outcome::Succeeded,
+        StopStatus::Failed => failed(
+            error_codes::STOPPED_BY_FLOW,
+            spec.message
+                .clone()
+                .unwrap_or_else(|| "Stopped by the flow".to_owned()),
+            Some(step),
+        ),
+    };
+    Ok((entry, outcome))
+}
+
 /// Runs control-flow instructions until something needs the outside world. Pure.
 pub fn advance(
     plan: &Plan,
@@ -225,23 +272,9 @@ pub fn advance(
                 arms,
                 otherwise,
             } => {
-                let sc = scope(facts, &state);
-                let mut warnings = Vec::new();
-                let mut chosen = None;
-                for arm in arms {
-                    let res = eval_condition(&arm.condition, &sc);
-                    warnings.extend(res.warnings);
-                    if res.matched {
-                        chosen = Some(arm);
-                        break;
-                    }
-                }
-                state.pc = chosen.map_or(*otherwise, |a| a.target);
-                trace.push(TraceEntry::Decision {
-                    step: step.clone(),
-                    branch: chosen.map(|a| a.branch.clone()),
-                    warnings,
-                });
+                let (pc, entry) = decide(step, arms, *otherwise, &scope(facts, &state));
+                state.pc = pc;
+                trace.push(entry);
             }
             Instr::Action { step } => {
                 let s = step_of(plan, step)?;
@@ -296,25 +329,8 @@ pub fn advance(
                 }
             }
             Instr::Stop { step } => {
-                let s = step_of(plan, step)?;
-                let StepKind::Stop(stop) = &s.kind else {
-                    return Err(EngineError::UnknownStep(step.clone()));
-                };
-                trace.push(TraceEntry::Stopped {
-                    step: step.clone(),
-                    status: stop.status,
-                    message: stop.message.clone(),
-                });
-                let outcome = match stop.status {
-                    StopStatus::Succeeded => Outcome::Succeeded,
-                    StopStatus::Failed => failed(
-                        error_codes::STOPPED_BY_FLOW,
-                        stop.message
-                            .clone()
-                            .unwrap_or_else(|| "Stopped by the flow".to_owned()),
-                        Some(step),
-                    ),
-                };
+                let (entry, outcome) = stop_outcome(plan, step)?;
+                trace.push(entry);
                 return Ok(finish(state, trace, outcome));
             }
         }

@@ -82,17 +82,7 @@ impl<'a> Simulator<'a> {
             };
             let adv = match advance(self.plan, state.clone(), &facts) {
                 Ok(a) => a,
-                Err(e) => {
-                    return finish(
-                        run,
-                        state,
-                        Outcome::Failed {
-                            code: "engine".into(),
-                            message: e.to_string(),
-                            step: None,
-                        },
-                    );
-                }
+                Err(e) => return finish(run, state, engine_failure(&e)),
             };
             state = adv.state;
             match adv.directive {
@@ -100,32 +90,11 @@ impl<'a> Simulator<'a> {
                 Directive::Sleep { until, .. } => self.now = until,
                 Directive::RunAction { step, attempt, .. } => {
                     run.actions.push((step.clone(), attempt));
-                    let result = match script.next().unwrap_or(Scripted::Ok) {
-                        Scripted::Ok => StepResult::Succeeded(json!({"ok": step})),
-                        kind @ (Scripted::Retryable | Scripted::Permanent) => {
-                            StepResult::Failed(StepError {
-                                code: "app.error".into(),
-                                message: "scripted".into(),
-                                retryable: kind == Scripted::Retryable,
-                                retry_after_secs: None,
-                                details: Value::Null,
-                            })
-                        }
-                    };
+                    let result = scripted_result(script.next().unwrap_or(Scripted::Ok), &step);
                     let (next, after) =
                         match record_result(self.plan, state.clone(), &step, &result, self.now) {
                             Ok(r) => r,
-                            Err(e) => {
-                                return finish(
-                                    run,
-                                    state,
-                                    Outcome::Failed {
-                                        code: "engine".into(),
-                                        message: e.to_string(),
-                                        step: None,
-                                    },
-                                );
-                            }
+                            Err(e) => return finish(run, state, engine_failure(&e)),
                         };
                     state = next;
                     match (after, &result) {
@@ -161,6 +130,27 @@ impl<'a> Simulator<'a> {
                 step: None,
             },
         )
+    }
+}
+
+fn scripted_result(kind: Scripted, step: &str) -> StepResult {
+    match kind {
+        Scripted::Ok => StepResult::Succeeded(json!({"ok": step})),
+        Scripted::Retryable | Scripted::Permanent => StepResult::Failed(StepError {
+            code: "app.error".into(),
+            message: "scripted".into(),
+            retryable: kind == Scripted::Retryable,
+            retry_after_secs: None,
+            details: Value::Null,
+        }),
+    }
+}
+
+fn engine_failure(e: &crate::EngineError) -> Outcome {
+    Outcome::Failed {
+        code: "engine".into(),
+        message: e.to_string(),
+        step: None,
     }
 }
 

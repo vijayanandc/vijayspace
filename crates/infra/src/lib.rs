@@ -1,3 +1,9 @@
-//! weft-infra: Non-database adapters: crypto, password hashing, JWT, mailer, SSRF-guarded HTTP, clock, IDs.
-//!
-//! Scaffold only. See `AGENTS.md` in this crate and `docs/plan/02-architecture.md` §4–§6.
+//! weft-infra: non-database adapters (clock, IDs, secret encryption, email).
+
+mod crypto;
+mod mail;
+mod system;
+
+pub use crypto::AesGcmSecretBox;
+pub use mail::{LogMailer, SmtpMailer};
+pub use system::{SystemClock, UuidV7Ids};

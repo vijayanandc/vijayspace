@@ -10,14 +10,37 @@ publish.workspace = true
 name = "weft"
 path = "src/main.rs"
 
+[lib]
+path = "src/lib.rs"
+
 [dependencies]
 weft-api.workspace = true
 weft-worker.workspace = true
 weft-db.workspace = true
 weft-infra.workspace = true
+weft-http.workspace = true
 weft-connectors.workspace = true
+weft-connector-sdk.workspace = true
 weft-app.workspace = true
 weft-domain.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+axum.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+uuid.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+weft-testkit.workspace = true
+weft-connector-sdk = { workspace = true, features = ["testing"] }
+sqlx.workspace = true
+chrono.workspace = true
+tower.workspace = true
+wiremock.workspace = true
+http-body-util = "0.1"
 
 [lints]
 workspace = true

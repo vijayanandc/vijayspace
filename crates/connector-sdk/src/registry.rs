@@ -20,7 +20,8 @@ impl ConnectorRegistry {
 
     /// Adds a connector (a later registration with the same key replaces the earlier one).
     pub fn register(&mut self, connector: Arc<dyn Connector>) {
-        self.connectors.insert(connector.manifest().key.clone(), connector);
+        self.connectors
+            .insert(connector.manifest().key.clone(), connector);
     }
 
     #[must_use]
@@ -43,7 +44,10 @@ impl Catalog for ConnectorRegistry {
     fn action(&self, connector: &str, action: &str) -> Option<ActionInfo> {
         let manifest = self.get(connector)?.manifest();
         let spec = manifest.action(action)?;
-        Some(ActionInfo { requires_connection: manifest.requires_connection(), required_fields: spec.required_fields() })
+        Some(ActionInfo {
+            requires_connection: manifest.requires_connection(),
+            required_fields: spec.required_fields(),
+        })
     }
 
     fn trigger(&self, connector: &str, trigger: &str) -> Option<ActionInfo> {
@@ -51,7 +55,12 @@ impl Catalog for ConnectorRegistry {
         let spec = manifest.trigger(trigger)?;
         Some(ActionInfo {
             requires_connection: manifest.requires_connection(),
-            required_fields: spec.fields.iter().filter(|f| f.required).map(|f| f.key.clone()).collect(),
+            required_fields: spec
+                .fields
+                .iter()
+                .filter(|f| f.required)
+                .map(|f| f.key.clone())
+                .collect(),
         })
     }
 }

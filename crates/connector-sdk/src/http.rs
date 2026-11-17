@@ -27,7 +27,10 @@ impl Method {
             "PUT" => Ok(Self::Put),
             "PATCH" => Ok(Self::Patch),
             "DELETE" => Ok(Self::Delete),
-            other => Err(ConnectorError::invalid_field("method", format!("unsupported method `{other}`"))),
+            other => Err(ConnectorError::invalid_field(
+                "method",
+                format!("unsupported method `{other}`"),
+            )),
         }
     }
 
@@ -56,7 +59,13 @@ pub struct HttpRequest {
 impl HttpRequest {
     #[must_use]
     pub fn new(method: Method, url: impl Into<String>) -> Self {
-        Self { method, url: url.into(), headers: Vec::new(), body: None, timeout: None }
+        Self {
+            method,
+            url: url.into(),
+            headers: Vec::new(),
+            body: None,
+            timeout: None,
+        }
     }
 
     #[must_use]
@@ -141,7 +150,10 @@ impl HttpResponse {
     /// Case-insensitive header lookup.
     #[must_use]
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.as_str())
+        self.headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
     }
 
     #[must_use]
@@ -154,13 +166,21 @@ impl HttpResponse {
         if self.body.iter().all(u8::is_ascii_whitespace) {
             return Ok(Value::Null);
         }
-        serde_json::from_slice(&self.body)
-            .map_err(|e| ConnectorError::permanent(format!("invalid JSON from the app (HTTP {}): {e}", self.status)))
+        serde_json::from_slice(&self.body).map_err(|e| {
+            ConnectorError::permanent(format!(
+                "invalid JSON from the app (HTTP {}): {e}",
+                self.status
+            ))
+        })
     }
 
     /// Returns the JSON body for 2xx, or the mapped error otherwise.
     pub fn json_ok(&self) -> Result<Value, ConnectorError> {
-        if self.is_success() { self.json() } else { Err(ConnectorError::from_http(self)) }
+        if self.is_success() {
+            self.json()
+        } else {
+            Err(ConnectorError::from_http(self))
+        }
     }
 }
 

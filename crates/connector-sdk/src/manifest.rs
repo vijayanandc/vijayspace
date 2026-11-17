@@ -65,12 +65,20 @@ pub struct AuthSpec {
 impl AuthSpec {
     #[must_use]
     pub const fn none() -> Self {
-        Self { kind: AuthKind::None, fields: Vec::new(), oauth2: None }
+        Self {
+            kind: AuthKind::None,
+            fields: Vec::new(),
+            oauth2: None,
+        }
     }
 
     #[must_use]
     pub const fn fields(fields: Vec<FieldSpec>) -> Self {
-        Self { kind: AuthKind::Fields, fields, oauth2: None }
+        Self {
+            kind: AuthKind::Fields,
+            fields,
+            oauth2: None,
+        }
     }
 }
 
@@ -152,7 +160,11 @@ impl ActionSpec {
     /// Keys of required fields (used by publish validation).
     #[must_use]
     pub fn required_fields(&self) -> Vec<String> {
-        self.fields.iter().filter(|f| f.required).map(|f| f.key.clone()).collect()
+        self.fields
+            .iter()
+            .filter(|f| f.required)
+            .map(|f| f.key.clone())
+            .collect()
     }
 }
 
@@ -252,7 +264,10 @@ pub struct OptionItem {
 impl OptionItem {
     #[must_use]
     pub fn new(value: impl Into<String>, label: impl Into<String>) -> Self {
-        Self { value: value.into(), label: label.into() }
+        Self {
+            value: value.into(),
+            label: label.into(),
+        }
     }
 }
 
@@ -366,7 +381,10 @@ impl FieldSpec {
 
     #[must_use]
     pub fn options(mut self, options: &[(&str, &str)]) -> Self {
-        self.options = options.iter().map(|(v, l)| OptionItem::new(*v, *l)).collect();
+        self.options = options
+            .iter()
+            .map(|(v, l)| OptionItem::new(*v, *l))
+            .collect();
         self
     }
 

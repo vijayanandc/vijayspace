@@ -1,6 +1,6 @@
 [package]
 name = "weft-db"
-description = "MySQL implementations of the repository ports, the job queue and migration embedding."
+description = "MySQL implementations of the repository ports, the job queue and migrations."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,17 @@ publish.workspace = true
 [dependencies]
 weft-app.workspace = true
 weft-domain.workspace = true
+weft-engine.workspace = true
+async-trait.workspace = true
+sqlx.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
 
 [lints]
 workspace = true

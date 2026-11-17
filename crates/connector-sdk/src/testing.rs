@@ -12,9 +12,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::Value;
 
-use crate::{
-    ActionCtx, ConnectionHandle, ConnectorError, EmailMessage, HttpSender, Mailer,
-};
+use crate::{ActionCtx, ConnectionHandle, ConnectorError, EmailMessage, HttpSender, Mailer};
 
 /// An in-memory connection: fixed config and secrets; `force_refresh` returns `refreshed-token`.
 #[derive(Debug)]
@@ -28,7 +26,12 @@ pub struct StaticConnection {
 impl StaticConnection {
     #[must_use]
     pub fn new(config: Value, secrets: Value) -> Arc<Self> {
-        Arc::new(Self { id: "cxn_test".into(), config, secrets: Mutex::new(secrets), refreshes: AtomicUsize::new(0) })
+        Arc::new(Self {
+            id: "cxn_test".into(),
+            config,
+            secrets: Mutex::new(secrets),
+            refreshes: AtomicUsize::new(0),
+        })
     }
 }
 
@@ -52,7 +55,9 @@ impl ConnectionHandle for StaticConnection {
             .get("access_token")
             .and_then(Value::as_str)
             .map(str::to_owned)
-            .ok_or_else(|| ConnectorError::AuthExpired { message: "no access token".into() })
+            .ok_or_else(|| ConnectorError::AuthExpired {
+                message: "no access token".into(),
+            })
     }
 
     async fn force_refresh(&self) -> Result<String, ConnectorError> {
@@ -60,7 +65,10 @@ impl ConnectionHandle for StaticConnection {
         if let Ok(mut s) = self.secrets.lock()
             && let Some(map) = s.as_object_mut()
         {
-            map.insert("access_token".into(), Value::String("refreshed-token".into()));
+            map.insert(
+                "access_token".into(),
+                Value::String("refreshed-token".into()),
+            );
         }
         Ok("refreshed-token".into())
     }
@@ -85,7 +93,9 @@ impl Mailer for CapturingMailer {
 /// Fixed test time: 2026-01-01T00:00:00Z.
 #[must_use]
 pub fn test_now() -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).single().unwrap_or_default()
+    Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0)
+        .single()
+        .unwrap_or_default()
 }
 
 /// A context with the given HTTP sender and optional connection.

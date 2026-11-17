@@ -25,6 +25,8 @@ pub const WEBHOOK_TOO_LARGE: &str = "webhook.too_large";
 pub const WEBHOOK_UNAUTHORIZED: &str = "webhook.unauthorized";
 
 pub const RECIPE_NOT_FOUND: &str = "recipe.not_found";
+pub const RECIPE_SLOT_MISSING: &str = "recipe.slot_missing";
+pub const RECIPE_SLOT_MISMATCH: &str = "recipe.slot_mismatch";
 
 pub const APP_UNAVAILABLE: &str = "app.unavailable";
 pub const APP_RATE_LIMITED: &str = "app.rate_limited";

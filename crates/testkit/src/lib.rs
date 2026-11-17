@@ -1,3 +1,8 @@
-//! weft-testkit: Test-only helpers: builders, fakes, contract suites, `ManualClock`, wiremock helpers.
-//!
-//! Scaffold only. See `AGENTS.md` in this crate and `docs/plan/02-architecture.md` §4–§6.
+//! weft-testkit: deterministic test helpers (manual clock, in-memory record app).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+mod clock;
+mod memory_app;
+
+pub use clock::ManualClock;
+pub use memory_app::MemoryRecordsConnector;

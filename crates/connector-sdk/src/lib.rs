@@ -23,8 +23,8 @@ pub use context::{ActionCtx, ConnectionHandle, EmailMessage, Mailer};
 pub use error::ConnectorError;
 pub use http::{HttpRequest, HttpResponse, HttpSender, Method};
 pub use manifest::{
-    ActionSpec, AuthKind, AuthSpec, ConnectorManifest, FieldKind, FieldSpec, OAuth2Spec,
-    ClientAuth, OptionItem, TriggerKind, TriggerSpec,
+    ActionSpec, AuthKind, AuthSpec, ClientAuth, ConnectorManifest, FieldKind, FieldSpec,
+    OAuth2Spec, OptionItem, TriggerKind, TriggerSpec,
 };
 pub use records::{ObjectInfo, Page, Record, RecordObjects, RecordRef};
 pub use registry::ConnectorRegistry;
@@ -35,8 +35,7 @@ pub mod prelude {
     pub use serde_json::{Map, Value, json};
 
     pub use crate::{
-        ActionCtx, ActionSpec, AuthSpec, Connector, ConnectorError, ConnectorManifest,
-        FieldKind, FieldSpec, HttpRequest, HttpResponse, Method, OptionItem, TriggerKind,
-        TriggerSpec,
+        ActionCtx, ActionSpec, AuthSpec, Connector, ConnectorError, ConnectorManifest, FieldKind,
+        FieldSpec, HttpRequest, HttpResponse, Method, OptionItem, TriggerKind, TriggerSpec,
     };
 }

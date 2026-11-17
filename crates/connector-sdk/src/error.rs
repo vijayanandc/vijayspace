@@ -13,19 +13,28 @@ pub enum ConnectorError {
     Transient { message: String },
     /// HTTP 429 / provider throttling: retried after `retry_after_secs`.
     #[error("rate limited: {message}")]
-    RateLimited { retry_after_secs: Option<u64>, message: String },
+    RateLimited {
+        retry_after_secs: Option<u64>,
+        message: String,
+    },
     /// Credentials rejected (after one refresh attempt where applicable).
     #[error("authorization expired or revoked: {message}")]
     AuthExpired { message: String },
     /// The app rejected the data (configuration or mapping error): not retried.
     #[error("{message}")]
-    InvalidInput { field: Option<String>, message: String },
+    InvalidInput {
+        field: Option<String>,
+        message: String,
+    },
     /// The record or resource does not exist.
     #[error("not found: {message}")]
     NotFound { message: String },
     /// Any other permanent failure.
     #[error("{message}")]
-    Permanent { status: Option<u16>, message: String },
+    Permanent {
+        status: Option<u16>,
+        message: String,
+    },
     /// The connector does not implement this operation.
     #[error("not supported: {what}")]
     Unsupported { what: String },
@@ -33,19 +42,30 @@ pub enum ConnectorError {
 
 impl ConnectorError {
     pub fn transient(message: impl Into<String>) -> Self {
-        Self::Transient { message: message.into() }
+        Self::Transient {
+            message: message.into(),
+        }
     }
 
     pub fn invalid(message: impl Into<String>) -> Self {
-        Self::InvalidInput { field: None, message: message.into() }
+        Self::InvalidInput {
+            field: None,
+            message: message.into(),
+        }
     }
 
     pub fn invalid_field(field: &str, message: impl Into<String>) -> Self {
-        Self::InvalidInput { field: Some(field.to_owned()), message: message.into() }
+        Self::InvalidInput {
+            field: Some(field.to_owned()),
+            message: message.into(),
+        }
     }
 
     pub fn permanent(message: impl Into<String>) -> Self {
-        Self::Permanent { status: None, message: message.into() }
+        Self::Permanent {
+            status: None,
+            message: message.into(),
+        }
     }
 
     pub fn unsupported(what: impl Into<String>) -> Self {
@@ -75,7 +95,9 @@ impl ConnectorError {
     #[must_use]
     pub const fn retry_after_secs(&self) -> Option<u64> {
         match self {
-            Self::RateLimited { retry_after_secs, .. } => *retry_after_secs,
+            Self::RateLimited {
+                retry_after_secs, ..
+            } => *retry_after_secs,
             Self::Transient { .. }
             | Self::AuthExpired { .. }
             | Self::InvalidInput { .. }
@@ -90,7 +112,9 @@ impl ConnectorError {
     pub fn details(&self) -> Value {
         match self {
             Self::InvalidInput { field: Some(f), .. } => serde_json::json!({"field": f}),
-            Self::Permanent { status: Some(s), .. } => serde_json::json!({"http_status": s}),
+            Self::Permanent {
+                status: Some(s), ..
+            } => serde_json::json!({"http_status": s}),
             Self::Transient { .. }
             | Self::RateLimited { .. }
             | Self::AuthExpired { .. }
@@ -105,14 +129,29 @@ impl ConnectorError {
     #[must_use]
     pub fn from_http(resp: &HttpResponse) -> Self {
         let body = resp.text();
-        let message = format!("HTTP {}: {}", resp.status, body.chars().take(500).collect::<String>());
+        let message = format!(
+            "HTTP {}: {}",
+            resp.status,
+            body.chars().take(500).collect::<String>()
+        );
         match resp.status {
             401 => Self::AuthExpired { message },
             408 | 500..=599 => Self::Transient { message },
-            429 => Self::RateLimited { retry_after_secs: resp.header("retry-after").and_then(|v| v.trim().parse().ok()), message },
+            429 => Self::RateLimited {
+                retry_after_secs: resp
+                    .header("retry-after")
+                    .and_then(|v| v.trim().parse().ok()),
+                message,
+            },
             404 => Self::NotFound { message },
-            400 | 409 | 412 | 413 | 415 | 422 => Self::InvalidInput { field: None, message },
-            status => Self::Permanent { status: Some(status), message },
+            400 | 409 | 412 | 413 | 415 | 422 => Self::InvalidInput {
+                field: None,
+                message,
+            },
+            status => Self::Permanent {
+                status: Some(status),
+                message,
+            },
         }
     }
 }
@@ -124,19 +163,43 @@ mod tests {
     fn resp(status: u16, headers: &[(&str, &str)]) -> HttpResponse {
         HttpResponse {
             status,
-            headers: headers.iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())).collect(),
+            headers: headers
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+                .collect(),
             body: b"{\"error\":\"x\"}".to_vec(),
         }
     }
 
     #[test]
     fn http_statuses_map_to_classes() {
-        assert!(matches!(ConnectorError::from_http(&resp(401, &[])), ConnectorError::AuthExpired { .. }));
-        assert!(matches!(ConnectorError::from_http(&resp(503, &[])), ConnectorError::Transient { .. }));
-        assert_eq!(ConnectorError::from_http(&resp(429, &[("Retry-After", "30")])).retry_after_secs(), Some(30));
-        assert!(matches!(ConnectorError::from_http(&resp(422, &[])), ConnectorError::InvalidInput { .. }));
-        assert!(matches!(ConnectorError::from_http(&resp(404, &[])), ConnectorError::NotFound { .. }));
-        assert!(matches!(ConnectorError::from_http(&resp(403, &[])), ConnectorError::Permanent { status: Some(403), .. }));
+        assert!(matches!(
+            ConnectorError::from_http(&resp(401, &[])),
+            ConnectorError::AuthExpired { .. }
+        ));
+        assert!(matches!(
+            ConnectorError::from_http(&resp(503, &[])),
+            ConnectorError::Transient { .. }
+        ));
+        assert_eq!(
+            ConnectorError::from_http(&resp(429, &[("Retry-After", "30")])).retry_after_secs(),
+            Some(30)
+        );
+        assert!(matches!(
+            ConnectorError::from_http(&resp(422, &[])),
+            ConnectorError::InvalidInput { .. }
+        ));
+        assert!(matches!(
+            ConnectorError::from_http(&resp(404, &[])),
+            ConnectorError::NotFound { .. }
+        ));
+        assert!(matches!(
+            ConnectorError::from_http(&resp(403, &[])),
+            ConnectorError::Permanent {
+                status: Some(403),
+                ..
+            }
+        ));
         assert!(ConnectorError::from_http(&resp(500, &[])).retryable());
         assert!(!ConnectorError::from_http(&resp(400, &[])).retryable());
     }

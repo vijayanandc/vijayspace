@@ -16,7 +16,7 @@ impl HttpConnector {
     #[must_use]
     pub fn new() -> Self {
         let request = ActionSpec::new("request", "Send HTTP request", "Call any HTTP API or send an outgoing webhook.")
-            .field(FieldSpec::select("method", "Method").required().options(&[("GET", "GET"), ("POST", "POST"), ("PUT", "PUT"), ("PATCH", "PATCH"), ("DELETE", "DELETE")]).default_value(json!("POST")))
+            .field(FieldSpec::select("method", "Method").options(&[("GET", "GET"), ("POST", "POST"), ("PUT", "PUT"), ("PATCH", "PATCH"), ("DELETE", "DELETE")]).default_value(json!("POST")))
             .field(FieldSpec::string("url", "URL").required().placeholder("https://api.example.com/items"))
             .field(FieldSpec::new("headers", "Headers", FieldKind::KeyValue))
             .field(FieldSpec::new("query", "Query parameters", FieldKind::KeyValue))
@@ -54,16 +54,26 @@ impl Connector for HttpConnector {
         &self.manifest
     }
 
-    async fn execute(&self, ctx: &ActionCtx, action: &str, input: Value) -> Result<Value, ConnectorError> {
+    async fn execute(
+        &self,
+        ctx: &ActionCtx,
+        action: &str,
+        input: Value,
+    ) -> Result<Value, ConnectorError> {
         if action != "request" {
             return Err(ConnectorError::unsupported(action));
         }
         let method = Method::parse(&opt_str(&input, "method").unwrap_or_else(|| "POST".into()))?;
         let url = req_str(&input, "url")?;
         let query = key_values(&input, "query");
-        let query_refs: Vec<(&str, &str)> = query.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        let query_refs: Vec<(&str, &str)> = query
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
         let mut req = HttpRequest::new(method, url).query(&query_refs);
-        let timeout = opt_f64(&input, "timeout_secs").unwrap_or(30.0).clamp(1.0, 120.0);
+        let timeout = opt_f64(&input, "timeout_secs")
+            .unwrap_or(30.0)
+            .clamp(1.0, 120.0);
         req = req.timeout(Duration::from_secs_f64(timeout));
         for (k, v) in key_values(&input, "headers") {
             req = req.header(&k, v);
@@ -76,10 +86,19 @@ impl Connector for HttpConnector {
             req = match opt_str(&input, "body_type").as_deref().unwrap_or("json") {
                 "form" => {
                     let fields = key_values(&json!({"b": body}), "b");
-                    let refs: Vec<(&str, &str)> = fields.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+                    let refs: Vec<(&str, &str)> = fields
+                        .iter()
+                        .map(|(k, v)| (k.as_str(), v.as_str()))
+                        .collect();
                     req.form(&refs)
                 }
-                "text" => req.raw_body(body.as_str().map_or_else(|| body.to_string(), str::to_owned).into_bytes()).header("Content-Type", "text/plain"),
+                "text" => req
+                    .raw_body(
+                        body.as_str()
+                            .map_or_else(|| body.to_string(), str::to_owned)
+                            .into_bytes(),
+                    )
+                    .header("Content-Type", "text/plain"),
                 "none" => req,
                 _ => req.json(&body),
             };
@@ -88,7 +107,11 @@ impl Connector for HttpConnector {
         if opt_bool(&input, "fail_on_error_status").unwrap_or(true) && !resp.is_success() {
             return Err(ConnectorError::from_http(&resp));
         }
-        let headers: Map<String, Value> = resp.headers.iter().map(|(k, v)| (k.to_lowercase(), Value::String(v.clone()))).collect();
+        let headers: Map<String, Value> = resp
+            .headers
+            .iter()
+            .map(|(k, v)| (k.to_lowercase(), Value::String(v.clone())))
+            .collect();
         let parsed = resp.json().unwrap_or_else(|_| Value::String(resp.text()));
         Ok(json!({"status": resp.status, "headers": headers, "body": parsed}))
     }

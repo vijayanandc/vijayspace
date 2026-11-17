@@ -1,6 +1,6 @@
 [package]
 name = "weft-infra"
-description = "Non-database adapters: crypto, password hashing, JWT, mailer, SSRF-guarded HTTP, clock, IDs."
+description = "Non-database adapters: clock, IDs, AES-GCM secret box, SMTP mailer."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,6 +10,14 @@ publish.workspace = true
 weft-app.workspace = true
 weft-domain.workspace = true
 weft-connector-sdk.workspace = true
+async-trait.workspace = true
+aes-gcm.workspace = true
+base64.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+lettre.workspace = true
+tracing.workspace = true
+sha2.workspace = true
 
 [lints]
 workspace = true

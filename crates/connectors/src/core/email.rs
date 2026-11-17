@@ -13,14 +13,22 @@ pub struct EmailConnector {
 impl EmailConnector {
     #[must_use]
     pub fn new() -> Self {
-        let send = ActionSpec::new("send", "Send email", "Send an email from the platform address.")
-            .field(FieldSpec::string("to", "To").required().help("Comma-separated addresses"))
-            .field(FieldSpec::string("cc", "Cc").advanced())
-            .field(FieldSpec::string("subject", "Subject").required())
-            .field(FieldSpec::text("body", "Body").required())
-            .field(FieldSpec::new("html", "Body is HTML", FieldKind::Boolean).advanced())
-            .field(FieldSpec::string("reply_to", "Reply-To").advanced())
-            .output(json!({"sent": true, "to": ["customer@example.com"]}));
+        let send = ActionSpec::new(
+            "send",
+            "Send email",
+            "Send an email from the platform address.",
+        )
+        .field(
+            FieldSpec::string("to", "To")
+                .required()
+                .help("Comma-separated addresses"),
+        )
+        .field(FieldSpec::string("cc", "Cc").advanced())
+        .field(FieldSpec::string("subject", "Subject").required())
+        .field(FieldSpec::text("body", "Body").required())
+        .field(FieldSpec::new("html", "Body is HTML", FieldKind::Boolean).advanced())
+        .field(FieldSpec::string("reply_to", "Reply-To").advanced())
+        .output(json!({"sent": true, "to": ["customer@example.com"]}));
         Self {
             manifest: ConnectorManifest {
                 key: "core.email".into(),
@@ -49,13 +57,21 @@ impl Connector for EmailConnector {
         &self.manifest
     }
 
-    async fn execute(&self, ctx: &ActionCtx, action: &str, input: Value) -> Result<Value, ConnectorError> {
+    async fn execute(
+        &self,
+        ctx: &ActionCtx,
+        action: &str,
+        input: Value,
+    ) -> Result<Value, ConnectorError> {
         if action != "send" {
             return Err(ConnectorError::unsupported(action));
         }
         let to = list(&input, "to");
         if to.is_empty() || to.iter().any(|a| !a.contains('@')) {
-            return Err(ConnectorError::invalid_field("to", "Enter at least one valid email address"));
+            return Err(ConnectorError::invalid_field(
+                "to",
+                "Enter at least one valid email address",
+            ));
         }
         let message = EmailMessage {
             to: to.clone(),
@@ -65,7 +81,9 @@ impl Connector for EmailConnector {
             html: opt_bool(&input, "html").unwrap_or(false),
             reply_to: opt_str(&input, "reply_to"),
         };
-        let mailer = ctx.mailer.as_ref().ok_or_else(|| ConnectorError::permanent("Email sending is not configured on this server"))?;
+        let mailer = ctx.mailer.as_ref().ok_or_else(|| {
+            ConnectorError::permanent("Email sending is not configured on this server")
+        })?;
         mailer.send(&message).await?;
         Ok(json!({"sent": true, "to": to}))
     }

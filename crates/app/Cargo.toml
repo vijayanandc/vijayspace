@@ -1,6 +1,6 @@
 [package]
 name = "weft-app"
-description = "Use cases, ports (traits), Deps, Actor, AppError and the execution runner."
+description = "Use cases, ports (traits), Deps, AppError and the execution runner."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,6 +11,17 @@ weft-domain.workspace = true
 weft-expr.workspace = true
 weft-engine.workspace = true
 weft-connector-sdk.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+sha2.workspace = true
+hex.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+urlencoding.workspace = true
 
 [lints]
 workspace = true

@@ -61,7 +61,9 @@ pub struct ActionCtx {
 impl ActionCtx {
     /// The connection, or an error telling the user to choose one.
     pub fn conn(&self) -> Result<&dyn ConnectionHandle, ConnectorError> {
-        self.connection.as_deref().ok_or_else(|| ConnectorError::invalid_field("connection_id", "Choose a connection"))
+        self.connection
+            .as_deref()
+            .ok_or_else(|| ConnectorError::invalid_field("connection_id", "Choose a connection"))
     }
 
     /// A string value from the connection config.
@@ -72,7 +74,11 @@ impl ActionCtx {
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
             .map(str::to_owned)
-            .ok_or_else(|| ConnectorError::invalid(format!("The connection is missing `{key}`; edit the connection")))
+            .ok_or_else(|| {
+                ConnectorError::invalid(format!(
+                    "The connection is missing `{key}`; edit the connection"
+                ))
+            })
     }
 
     /// A string value from the decrypted secrets.
@@ -84,7 +90,9 @@ impl ActionCtx {
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
             .map(str::to_owned)
-            .ok_or_else(|| ConnectorError::AuthExpired { message: format!("The connection has no `{key}`; reconnect it") })
+            .ok_or_else(|| ConnectorError::AuthExpired {
+                message: format!("The connection has no `{key}`; reconnect it"),
+            })
     }
 }
 
@@ -92,7 +100,10 @@ impl std::fmt::Debug for ActionCtx {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ActionCtx")
             .field("org_id", &self.org_id)
-            .field("connection", &self.connection.as_ref().map(|c| c.id().to_owned()))
+            .field(
+                "connection",
+                &self.connection.as_ref().map(|c| c.id().to_owned()),
+            )
             .field("timeout", &self.timeout)
             .finish_non_exhaustive()
     }

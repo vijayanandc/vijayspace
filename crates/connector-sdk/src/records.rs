@@ -40,11 +40,43 @@ pub struct Page {
 #[async_trait]
 pub trait RecordObjects: Send + Sync {
     async fn list_objects(&self, ctx: &ActionCtx) -> Result<Vec<ObjectInfo>, ConnectorError>;
-    async fn describe(&self, ctx: &ActionCtx, object: &str) -> Result<Vec<FieldSpec>, ConnectorError>;
-    async fn get(&self, ctx: &ActionCtx, object: &str, id: &str) -> Result<Option<Record>, ConnectorError>;
-    async fn find_by(&self, ctx: &ActionCtx, object: &str, field: &str, value: &Value) -> Result<Vec<Record>, ConnectorError>;
-    async fn create(&self, ctx: &ActionCtx, object: &str, values: &Map<String, Value>) -> Result<RecordRef, ConnectorError>;
-    async fn update(&self, ctx: &ActionCtx, object: &str, id: &str, values: &Map<String, Value>) -> Result<RecordRef, ConnectorError>;
+    async fn describe(
+        &self,
+        ctx: &ActionCtx,
+        object: &str,
+    ) -> Result<Vec<FieldSpec>, ConnectorError>;
+    async fn get(
+        &self,
+        ctx: &ActionCtx,
+        object: &str,
+        id: &str,
+    ) -> Result<Option<Record>, ConnectorError>;
+    async fn find_by(
+        &self,
+        ctx: &ActionCtx,
+        object: &str,
+        field: &str,
+        value: &Value,
+    ) -> Result<Vec<Record>, ConnectorError>;
+    async fn create(
+        &self,
+        ctx: &ActionCtx,
+        object: &str,
+        values: &Map<String, Value>,
+    ) -> Result<RecordRef, ConnectorError>;
+    async fn update(
+        &self,
+        ctx: &ActionCtx,
+        object: &str,
+        id: &str,
+        values: &Map<String, Value>,
+    ) -> Result<RecordRef, ConnectorError>;
     /// Records modified after `cursor` (oldest first). `cursor = None` starts from the beginning.
-    async fn changed_since(&self, ctx: &ActionCtx, object: &str, cursor: Option<&Value>, limit: u32) -> Result<Page, ConnectorError>;
+    async fn changed_since(
+        &self,
+        ctx: &ActionCtx,
+        object: &str,
+        cursor: Option<&Value>,
+        limit: u32,
+    ) -> Result<Page, ConnectorError>;
 }

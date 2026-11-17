@@ -1,6 +1,6 @@
 [package]
 name = "weft-worker"
-description = "Background loops: job claiming, scheduler, poller, reaper, retention, graceful shutdown."
+description = "Background loops: job claiming, scheduler, pollers, reaper, graceful shutdown."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,12 @@ publish.workspace = true
 [dependencies]
 weft-app.workspace = true
 weft-domain.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+serde_json.workspace = true
+futures.workspace = true
 
 [lints]
 workspace = true
