@@ -3,8 +3,9 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::{MySql, Transaction, types::Json};
+use uuid::Uuid;
 use weft_app::ports::{NewExecution, NewTriggerEvent, Res};
-use weft_domain::ids::OrgId;
+use weft_domain::ids::{ExecutionId, OrgId};
 
 use crate::codec::{db_err, is_duplicate};
 
@@ -34,20 +35,41 @@ pub(crate) async fn insert_event(
     }
 }
 
-/// Debounce: gives the burst's execution the newest trigger data while it is still queued.
+/// Debounce: gives the burst's execution the newest trigger data while its job is still waiting.
+/// The job row is locked first, so a worker cannot claim it until this commits; a job that is
+/// already claimed may have read the old data, so the caller starts a new execution instead.
 pub(crate) async fn coalesce_into_queued(
     tx: &mut Transaction<'_, MySql>,
     org: OrgId,
     ev: &NewTriggerEvent,
     trigger_data: &Value,
 ) -> Res<bool> {
-    let updated = sqlx::query("UPDATE executions e JOIN trigger_events t ON t.id = e.trigger_event_id SET e.trigger_data = ? WHERE e.org_id = ? AND t.registration_id = ? AND t.dedupe_key = ? AND e.status = 'queued' AND e.started_at IS NULL")
-        .bind(Json(trigger_data))
+    let execution: Option<Uuid> = sqlx::query_scalar("SELECT e.id FROM executions e JOIN trigger_events t ON t.id = e.trigger_event_id WHERE e.org_id = ? AND t.registration_id = ? AND t.dedupe_key = ? AND e.status = 'queued' AND e.started_at IS NULL FOR UPDATE")
         .bind(org.as_uuid())
         .bind(ev.registration_id.as_uuid())
         .bind(&ev.dedupe_key)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(db_err)?;
+    let Some(execution) = execution else {
+        return Ok(false);
+    };
+    let job_key = format!("exe:{}", ExecutionId::from_uuid(execution));
+    let waiting: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM jobs WHERE dedupe_key = ? AND status = 'ready' FOR UPDATE",
+    )
+    .bind(&job_key)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    if waiting.is_none() {
+        return Ok(false);
+    }
+    sqlx::query("UPDATE executions SET trigger_data = ? WHERE id = ?")
+        .bind(Json(trigger_data))
+        .bind(execution)
         .execute(&mut **tx)
         .await
         .map_err(db_err)?;
-    Ok(updated.rows_affected() > 0)
+    Ok(true)
 }

@@ -62,9 +62,15 @@ pub(super) async fn handle_event(
         .as_ref()
         .and_then(|r| r.get("modified_time"))
         .and_then(Value::as_str)
-        .unwrap_or("deleted")
-        .to_owned();
-    let dedupe_key = delivery_key.unwrap_or_else(|| format!("{api_id}:{modified}"));
+        .filter(|m| !m.is_empty());
+    // The record version (`{api_id}:{modified_time}`) is the key whenever there is one: polling
+    // builds the same key, so a version delivered live is not run again by the reconciliation
+    // poll. The delivery ID is only a fallback (deletes, records without a modified time).
+    let dedupe_key = match (modified, delivery_key) {
+        (Some(m), _) => format!("{api_id}:{m}"),
+        (None, Some(delivery)) => delivery,
+        (None, None) => format!("{api_id}:deleted"),
+    };
     let item = EventItem {
         dedupe_key,
         record_id: Some(api_id.clone()),

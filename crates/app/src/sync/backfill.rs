@@ -19,16 +19,25 @@ use crate::{
 /// Upper bound for one backfill call.
 pub const MAX_BACKFILL: u32 = 2_000;
 
-/// Pages through the trigger module's records (up to `limit`, at most [`MAX_BACKFILL`]) and starts a backfill execution for each.
+/// What one backfill call did.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BackfillPage {
+    pub enqueued: usize,
+    /// Pass back as `cursor` to continue; `None` when every record has been started.
+    pub next_cursor: Option<Value>,
+}
+
+/// Pages through the trigger module's records from `cursor` (whole pages, about `limit` records,
+/// at most [`MAX_BACKFILL`]) and starts a backfill execution for each.
 pub async fn backfill(
     deps: &Deps,
     org: OrgId,
     flow_id: FlowId,
     limit: u32,
-) -> Result<usize, AppError> {
-    // Runs inside the HTTP request: keep one call bounded. For more records, call again; sync
-    // steps skip records whose data has not changed.
-    let limit = limit.min(MAX_BACKFILL);
+    cursor: Option<Value>,
+) -> Result<BackfillPage, AppError> {
+    // Runs inside the HTTP request: one call is bounded, and `next_cursor` continues it.
+    let limit = limit.clamp(1, MAX_BACKFILL);
     let flow = deps
         .store
         .get_flow(org, flow_id)
@@ -75,7 +84,7 @@ pub async fn backfill(
         .get_registration_by_flow(flow_id)
         .await?
         .ok_or_else(|| AppError::internal("registration missing"))?;
-    let mut cursor: Option<Value> = None;
+    let mut cursor = cursor.filter(|c| !c.is_null());
     let mut total = 0usize;
     let started = deps.clock.now().to_rfc3339_opts(SecondsFormat::Secs, true);
     while total < limit as usize {
@@ -83,25 +92,27 @@ pub async fn backfill(
             .changed_since(&ctx, module, cursor.as_ref(), 100)
             .await
             .map_err(|e| AppError::new(crate::ErrorKind::BadGateway, e.code(), e.to_string()))?;
+        // Whole pages only, so `next_cursor` never skips records.
         let items: Vec<EventItem> = page
             .records
             .into_iter()
-            .take(limit as usize - total)
             .map(|r| EventItem {
                 dedupe_key: format!("backfill:{started}:{}", r.id),
                 record_id: Some(r.id.clone()),
                 data: json!({"module": module, "operation": "backfill", "id": r.id, "record": Value::Object(r.values)}),
             })
             .collect();
-        if items.is_empty() {
+        total += items.len();
+        if !items.is_empty() {
+            ingress_items(deps, &reg, &flow, &version, &items, ExecutionMode::Backfill).await?;
+        }
+        cursor = page.next_cursor;
+        if cursor.is_none() {
             break;
         }
-        total += items.len();
-        ingress_items(deps, &reg, &flow, &version, &items, ExecutionMode::Backfill).await?;
-        match page.next_cursor {
-            Some(c) => cursor = Some(c),
-            None => break,
-        }
     }
-    Ok(total)
+    Ok(BackfillPage {
+        enqueued: total,
+        next_cursor: cursor,
+    })
 }

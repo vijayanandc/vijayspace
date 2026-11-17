@@ -13,6 +13,8 @@ pub struct Settings {
     pub client_origins: Vec<String>,
     pub master_keys: Option<(String, String)>,
     pub allow_private_networks: bool,
+    /// Egress proxy for outbound app calls (`WEFT_HTTP_PROXY`); environment proxies are ignored.
+    pub http_proxy: Option<String>,
     pub smtp_url: Option<String>,
     pub mail_from: String,
     pub worker_concurrency: usize,
@@ -67,6 +69,7 @@ impl Settings {
                 .collect(),
             public_url,
             master_keys,
+            http_proxy: var("WEFT_HTTP_PROXY"),
             allow_private_networks: var("WEFT_ALLOW_PRIVATE_NETWORKS")
                 .is_some_and(|v| v == "true" || v == "1"),
             smtp_url: var("WEFT_SMTP_URL"),

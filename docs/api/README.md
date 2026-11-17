@@ -153,7 +153,7 @@ Secrets are never returned.
 | POST | `/api/v1/flows/{id}/test` | `{payload}` | `{execution_id}` (runs the **draft**) |
 | POST | `/api/v1/flows/{id}/run` | `{payload}` | `{execution_id}` (runs the **published** version) |
 | POST | `/api/v1/flows/{id}/steps/{key}/test` | `{context?: {trigger, steps, vars}}` | `{input, output?, error?}` (calls the action once; does not modify the draft) |
-| POST | `/api/v1/flows/{id}/backfill` | `{limit?}` | `{enqueued}` (app triggers with polling support) |
+| POST | `/api/v1/flows/{id}/backfill` | `{limit?, cursor?}` | `{enqueued, next_cursor}`: starts an execution per existing record (app triggers with record support), about `limit` records per call (default 500, at most 2,000). Pass `next_cursor` back to continue; `null` means done. |
 
 **FlowSummary:**
 ```json

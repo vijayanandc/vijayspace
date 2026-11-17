@@ -113,6 +113,7 @@ async fn a_job_whose_worker_keeps_dying_goes_dead_and_frees_its_key() {
     t.store.enqueue(&j, t0()).await.unwrap();
     let mut now = t0();
     let mut claims = 0;
+    let mut reported_dead = Vec::new();
     loop {
         let got = claim(&t.store, "w", now).await;
         if got.is_empty() {
@@ -121,9 +122,14 @@ async fn a_job_whose_worker_keeps_dying_goes_dead_and_frees_its_key() {
         claims += 1;
         assert!(claims <= 25, "poison job cycles forever");
         now += Duration::seconds(120); // the worker died: the lease expires
-        t.store.reap(now).await.unwrap();
+        reported_dead.extend(t.store.reap(now).await.unwrap());
     }
     assert_eq!(claims, 25, "dead after max_attempts claims");
+    assert_eq!(
+        reported_dead,
+        vec![json!({})],
+        "the dead job is reported so its execution can be failed"
+    );
     assert!(
         t.store.enqueue(&job("poll:r2"), now).await.unwrap(),
         "a dead job must not block new work"

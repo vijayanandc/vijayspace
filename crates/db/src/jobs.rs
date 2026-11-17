@@ -171,16 +171,24 @@ impl JobQueue for MySqlStore {
         Ok(r.rows_affected() > 0)
     }
 
-    async fn reap(&self, now: DateTime<Utc>) -> Res<u64> {
-        // A job whose worker keeps dying (crash, OOM, panic) is a poison job: dead after
-        // `max_attempts` claims instead of cycling forever.
-        let result = sqlx::query("UPDATE jobs SET status = IF(attempts >= max_attempts, 'dead', 'ready'), dedupe_key = IF(attempts >= max_attempts, NULL, dedupe_key), last_error = IF(attempts >= max_attempts, 'lease expired too many times', last_error), locked_by = NULL, locked_until = NULL, updated_at = ? WHERE status = 'running' AND locked_until < ?")
+    async fn reap(&self, now: DateTime<Utc>) -> Res<Vec<Value>> {
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        // Jobs about to go dead (their worker kept dying): locked so the update below sees them.
+        let dying: Vec<Json<Value>> = sqlx::query_scalar("SELECT payload FROM jobs WHERE status = 'running' AND locked_until < ? AND attempts >= max_attempts FOR UPDATE")
             .bind(now)
-            .bind(now)
-            .execute(&self.pool)
+            .fetch_all(&mut *tx)
             .await
             .map_err(db_err)?;
-        Ok(result.rows_affected())
+        // A job whose worker keeps dying (crash, OOM, panic) is a poison job: dead after
+        // `max_attempts` claims instead of cycling forever.
+        sqlx::query("UPDATE jobs SET status = IF(attempts >= max_attempts, 'dead', 'ready'), dedupe_key = IF(attempts >= max_attempts, NULL, dedupe_key), last_error = IF(attempts >= max_attempts, 'lease expired too many times', last_error), locked_by = NULL, locked_until = NULL, updated_at = ? WHERE status = 'running' AND locked_until < ?")
+            .bind(now)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
+        tx.commit().await.map_err(db_err)?;
+        Ok(dying.into_iter().map(|p| p.0).collect())
     }
 
     async fn delete_jobs_for_execution(&self, execution: ExecutionId) -> Res<()> {

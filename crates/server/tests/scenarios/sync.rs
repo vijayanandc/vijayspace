@@ -247,3 +247,117 @@ async fn a_target_linked_to_another_source_is_never_taken_over() {
     assert_eq!(output(&again)["action"], "skipped", "{again}");
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn backfill_continues_from_its_cursor_until_every_record_is_started() {
+    let app = TestApp::spawn().await;
+    let src = app.connection("memsrc", "Source").await;
+    for i in 0..250 {
+        app.src.seed(
+            "accounts",
+            &format!("acc-{i:03}"),
+            json!({"name": format!("Account {i}")}),
+        );
+    }
+    let flow = app
+        .live_flow("Accounts backfill", json!({
+            "trigger": {"type": "app", "connector": "memsrc", "trigger": "record_event", "connection_id": src,
+                "input": {"module": "accounts"}},
+            "steps": [{"key": "s", "type": "stop"}]
+        }))
+        .await;
+    let path = format!("/api/v1/flows/{}/backfill", flow["id"].as_str().unwrap());
+    let mut cursor = Value::Null;
+    let mut pages = Vec::new();
+    loop {
+        let page = app
+            .ok("POST", &path, Some(json!({"limit": 100, "cursor": cursor})))
+            .await;
+        pages.push(page["enqueued"].as_u64().unwrap());
+        cursor = page["next_cursor"].clone();
+        if cursor.is_null() {
+            break;
+        }
+        assert!(pages.len() < 10, "backfill must make progress: {pages:?}");
+    }
+    assert_eq!(
+        pages,
+        vec![100, 100, 50],
+        "each call continues where the last stopped"
+    );
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_matched_target_is_leased_so_two_sources_cannot_write_it_at_once() {
+    use sha2::{Digest as _, Sha256};
+    let app = TestApp::spawn().await;
+    let src = app.connection("memsrc", "Source").await;
+    let dst = app.connection("memdst", "Target").await;
+    app.dst.seed(
+        "contacts",
+        "contacts-9",
+        json!({"email": "y@acme.io", "name": "Old"}),
+    );
+    let flow = app
+        .live_flow(
+            "Contacts",
+            sync_flow(
+                &src,
+                &dst,
+                "contacts",
+                json!({"email": "{{ trigger.email }}", "name": "{{ trigger.name }}"}),
+                json!({"match_field": "email", "match_value": "{{ trigger.email }}"}),
+            ),
+        )
+        .await;
+    // Another source record's sync is writing this target right now (it holds the target lease).
+    let key = Sha256::digest(format!("contacts_link|target|{dst}|contacts|contacts-9").as_bytes())
+        .to_vec();
+    let org = weft_domain::ids::OrgId::from_uuid(weft_server::wiring::DEFAULT_ORG);
+    let now = weft_app::ports::Clock::now(&app.clock);
+    assert!(
+        app.deps
+            .store
+            .acquire_lease(org, &key, "other-sync", now + Duration::seconds(300), now)
+            .await
+            .unwrap()
+    );
+
+    let waiting = run(
+        &app,
+        flow["id"].as_str().unwrap(),
+        json!({"id": "A3", "email": "y@acme.io", "name": "Ann"}),
+    )
+    .await;
+    assert_eq!(
+        waiting["status"], "waiting",
+        "the step waits for the other sync: {waiting}"
+    );
+    assert_eq!(
+        app.dst.get_record("contacts", "contacts-9").unwrap()["name"],
+        "Old",
+        "nothing written"
+    );
+
+    app.deps
+        .store
+        .release_lease(org, &key, "other-sync")
+        .await
+        .unwrap();
+    app.clock.advance(Duration::seconds(61));
+    app.drain().await;
+    let done = app
+        .ok(
+            "GET",
+            &format!("/api/v1/executions/{}", waiting["id"].as_str().unwrap()),
+            None,
+        )
+        .await;
+    assert_eq!(done["status"], "succeeded", "{done}");
+    assert_eq!(
+        app.dst.get_record("contacts", "contacts-9").unwrap()["name"],
+        "Ann"
+    );
+    app.cleanup().await;
+}

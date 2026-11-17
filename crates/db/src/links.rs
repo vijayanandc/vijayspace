@@ -102,61 +102,28 @@ impl LinkRepo for MySqlStore {
     }
 
     async fn upsert_link(&self, l: &RecordLink, now: DateTime<Utc>) -> Res<()> {
-        // Not `INSERT … ON DUPLICATE KEY UPDATE`: with two unique keys MySQL would update the row
-        // that collides on side B (another source record's link) instead of failing.
-        let mut tx = self.pool.begin().await.map_err(db_err)?;
-        let existing: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM record_links WHERE org_id = ? AND link_set = ? AND a_connection_id = ? AND a_object = ? AND a_record_id = ? FOR UPDATE",
-        )
-        .bind(l.org_id.as_uuid())
-        .bind(&l.link_set)
-        .bind(l.a.connection_id.as_uuid())
-        .bind(&l.a.object)
-        .bind(&l.a.record_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(db_err)?;
-        let result = match existing {
-            Some(id) => {
-                sqlx::query("UPDATE record_links SET b_connection_id = ?, b_object = ?, b_record_id = ?, b_hash = ?, b_written_at = ?, updated_at = ? WHERE id = ?")
-                    .bind(l.b.connection_id.as_uuid())
-                    .bind(&l.b.object)
-                    .bind(&l.b.record_id)
-                    .bind(&l.b_hash)
-                    .bind(l.b_written_at)
-                    .bind(now)
-                    .bind(id)
-                    .execute(&mut *tx)
-                    .await
+        // A concurrent insert for the same source record can win between our SELECT and INSERT
+        // (READ COMMITTED takes no gap lock): retry once, which then takes the update path.
+        let mut attempt = 0;
+        loop {
+            match self.save_link_once(l, now).await {
+                Ok(()) => return Ok(()),
+                Err(e)
+                    if is_duplicate(&e)
+                        && duplicate_key_is(&e, "uq_record_links_a")
+                        && attempt == 0 =>
+                {
+                    attempt += 1;
+                }
+                // Side B already belongs to another source record.
+                Err(e) if is_duplicate(&e) => {
+                    return Err(AppError::conflict(
+                        error_codes::SYNC_AMBIGUOUS_MATCH,
+                        "The target record is already linked to another source record",
+                    ));
+                }
+                Err(e) => return Err(db_err(e)),
             }
-            None => {
-                sqlx::query("INSERT INTO record_links (id, org_id, link_set, a_connection_id, a_object, a_record_id, b_connection_id, b_object, b_record_id, b_hash, b_written_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-                    .bind(l.id.as_uuid())
-                    .bind(l.org_id.as_uuid())
-                    .bind(&l.link_set)
-                    .bind(l.a.connection_id.as_uuid())
-                    .bind(&l.a.object)
-                    .bind(&l.a.record_id)
-                    .bind(l.b.connection_id.as_uuid())
-                    .bind(&l.b.object)
-                    .bind(&l.b.record_id)
-                    .bind(&l.b_hash)
-                    .bind(l.b_written_at)
-                    .bind(now)
-                    .bind(now)
-                    .execute(&mut *tx)
-                    .await
-            }
-        };
-        match result {
-            Ok(_) => tx.commit().await.map_err(db_err),
-            // Side B already belongs to another source record (or a concurrent insert of the same
-            // source won the race; the caller's retry then takes the update path).
-            Err(e) if is_duplicate(&e) => Err(AppError::conflict(
-                error_codes::SYNC_AMBIGUOUS_MATCH,
-                "The target record is already linked to another source record",
-            )),
-            Err(e) => Err(db_err(e)),
         }
     }
 
@@ -213,5 +180,63 @@ impl LinkRepo for MySqlStore {
             .await
             .map_err(db_err)?;
         Ok(())
+    }
+}
+
+/// True when a duplicate-key error is on the named unique key.
+fn duplicate_key_is(e: &sqlx::Error, key: &str) -> bool {
+    e.as_database_error()
+        .is_some_and(|d| d.message().contains(key))
+}
+
+impl MySqlStore {
+    /// One attempt: update the link of this source record, or insert it. Not
+    /// `INSERT … ON DUPLICATE KEY UPDATE`: with two unique keys MySQL would update the row that
+    /// collides on side B (another source record's link) instead of failing.
+    async fn save_link_once(&self, l: &RecordLink, now: DateTime<Utc>) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+        let existing: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM record_links WHERE org_id = ? AND link_set = ? AND a_connection_id = ? AND a_object = ? AND a_record_id = ? FOR UPDATE",
+        )
+        .bind(l.org_id.as_uuid())
+        .bind(&l.link_set)
+        .bind(l.a.connection_id.as_uuid())
+        .bind(&l.a.object)
+        .bind(&l.a.record_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        match existing {
+            Some(id) => {
+                sqlx::query("UPDATE record_links SET b_connection_id = ?, b_object = ?, b_record_id = ?, b_hash = ?, b_written_at = ?, updated_at = ? WHERE id = ?")
+                    .bind(l.b.connection_id.as_uuid())
+                    .bind(&l.b.object)
+                    .bind(&l.b.record_id)
+                    .bind(&l.b_hash)
+                    .bind(l.b_written_at)
+                    .bind(now)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            None => {
+                sqlx::query("INSERT INTO record_links (id, org_id, link_set, a_connection_id, a_object, a_record_id, b_connection_id, b_object, b_record_id, b_hash, b_written_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                    .bind(l.id.as_uuid())
+                    .bind(l.org_id.as_uuid())
+                    .bind(&l.link_set)
+                    .bind(l.a.connection_id.as_uuid())
+                    .bind(&l.a.object)
+                    .bind(&l.a.record_id)
+                    .bind(l.b.connection_id.as_uuid())
+                    .bind(&l.b.object)
+                    .bind(&l.b.record_id)
+                    .bind(&l.b_hash)
+                    .bind(l.b_written_at)
+                    .bind(now)
+                    .bind(now)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+        tx.commit().await
     }
 }

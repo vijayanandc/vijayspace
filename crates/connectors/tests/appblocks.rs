@@ -244,7 +244,9 @@ async fn workflow_webhook_events_are_verified_and_fetched() {
         .await
         .unwrap();
     assert_eq!(batch.items.len(), 1);
-    assert_eq!(batch.items[0].dedupe_key, "evt-9");
+    // The record version, not the delivery ID: polling builds the same key, so the
+    // reconciliation poll does not re-run a version already delivered live.
+    assert_eq!(batch.items[0].dedupe_key, "01JOB:2026-01-01T10:00:00+05:30");
     assert_eq!(batch.items[0].data["record"]["status"], "Completed");
     // Operation filter: a delete event is ignored when only updates are wanted; deletes are never fetched.
     let only_updates = json!({"module": "jobs", "operation": "update"});

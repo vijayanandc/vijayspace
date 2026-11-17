@@ -55,8 +55,16 @@ pub struct ReqwestSender {
 }
 
 impl ReqwestSender {
-    /// Builds the client. Fails only if the TLS backend cannot initialise.
+    /// Builds the client, ignoring any environment proxy. Fails only if the TLS backend cannot
+    /// initialise.
     pub fn new(policy: SsrfPolicy) -> Result<Self, String> {
+        Self::with_proxy(policy, None)
+    }
+
+    /// Like [`Self::new`], but sends every request through `proxy` (an egress proxy URL).
+    /// The proxy resolves hosts itself, so only literal IPs and redirects are checked here: use
+    /// it only with an egress proxy that enforces its own destination policy.
+    pub fn with_proxy(policy: SsrfPolicy, proxy: Option<&str>) -> Result<Self, String> {
         let redirect_policy = reqwest::redirect::Policy::custom(move |attempt| {
             if attempt.previous().len() >= 5 {
                 attempt.error("too many redirects")
@@ -66,10 +74,13 @@ impl ReqwestSender {
                 attempt.follow()
             }
         });
-        let client = reqwest::Client::builder()
-            // An HTTP(S)_PROXY from the environment would resolve hosts itself and bypass the
-            // guarded resolver below.
-            .no_proxy()
+        // An HTTP(S)_PROXY from the environment would resolve hosts itself and bypass the
+        // guarded resolver below, so it is ignored; a proxy is used only when configured.
+        let mut builder = reqwest::Client::builder().no_proxy();
+        if let Some(url) = proxy {
+            builder = builder.proxy(reqwest::Proxy::all(url).map_err(|e| e.to_string())?);
+        }
+        let client = builder
             .dns_resolver(Arc::new(GuardedResolver { policy }))
             .redirect(redirect_policy)
             .connect_timeout(Duration::from_secs(10))

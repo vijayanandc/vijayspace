@@ -27,8 +27,15 @@ pub struct WorkerConfig {
 /// One scheduler pass: reap expired leases, fire schedules, enqueue polls. Only database work,
 /// so a slow app API can never delay schedules or lease recovery.
 pub async fn tick(deps: &Deps) {
-    if let Err(e) = deps.store.reap(deps.clock.now()).await {
-        tracing::warn!(error = %e, "reap");
+    match deps.store.reap(deps.clock.now()).await {
+        Ok(dead) => {
+            for payload in dead {
+                if let Err(e) = mark_dead_execution(deps, &payload).await {
+                    tracing::warn!(error = %e, "failing the execution of a dead job");
+                }
+            }
+        }
+        Err(e) => tracing::warn!(error = %e, "reap"),
     }
     if let Err(e) = fire_due_schedules(deps).await {
         tracing::warn!(error = %e, "schedules");
@@ -75,7 +82,7 @@ pub async fn process(deps: &Deps, job: ClaimedJob) {
             tracing::warn!(job = %job.id, kind = %job.kind, error = %e, "job failed");
             let retry_at = now + infra_backoff(job.attempts);
             match deps.store.fail(&job, &e.to_string(), retry_at, now).await {
-                Ok(Some(true)) => mark_dead_execution(deps, &job).await.map(|()| true),
+                Ok(Some(true)) => mark_dead_execution(deps, &job.payload).await.map(|()| true),
                 Ok(Some(false)) => Ok(true),
                 Ok(None) => Ok(false),
                 Err(e) => Err(e),
@@ -89,6 +96,12 @@ pub async fn process(deps: &Deps, job: ClaimedJob) {
         }
         Err(e) => tracing::error!(job = %job.id, error = %e, "could not settle job"),
     }
+}
+
+/// A lease holder unique to one claim (worker ID plus a fresh UUID): a job reaped from a stalled
+/// task and reclaimed by another task of the same process must not be settled by the first.
+fn claim_token(deps: &Deps, worker: &str) -> String {
+    format!("{worker}:{}", deps.ids.uuid().simple())
 }
 
 /// A cancel that arrived while the slice ran must not wait for a long delay or retry backoff:
@@ -112,7 +125,11 @@ async fn cancel_pending(deps: &Deps, job: &ClaimedJob) -> bool {
 }
 
 fn execution_id(job: &ClaimedJob) -> Option<ExecutionId> {
-    job.payload
+    execution_id_of(&job.payload)
+}
+
+fn execution_id_of(payload: &serde_json::Value) -> Option<ExecutionId> {
+    payload
         .get("execution_id")
         .and_then(serde_json::Value::as_str)
         .and_then(|s| s.parse::<ExecutionId>().ok())
@@ -147,8 +164,11 @@ async fn handle(deps: &Deps, job: &ClaimedJob) -> Result<JobOutcome, weft_app::A
 }
 
 /// A job that keeps failing for infrastructure reasons fails its execution so it is visible.
-async fn mark_dead_execution(deps: &Deps, job: &ClaimedJob) -> Result<(), weft_app::AppError> {
-    let Some(id) = execution_id(job) else {
+async fn mark_dead_execution(
+    deps: &Deps,
+    payload: &serde_json::Value,
+) -> Result<(), weft_app::AppError> {
+    let Some(id) = execution_id_of(payload) else {
         return Ok(());
     };
     let Some(exe) = deps.store.get_execution_system(id).await? else {
@@ -178,7 +198,7 @@ pub async fn drain(deps: &Deps) -> usize {
             .store
             .claim(
                 &QUEUES,
-                "drain",
+                &claim_token(deps, "drain"),
                 50,
                 now,
                 now + ChronoDuration::seconds(LEASE_SECS),
@@ -235,7 +255,7 @@ pub async fn run(deps: Deps, config: WorkerConfig, shutdown: CancellationToken) 
             deps.store
                 .claim(
                     &QUEUES,
-                    &config.id,
+                    &claim_token(&deps, &config.id),
                     u32::try_from(free).unwrap_or(1),
                     now,
                     now + ChronoDuration::seconds(LEASE_SECS),

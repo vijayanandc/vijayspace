@@ -53,7 +53,10 @@ pub fn build(settings: &Settings, store: MySqlStore) -> anyhow::Result<Deps> {
         clock: Arc::new(SystemClock),
         ids: Arc::new(UuidV7Ids),
         secrets: Arc::new(secrets),
-        http: Arc::new(ReqwestSender::new(policy).map_err(anyhow::Error::msg)?),
+        http: Arc::new(
+            ReqwestSender::with_proxy(policy, settings.http_proxy.as_deref())
+                .map_err(anyhow::Error::msg)?,
+        ),
         mailer: Some(mailer),
         connectors: Arc::new(registry()),
         config: Arc::new(AppConfig {

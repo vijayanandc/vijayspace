@@ -186,3 +186,47 @@ async fn test_runs_use_the_draft_and_step_tests_render_inputs() {
     assert_eq!(list[0]["has_unpublished_changes"], true);
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn an_execution_whose_worker_keeps_dying_fails_instead_of_hanging() {
+    let app = TestApp::spawn().await;
+    let flow = app
+        .live_flow(
+            "Poison",
+            json!({"trigger": {"type": "manual"}, "steps": [{"key": "s", "type": "stop"}]}),
+        )
+        .await;
+    let run = app
+        .ok(
+            "POST",
+            &format!("/api/v1/flows/{}/run", flow["id"].as_str().unwrap()),
+            Some(json!({"payload": {}})),
+        )
+        .await;
+    let exe = run["execution_id"].as_str().unwrap().to_owned();
+    // A worker claims the job and dies, again and again: the lease expires each time.
+    for _ in 0..25 {
+        let now = weft_app::ports::Clock::now(&app.clock);
+        let claimed = app
+            .deps
+            .store
+            .claim(
+                &weft_worker::QUEUES,
+                "doomed",
+                10,
+                now,
+                now + chrono::Duration::seconds(90),
+            )
+            .await
+            .unwrap();
+        assert_eq!(claimed.len(), 1);
+        app.clock.advance(chrono::Duration::seconds(120));
+        weft_worker::tick(&app.deps).await;
+    }
+    let detail = app
+        .ok("GET", &format!("/api/v1/executions/{exe}"), None)
+        .await;
+    assert_eq!(detail["status"], "failed", "{detail}");
+    assert_eq!(detail["error_code"], "internal.poison_job");
+    app.cleanup().await;
+}

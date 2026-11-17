@@ -290,11 +290,16 @@ impl RecordObjects for MemoryRecordsConnector {
         &self,
         _ctx: &ActionCtx,
         object: &str,
-        _cursor: Option<&Value>,
-        _limit: u32,
+        cursor: Option<&Value>,
+        limit: u32,
     ) -> Result<Page, ConnectorError> {
+        // Pages in ID order; the cursor is the offset of the next page.
+        let offset = cursor
+            .and_then(Value::as_u64)
+            .and_then(|o| usize::try_from(o).ok())
+            .unwrap_or(0);
         let tables = self.tables.lock().unwrap();
-        let records = tables
+        let all: Vec<Record> = tables
             .get(object)
             .map(|t| {
                 t.iter()
@@ -306,9 +311,14 @@ impl RecordObjects for MemoryRecordsConnector {
                     .collect()
             })
             .unwrap_or_default();
+        let end = (offset + limit as usize).min(all.len());
+        let records = all
+            .get(offset..end)
+            .map(<[Record]>::to_vec)
+            .unwrap_or_default();
         Ok(Page {
             records,
-            next_cursor: None,
+            next_cursor: (end < all.len()).then(|| json!(end)),
         })
     }
 }

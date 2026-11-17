@@ -263,6 +263,9 @@ async fn test_step(
 struct BackfillBody {
     #[serde(default)]
     limit: Option<u32>,
+    /// `next_cursor` from the previous call, to continue.
+    #[serde(default)]
+    cursor: Option<Value>,
 }
 
 async fn backfill(
@@ -271,7 +274,10 @@ async fn backfill(
     Path(raw): Path<String>,
     body: Option<Json<BackfillBody>>,
 ) -> ApiResult<Json<Value>> {
-    let limit = body.and_then(|Json(b)| b.limit).unwrap_or(500);
-    let enqueued = weft_app::sync::backfill(&s.deps, org, id(&raw)?, limit).await?;
-    Ok(Json(json!({"enqueued": enqueued})))
+    let (limit, cursor) = body.map_or((None, None), |Json(b)| (b.limit, b.cursor));
+    let page =
+        weft_app::sync::backfill(&s.deps, org, id(&raw)?, limit.unwrap_or(500), cursor).await?;
+    Ok(Json(
+        json!({"enqueued": page.enqueued, "next_cursor": page.next_cursor}),
+    ))
 }

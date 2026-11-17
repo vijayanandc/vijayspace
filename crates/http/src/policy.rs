@@ -71,6 +71,10 @@ fn is_public_v6(ip: Ipv6Addr) -> bool {
         let [.., a, b] = seg;
         return is_public_v4(Ipv4Addr::from((u32::from(a) << 16) | u32::from(b)));
     }
+    // 64:ff9b:1::/48 is the local-use NAT64 prefix (RFC 8215): never a public destination.
+    if seg[0] == 0x0064 && seg[1] == 0xff9b && seg[2] == 0x0001 {
+        return false;
+    }
     if seg[0] == 0x2002 {
         return is_public_v4(Ipv4Addr::from(
             (u32::from(seg[1]) << 16) | u32::from(seg[2]),
@@ -111,6 +115,7 @@ mod tests {
             "64:ff9b::a9fe:a9fe", // NAT64 of 169.254.169.254
             "2002:a00:1::1",      // 6to4 of 10.0.0.1
             "2002:c0a8:101::1",   // 6to4 of 192.168.1.1
+            "64:ff9b:1::808:808", // local-use NAT64 prefix
         ] {
             assert!(
                 !p.allows(blocked.parse().unwrap()),
