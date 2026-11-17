@@ -4,14 +4,15 @@
 ## What this is
 Weft is a Zoho Flow–style integration platform. Users build **flows**: one trigger (webhook, schedule, app, manual) followed by steps (actions, decision, delay, set variable, …). Every run is an **execution** with step-by-step history.
 - Backend: Rust workspace (`crates/`) with MySQL 8.4, which is also the job queue.
-- Client: Flutter, on the separate **`client` branch** of this repository. It is not in this tree. The backend publishes the API contract in `openapi/` and `fixtures/`, and the client syncs it.
+- Client: a React web app, on the separate **`client` branch** of this repository. It is not in this tree. The API contract it follows is `docs/api/README.md` (generated `openapi/` and `fixtures/` come with T01–T10).
 - **Current MVP:** Zoho CRM ↔ Appblocks apps (FSM, HMS) with a sync layer and Logto multi-tenancy: `docs/plan/13-mvp-zoho-crm-appblocks.md`, backlog M01–M39.
-- Plan and architecture: `docs/plan/`. Inventory of routes, use cases, connectors, error codes and tables: `docs/generated/map.md` (**read this before searching**).
+- Plan and architecture: `docs/plan/`. What is built, deviations from the plan, and items still to verify: `docs/STATUS.md` (**read this first**).
 
 ## Current status (update this as backlog tasks land)
-- **Done:** backlog T00 scaffold. The workspace has 12 crates with empty `lib.rs` files, the `AGENTS.md` per crate, lints, a pinned toolchain, the `justfile`, the docker-compose file and the nextest config.
-- **Available now:** `just db-up`, `just db-down`, `just fmt`, `just lint`, `just test-unit`, `just test`, `just check`.
-- **Not yet available:** `just db-reset`, `just gen`, the `xtask` checks, `docs/generated/map.md`, `docs/recipes/`, `docs/specs/` and the golden slice. Those arrive with T01–T10 (see `docs/plan/12-roadmap-and-backlog.md`). Until then, follow `docs/plan/` directly.
+- **Done:** the server runtime (flows, engine, executions, job queue, webhook/schedule/polling/app triggers, connections with OAuth), the sync layer, the Zoho CRM / Appblocks / Autodesk Forma connectors, recipes R1–R9 and the React client. Details and deviations: `docs/STATUS.md`.
+- **Skipped for now:** Logto authentication. Requests run as the default org, or as the org in `X-Org-ID`.
+- **Available now:** `just db-up`, `just db-down`, `just serve`, `just migrate`, `just fmt`, `just lint`, `just test-unit`, `just test`, `just check`.
+- **Not yet available:** `just db-reset`, `just gen`, the `xtask` checks, `docs/generated/map.md`, `docs/recipes/` and `docs/specs/`. Until they exist, use `docs/STATUS.md` and `docs/plan/`, and copy the shape of an existing use case (e.g. `crates/app/src/flows/`).
 
 ## Map
 | Need to… | Go to |
@@ -19,17 +20,18 @@ Weft is a Zoho Flow–style integration platform. Users build **flows**: one tri
 | Change business rules or flow definition types | `crates/domain/` (pure; no async, no IO) |
 | Change templates or conditions | `crates/expr/` (pure) |
 | Change how flows execute | `crates/engine/` (pure, 🔒 human review) and `crates/app/src/runner/` |
-| Add or modify a use case | `crates/app/src/<feature>/<use_case>.rs` (one per file) |
-| Add a port method | `crates/app/src/ports/` + `crates/db/src/` + `crates/testkit/src/fakes/` + `crates/testkit/src/contracts/` |
-| Add or modify an endpoint | `crates/api/src/routes/<feature>/<use_case>.rs` (same file stem as the use case) |
-| Add a connector | `crates/connectors/src/<app>/` (native) or `crates/connectors/src/declarative/specs/<app>.yaml` |
+| Add or modify a use case | `crates/app/src/<feature>/` (grouped by feature) |
+| Add a port method | `crates/app/src/ports.rs` + `crates/db/src/` (in-memory fakes and contract suites in `crates/testkit/` are planned) |
+| Add or modify an endpoint | `crates/api/src/routes/<feature>.rs`, then update `docs/api/README.md` (the contract the client follows) |
+| Add a connector | `crates/connectors/src/<app>/` (native; register in `builtin_connectors()`). Declarative YAML specs are planned. |
 | Sync (record links, upsert-linked-record, backfill) | `crates/app/src/sync/` and the `core.sync` connector (doc 13 §4) |
-| Logto identity, orgs, members, `X-Org-ID` | `crates/app/src/tenancy/`, `crates/infra/src/auth/logto/` (doc 13 §6) |
+| Recipes (prebuilt integrations) | `crates/app/src/recipes/` (templates with `$slot:<name>` connection placeholders) |
+| Org resolution (`X-Org-ID`, default org) | `crates/app/src/org.rs`, `crates/api/src/extract.rs`. Logto is planned in `crates/app/src/tenancy/` (doc 13 §6). |
 | Background loops | `crates/worker/` |
 | Wiring and config | `crates/server/` |
-| Test helpers | `crates/testkit/` |
+| Test helpers | `crates/testkit/`; end-to-end scenarios in `crates/server/tests/scenarios/` |
 | SQL schema | `migrations/` (append-only, 🔒) |
-| Flutter feature | The `client` branch: `app/lib/features/<feature>/{data,application,presentation}` |
+| Client feature | The `client` branch: `src/features/<feature>/` (React; see its `AGENTS.md`) |
 
 Crate dependency rules are in `docs/plan/02-architecture.md` §4 and are enforced by `cargo xtask check-arch`.
 
@@ -42,7 +44,7 @@ just test-unit     # fast tests, no DB (run often)
 just test          # all tests (needs MySQL)
 just check         # EVERYTHING CI runs. Must pass before you finish.
 ```
-On the `client` branch: `just sync-contract` and `just flutter-check`.
+On the `client` branch: `npm run check`.
 
 ## How to work
 1. Read the spec (`docs/specs/F-xxx-*.md`) and the matching recipe (`docs/recipes/*.md`).
@@ -64,7 +66,7 @@ On the `client` branch: `just sync-contract` and `just flutter-check`.
 
 ## Never
 - `unwrap`/`expect`/`panic!` outside tests; `unsafe`; `todo!`; `dbg!`; `println!`.
-- Business logic in handlers, SQL adapters or Flutter widgets.
+- Business logic in handlers, SQL adapters or React components.
 - `Utc::now()`, `rand::thread_rng()` or `Uuid::now_v7()` called directly; global state; `tokio::spawn` outside `worker`/`server`.
 - `_ =>` wildcard arms on domain enums.
 - `SELECT *`, string-built SQL, or SQL outside `crates/db`.

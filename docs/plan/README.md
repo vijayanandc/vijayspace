@@ -7,7 +7,7 @@
 |---|---|
 | Backend | Rust (stable, edition 2024), axum, sqlx, tokio |
 | Database | MySQL 8.4 LTS. It is the **only** stateful dependency and also serves as the job queue. |
-| Client | Flutter: web first, then desktop and mobile |
+| Client | React web app (TypeScript, React Flow builder); mobile later |
 | Who writes the code | Mostly AI coding agents, reviewed by a small human team |
 | Plan version | v1 (2026-11-17) |
 
@@ -30,7 +30,7 @@
 | 07 | [Connectors](07-connectors.md) | Connector SDK, declarative (YAML) connectors, OAuth, custom apps |
 | 08 | [Security](08-security.md) | Tenant isolation, secrets, SSRF, sandboxing, RBAC |
 | 09 | [Rust test strategy](09-rust-test-strategy.md) | The full testing plan for the backend |
-| 10 | [Flutter client](10-flutter-client.md) | Client architecture, builder UX, client testing |
+| 10 | [Web client](10-web-client.md) | Client architecture (React), builder UX, client testing |
 | 11 | [Operations](11-operations.md) | Deployment, observability, scaling, SLOs |
 | 12 | [Roadmap and backlog](12-roadmap-and-backlog.md) | Phases, exit criteria, about 80 ordered tasks sized for AI sessions |
 | — | [templates/AGENTS.md](templates/AGENTS.md) | Root instructions for AI agents, ready to drop into the repo |
@@ -42,7 +42,7 @@
 | Branch | Contains | Root |
 |---|---|---|
 | `backend` | The Rust workspace, migrations, the generated contract files (`openapi/`, `fixtures/flows/`), and these docs | A Cargo workspace (see doc 02 §3) |
-| `client` | The Flutter app and its packages | A Dart pub workspace (see doc 10 §2) |
+| `client` | The React web app | A Vite + npm project (see doc 10 §2) |
 
 The two branches share no history. Feature work branches off one of them and merges back into it.
 - **The contract flows one way, from backend to client.** `just gen` on `backend` writes `openapi/openapi.json`, `openapi/flow-definition.schema.json`, `openapi/error-codes.json` and `fixtures/flows/`.

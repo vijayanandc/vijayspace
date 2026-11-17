@@ -1,5 +1,5 @@
 # Every developer and agent command. `just check` runs what CI runs.
-# Recipes for later backlog tasks (db-reset, gen, e2e, xtask checks) are added by those tasks.
+# Recipes for later backlog tasks (db-reset, gen, xtask checks) are added by those tasks.
 
 set dotenv-load := true
 
@@ -17,6 +17,14 @@ db-up:
 # Stop local dependencies
 db-down:
     docker compose -f deploy/docker-compose.yml down
+
+# Migrate, then run the API and the worker on :8080 (local networks allowed for testing)
+serve:
+    WEFT_ALLOW_PRIVATE_NETWORKS=${WEFT_ALLOW_PRIVATE_NETWORKS:-true} cargo run -p weft-server -- serve
+
+# Apply migrations only
+migrate:
+    cargo run -p weft-server -- migrate
 
 fmt:
     cargo fmt --all
