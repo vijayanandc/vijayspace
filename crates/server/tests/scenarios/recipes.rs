@@ -52,6 +52,18 @@ async fn every_recipe_installs_as_valid_drafts() {
             assert!(errors.is_empty(), "{key} / {id}: {errors:?}");
         }
     }
+    // The list shows each flow's apps (trigger first, then actions) for the app-icon chain.
+    let flows = app.ok("GET", "/api/v1/flows", None).await;
+    let deal_won = flows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["name"] == "Deal won → FSM request")
+        .unwrap();
+    assert_eq!(
+        deal_won["apps"],
+        json!(["zoho_crm", "core.sync", "appblocks"])
+    );
     app.cleanup().await;
 }
 
@@ -89,6 +101,10 @@ async fn install_checks_slots_before_creating_anything() {
     assert_eq!(body["code"], "recipe.not_found");
 
     let flows = app.ok("GET", "/api/v1/flows", None).await;
-    assert_eq!(flows["items"].as_array().map_or(0, Vec::len), 0, "{flows}");
+    assert_eq!(
+        flows.as_array().unwrap().len(),
+        0,
+        "nothing is created when a slot is wrong: {flows}"
+    );
     app.cleanup().await;
 }

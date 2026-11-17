@@ -33,6 +33,8 @@ pub struct FlowSummaryDto {
     pub draft_revision: u32,
     pub updated_at: DateTime<Utc>,
     pub last_execution: Option<LastExecutionDto>,
+    /// Connector keys the draft uses (app trigger first, then actions), for app-icon chains.
+    pub apps: Vec<String>,
 }
 
 pub fn trigger_type(def: &FlowDefinition) -> &'static str {
@@ -64,6 +66,7 @@ impl FlowSummaryDto {
                     status,
                     queued_at,
                 }),
+            apps: f.draft.apps(),
         }
     }
 }

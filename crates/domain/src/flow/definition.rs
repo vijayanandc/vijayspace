@@ -51,6 +51,27 @@ impl FlowDefinition {
         });
         found
     }
+
+    /// The apps a flow uses, in order of first use: the trigger's connector (app triggers only),
+    /// then each action's connector. Each appears once.
+    #[must_use]
+    pub fn apps(&self) -> Vec<String> {
+        let mut apps: Vec<String> = Vec::new();
+        let mut add = |key: &str| {
+            if !apps.iter().any(|a| a == key) {
+                apps.push(key.to_owned());
+            }
+        };
+        if let TriggerNode::App(app) = &self.trigger {
+            add(&app.connector);
+        }
+        self.walk(&mut |step, _| {
+            if let StepKind::Action(a) = &step.kind {
+                add(&a.connector);
+            }
+        });
+        apps
+    }
 }
 
 fn walk_steps<'a>(steps: &'a [Step], base: &str, f: &mut dyn FnMut(&'a Step, &str)) {
@@ -274,6 +295,25 @@ mod tests {
                 {"key": "mark", "type": "set_variable", "assignments": [{"name": "done", "value": true}]}
             ]
         })
+    }
+
+    #[test]
+    fn apps_lists_trigger_then_action_connectors_once_in_order() {
+        let def: FlowDefinition = serde_json::from_value(serde_json::json!({
+            "trigger": {"type": "app", "connector": "zoho_crm", "trigger": "record_event"},
+            "steps": [
+                {"key": "a", "type": "action", "connector": "core.sync", "action": "upsert_linked_record"},
+                {"key": "d", "type": "decision", "branches": [{"key": "b", "condition": {"all": []}, "steps": [
+                    {"key": "n", "type": "action", "connector": "zoho_crm", "action": "add_note"},
+                    {"key": "x", "type": "action", "connector": "appblocks", "action": "get_record"}
+                ]}], "otherwise": [{"key": "s", "type": "stop"}]}
+            ]
+        }))
+        .unwrap();
+        assert_eq!(def.apps(), ["zoho_crm", "core.sync", "appblocks"]);
+        let webhook: FlowDefinition =
+            serde_json::from_value(serde_json::json!({"trigger": {"type": "webhook"}})).unwrap();
+        assert!(webhook.apps().is_empty());
     }
 
     #[test]

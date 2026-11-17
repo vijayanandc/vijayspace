@@ -159,8 +159,10 @@ Secrets are never returned.
 ```json
 { "id": "flw_…", "name": "Order alert", "description": null, "is_enabled": true, "trigger_type": "webhook",
   "published_version": 3, "has_unpublished_changes": false, "draft_revision": 12, "updated_at": "…",
-  "last_execution": { "id": "exe_…", "status": "succeeded", "queued_at": "…" } }
+  "last_execution": { "id": "exe_…", "status": "succeeded", "queued_at": "…" },
+  "apps": ["zoho_crm", "core.sync", "appblocks"] }
 ```
+`apps` lists the connector keys the draft uses (an app trigger's connector first, then actions in order, each once).
 
 **Flow:** `FlowSummary` fields, plus these:
 ```json
