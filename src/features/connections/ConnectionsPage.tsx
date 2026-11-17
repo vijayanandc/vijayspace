@@ -1,13 +1,13 @@
 // Connections: page header, command bar (search, app filter, refresh) and a sortable table with row actions.
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plug, PlugZap, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
+import { KeyRound, Plug, PlugZap, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { errorMessage } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
 import { qk, useConnections, useConnectors } from '../../api/hooks';
-import type { Connection, ConnectorManifest } from '../../api/types';
+import type { Connection, ConnectorManifest, JsonObject } from '../../api/types';
 import { AppIcon } from '../../components/AppIcon';
 import { StatusBadge } from '../../components/Badge';
 import { Button } from '../../components/Button';
@@ -20,6 +20,7 @@ import { useToast } from '../../components/Toast';
 import { formatTime, relativeTime } from '../../lib/format';
 import { type SortState, nextSort, sortRows } from '../../lib/sort';
 import { ConnectionDialog } from './ConnectionDialog';
+import { oauthReturnUrl } from './oauth';
 
 type Column = 'name' | 'app' | 'status' | 'created';
 
@@ -113,9 +114,34 @@ export function ConnectionsPage() {
   );
 }
 
+/** The connection's non-secret auth settings (e.g. region), resent when signing in again. */
+function oauthSettings(connection: Connection, manifest: ConnectorManifest | undefined): JsonObject {
+  const out: JsonObject = {};
+  for (const f of manifest?.auth.fields ?? []) {
+    const v = connection.config[f.key];
+    if (!f.secret && v !== undefined) out[f.key] = v;
+  }
+  return out;
+}
+
 function ConnectionRow({ connection, manifest }: { connection: Connection; manifest: ConnectorManifest | undefined }) {
   const qc = useQueryClient();
   const toast = useToast();
+  const isOauth = manifest?.auth.kind === 'oauth2';
+  // Signs in again for this connection (`connection_id`), e.g. when it needs re-authorisation.
+  const reconnect = useMutation({
+    mutationFn: async () => {
+      const res = await endpoints.oauthStart({
+        connector: connection.connector,
+        name: connection.name,
+        connection_id: connection.id,
+        fields: oauthSettings(connection, manifest),
+        return_to: oauthReturnUrl(window.location.origin),
+      });
+      window.location.assign(res.authorize_url);
+    },
+    onError: (e) => toast.show('error', errorMessage(e)),
+  });
   const test = useMutation({
     mutationFn: () => endpoints.testConnection(connection.id),
     onSuccess: (res) => {
@@ -153,6 +179,11 @@ function ConnectionRow({ connection, manifest }: { connection: Connection; manif
       <td title={formatTime(connection.created_at)}>{relativeTime(connection.created_at)}</td>
       <td className="col-actions">
         <span className="row-actions">
+          {isOauth && connection.status === 'needs_reauth' && (
+            <Button size="sm" variant="ghost" icon={KeyRound} disabled={reconnect.isPending} onClick={() => reconnect.mutate()}>
+              Reconnect
+            </Button>
+          )}
           <Button size="sm" variant="ghost" icon={PlugZap} disabled={test.isPending} onClick={() => test.mutate()}>
             {test.isPending ? 'Testing…' : 'Test'}
           </Button>
@@ -160,6 +191,7 @@ function ConnectionRow({ connection, manifest }: { connection: Connection; manif
             label={`More actions for ${connection.name}`}
             items={[
               { label: 'Test connection', icon: PlugZap, onSelect: () => test.mutate(), disabled: test.isPending },
+              ...(isOauth ? [{ label: 'Reconnect (sign in again)', icon: KeyRound, onSelect: () => reconnect.mutate(), disabled: reconnect.isPending }] : []),
               { label: 'Delete', icon: Trash2, danger: true, onSelect: confirmDelete },
             ]}
           />

@@ -7,7 +7,7 @@ import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef } from '
 
 import { useBuilder } from '../BuilderContext';
 import { isWeftDrag } from '../model/factories';
-import { layoutDefinition, stepNodeId } from '../model/layout';
+import { type BuilderNode, layoutDefinition, stepNodeId } from '../model/layout';
 import { TRIGGER_ID } from '../model/paths';
 import { edgeTypes } from './edges';
 import { nodeTypes } from './nodes';
@@ -80,9 +80,24 @@ function Canvas() {
     return () => window.clearTimeout(timer);
   }, [nodes.length, fitView]);
 
+  /** Opens the trigger or step panel for a card (click, or Enter/Space on the focused card). */
+  const openNode = (node: BuilderNode) => {
+    if (node.data.kind === 'trigger') select(TRIGGER_ID);
+    if (node.data.kind === 'step') select(node.data.step.key);
+  };
+
   const onKeyDown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('input, textarea, select, [contenteditable]')) return;
+    if ((e.key === 'Enter' || e.key === ' ') && target.classList.contains('react-flow__node')) {
+      // React Flow focuses the card wrapper (role="button") but only selects it internally on these keys.
+      const node = nodes.find((n) => n.id === target.dataset.id);
+      if (node) {
+        e.preventDefault();
+        openNode(node);
+      }
+      return;
+    }
     if ((e.key === 'Delete' || e.key === 'Backspace') && selected && selected !== TRIGGER_ID) {
       e.preventDefault();
       deleteStep(selected);
@@ -108,10 +123,7 @@ function Canvas() {
         fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
         minZoom={0.2}
         maxZoom={1.5}
-        onNodeClick={(_, node) => {
-          if (node.data.kind === 'trigger') select(TRIGGER_ID);
-          if (node.data.kind === 'step') select(node.data.step.key);
-        }}
+        onNodeClick={(_, node) => openNode(node)}
         onPaneClick={() => {
           select(null);
           setActivePoint(null);

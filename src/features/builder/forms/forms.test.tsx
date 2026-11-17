@@ -72,6 +72,36 @@ describe('DynamicForm', () => {
     fireEvent.change(screen.getByLabelText('Headers value 1'), { target: { value: 'secret' } });
     expect(onValues).toHaveBeenLastCalledWith({ headers: { 'X-Api-Key': 'secret' } });
   });
+
+  it('keeps key/value rows in place for numeric keys and on duplicate keys', () => {
+    const onValues = vi.fn();
+    renderWithProviders(<Harness fields={[{ key: 'headers', label: 'Headers', type: 'key_value' }]} initial={{ headers: { name: 'x', other: 'y' } }} onValues={onValues} />);
+    fireEvent.change(screen.getByLabelText('Headers key 2'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Headers key 2'), { target: { value: '10' } });
+    expect(screen.getByLabelText('Headers key 1')).toHaveValue('name');
+    expect(screen.getByLabelText('Headers key 2')).toHaveValue('10');
+    expect(onValues).toHaveBeenLastCalledWith({ headers: { name: 'x', 10: 'y' } });
+
+    fireEvent.change(screen.getByLabelText('Headers key 2'), { target: { value: 'name' } });
+    expect(screen.getByLabelText('Headers key 2')).toHaveValue('name');
+    expect(screen.getByLabelText('Headers value 2')).toHaveValue('y');
+    expect(screen.getByLabelText('Headers key 2')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(/Another row already uses the key “name”/)).toBeInTheDocument();
+    expect(onValues).toHaveBeenLastCalledWith({ headers: { name: 'x' } });
+  });
+
+  it('lets mappable number fields take decimals and stores the number', () => {
+    const onValues = vi.fn();
+    renderWithProviders(<Harness fields={[{ key: 'amount', label: 'Amount', type: 'number' }]} onValues={onValues} />);
+    const input = screen.getByLabelText('Amount');
+    for (const text of ['1', '1.', '1.5', '1.50']) {
+      fireEvent.change(input, { target: { value: text } });
+      expect(input).toHaveValue(text);
+    }
+    expect(onValues).toHaveBeenLastCalledWith({ amount: 1.5 });
+    fireEvent.change(input, { target: { value: '{{ trigger.email }}' } });
+    expect(onValues).toHaveBeenLastCalledWith({ amount: '{{ trigger.email }}' });
+  });
 });
 
 describe('MappingInput', () => {

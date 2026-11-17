@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Condition } from '../../../api/types';
-import { fromModel, isEditable, summarize, toModel } from './condition';
+import { conditionProblem, fromModel, isCondition, isEditable, summarize, toModel } from './condition';
 
 describe('condition model', () => {
   it('round-trips groups and sub-groups', () => {
@@ -29,5 +29,17 @@ describe('condition model', () => {
     const model = toModel({ all: [{ left: '{{ x }}', op: 'gt', right: 100, case_insensitive: true }] });
     expect(model.items[0]).toEqual({ left: '{{ x }}', op: 'gt', right: '100', case_insensitive: true });
     expect(summarize({ all: [{ left: '{{ trigger.amount }}', op: 'gt', right: 100 }] })).toBe('trigger.amount is greater than 100');
+  });
+
+  it('rejects JSON that is not a condition instead of crashing', () => {
+    for (const bad of [{ all: [{ left: 'a', right: 'b' }] }, {}, [], null, 'x', { all: 'a' }, { any: [{ left: 'a', op: 'nope' }] }, { not: {} }]) {
+      expect(isCondition(bad)).toBe(false);
+      expect(isEditable(bad as unknown as Condition)).toBe(false);
+      expect(toModel(bad as unknown as Condition)).toEqual({ mode: 'all', items: [] });
+    }
+    expect(conditionProblem({ all: [{ left: 'a', right: 'b' }] })).toBe('condition.all[0] needs "left" and "op" (or "all", "any" or "not")');
+    expect(conditionProblem({ any: [{ left: 'a', op: 'eq', case_insensitive: 'yes' }] })).toBe('condition.any[0].case_insensitive must be true or false');
+    expect(isCondition({ not: { all: [{ left: '{{ x }}', op: 'is_true' }] } })).toBe(true);
+    expect(isCondition({ all: [] })).toBe(true);
   });
 });

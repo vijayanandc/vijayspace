@@ -6,10 +6,12 @@ import { errorMessage } from '../../../api/client';
 import { endpoints } from '../../../api/endpoints';
 import type { FieldSpec, JsonObject, JsonValue } from '../../../api/types';
 import { Field } from '../../../components/Field';
+import { parseNumberField } from '../model/values';
 import type { FormEnv } from './env';
 import { JsonInput } from './JsonInput';
 import { KeyValueInput } from './KeyValueInput';
 import { MappingInput } from './MappingInput';
+import { ParsedMappingInput } from './ParsedMappingInput';
 import { SelectInput } from './SelectInput';
 
 interface FieldProps {
@@ -76,7 +78,7 @@ export function FieldInput({ field, value, onChange, env, siblings }: FieldProps
             return <input id={id} className="input" type="password" autoComplete="new-password" value={asText(value)} onChange={(e) => onChange(e.target.value)} />;
           case 'number':
             if (!mappable) return <input id={id} className="input" type="number" value={asText(value)} onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))} />;
-            return <MappingInput id={id} value={asText(value)} onChange={(v) => onChange(v.trim() !== '' && !v.includes('{{') && !Number.isNaN(Number(v)) ? Number(v) : v)} variables={env.variables} placeholder={field.placeholder} />;
+            return <ParsedMappingInput id={id} value={value} parse={parseNumberField} onChange={onChange} variables={env.variables} placeholder={field.placeholder} />;
           case 'text':
           case 'code':
             return mappable ? (

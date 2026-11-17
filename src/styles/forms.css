@@ -58,5 +58,6 @@
 /* ---------- Key/value rows and assignments ---------- */
 .kv-row { display: grid; grid-template-columns: 36% 1fr 24px; gap: 6px; margin-bottom: 6px; align-items: start; }
 .kv-row .icon-btn, .assignment .icon-btn { margin-top: 4px; }
+.kv-warning { margin: -2px 0 8px; }
 .assignment { display: grid; grid-template-columns: 120px 14px 1fr 24px; gap: 6px; align-items: start; margin: 12px 0 8px; }
 .assignment > span { line-height: 32px; text-align: center; color: var(--text-2); }

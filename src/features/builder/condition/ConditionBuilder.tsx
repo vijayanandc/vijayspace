@@ -8,7 +8,7 @@ import { OPS } from '../../../api/types';
 import { JsonInput } from '../forms/JsonInput';
 import { MappingInput } from '../forms/MappingInput';
 import {
-  type Group, type Mode, NO_RIGHT, OP_LABELS, type Row, type SubGroup, emptyRow, fromModel, isEditable, isSubGroup, toModel,
+  type Group, type Mode, NO_RIGHT, OP_LABELS, type Row, type SubGroup, conditionProblem, emptyRow, fromModel, isCondition, isEditable, isSubGroup, toModel,
 } from '../model/condition';
 import type { VarNode } from '../model/variables';
 
@@ -57,7 +57,15 @@ export function ConditionBuilder({ value, onChange, variables }: Props) {
   if (raw) {
     return (
       <div>
-        <JsonInput id="condition-json" value={value as unknown as JsonValue} onChange={(v) => v && typeof v === 'object' && onChange(v as unknown as Condition)} rows={8} />
+        <JsonInput
+          id="condition-json"
+          value={value as unknown as JsonValue}
+          validate={(v) => conditionProblem(v)}
+          onChange={(v) => {
+            if (isCondition(v)) onChange(v);
+          }}
+          rows={8}
+        />
         {isEditable(value) && (
           <button type="button" className="link-btn" onClick={() => setRaw(false)}>
             Back to visual editor

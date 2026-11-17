@@ -22,6 +22,7 @@ export function detectPreset(spec: ScheduleSpec): PresetState {
   if (spec.kind === 'interval') return { ...base, preset: 'interval', minutes: spec.minutes };
   if (spec.kind === 'once') return { ...base, preset: 'once', at: spec.at, timezone: spec.timezone ?? 'UTC' };
   const tz = spec.timezone ?? 'UTC';
+  // Match on the trimmed text, but keep what the user typed (spaces included) for the cron editor.
   const expr = spec.expr.trim();
   const daily = /^(\d{1,2}) (\d{1,2}) \* \* \*$/.exec(expr);
   if (daily) return { ...base, preset: 'daily', time: `${pad(Number(daily[2]))}:${pad(Number(daily[1]))}`, expr, timezone: tz };
@@ -34,7 +35,19 @@ export function detectPreset(spec: ScheduleSpec): PresetState {
   if (monthly) {
     return { ...base, preset: 'monthly', time: `${pad(Number(monthly[2]))}:${pad(Number(monthly[1]))}`, dayOfMonth: Number(monthly[3]), expr, timezone: tz };
   }
-  return { ...base, preset: 'cron', expr, timezone: tz };
+  return { ...base, preset: 'cron', expr: spec.expr, timezone: tz };
+}
+
+/**
+ * What the schedule panel shows for `spec` when the user last chose `mode`. The preset is detected only
+ * when the panel opens (or the spec changes underneath it, e.g. undo); afterwards the chosen mode sticks, so
+ * a cron expression that happens to look daily or weekly stays in the cron editor while it is typed.
+ */
+export function scheduleView(spec: ScheduleSpec, mode: Preset): PresetState {
+  const detected = detectPreset(spec);
+  if (spec.kind !== 'cron') return detected;
+  if (mode === 'cron') return { ...detected, preset: 'cron', expr: spec.expr };
+  return detected;
 }
 
 function hm(time: string): [number, number] {

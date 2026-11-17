@@ -15,6 +15,7 @@ import { ErrorBox } from '../../components/Empty';
 import { Field } from '../../components/Field';
 import { MessageBar } from '../../components/MessageBar';
 import { DynamicForm } from '../builder/forms/DynamicForm';
+import { oauthReturnUrl } from './oauth';
 
 interface Props {
   open: boolean;
@@ -22,11 +23,13 @@ interface Props {
   /** Preselects (and locks) the connector. */
   connector?: string;
   onCreated?: (c: Connection) => void;
+  /** In-app page to come back to after an OAuth sign-in (default: the callback page's own links). */
+  returnTo?: string;
+  /** Runs before leaving for the OAuth provider (e.g. saving the flow); false cancels the redirect. */
+  beforeRedirect?: () => Promise<boolean>;
 }
 
-export const OAUTH_RETURN_PATH = '/connections/callback';
-
-export function ConnectionDialog({ open, onClose, connector, onCreated }: Props) {
+export function ConnectionDialog({ open, onClose, connector, onCreated, returnTo, beforeRedirect }: Props) {
   const { data: manifests = [] } = useConnectors();
   const choices = manifests.filter((m) => m.auth.kind !== 'none');
   const [key, setKey] = useState(connector ?? '');
@@ -49,7 +52,8 @@ export function ConnectionDialog({ open, onClose, connector, onCreated }: Props)
       if (!manifest) throw new Error('Choose an app');
       const label = name.trim() || manifest.name;
       if (isOauth) {
-        const res = await endpoints.oauthStart({ connector: manifest.key, name: label, fields, return_to: window.location.origin + OAUTH_RETURN_PATH });
+        if (beforeRedirect && !(await beforeRedirect())) throw new Error('Your latest flow changes could not be saved, so sign-in was not started. Fix the save error first.');
+        const res = await endpoints.oauthStart({ connector: manifest.key, name: label, fields, return_to: oauthReturnUrl(window.location.origin, returnTo) });
         window.location.assign(res.authorize_url);
         return undefined;
       }

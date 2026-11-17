@@ -15,7 +15,12 @@ interface Props {
   subtitle?: ReactNode;
 }
 
-/** Modal dialog (portalled to <body> so it covers the whole app): Escape closes, focus moves into the body and returns afterwards. */
+function isTopmost(el: HTMLElement | null): boolean {
+  const open = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+  return el !== null && open[open.length - 1] === el;
+}
+
+/** Modal dialog (portalled to <body> so it covers the whole app): Escape closes the topmost one, focus moves into the body and returns afterwards. */
 export function Dialog({ title, open, onClose, children, footer, wide, subtitle }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -30,7 +35,8 @@ export function Dialog({ title, open, onClose, children, footer, wide, subtitle 
     const first = body?.querySelector<HTMLElement>(focusable) ?? ref.current?.querySelector<HTMLElement>(focusable);
     first?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeRef.current();
+      // Nested dialogs are portalled in opening order, so only the last one in the document is on top.
+      if (e.key === 'Escape' && isTopmost(ref.current)) closeRef.current();
     };
     document.addEventListener('keydown', onKey);
     return () => {

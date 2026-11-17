@@ -1,30 +1,29 @@
 // "Configure" tabs of the delay, set-variable and stop steps.
 
 import { Plus, X } from 'lucide-react';
+import { useState } from 'react';
 
-import type { DelayStep, SetVariableStep, StopStep } from '../../../api/types';
+import type { DelayStep, JsonValue, SetVariableStep, StopStep } from '../../../api/types';
 import { Field } from '../../../components/Field';
 import { useBuilder } from '../BuilderContext';
+import { IntInput } from '../forms/IntInput';
 import { MappingInput } from '../forms/MappingInput';
+import { ParsedMappingInput } from '../forms/ParsedMappingInput';
 import { updateStep } from '../model/tree';
+import { DELAY_UNITS, MAX_DELAY_SECS, bestDelayUnit, changeDelayUnit, delaySeconds, delayUnit, parseLooseValue } from '../model/values';
 import { buildVariableTree } from '../model/variables';
 
-const UNITS = [
-  { value: 60, label: 'minutes' },
-  { value: 3600, label: 'hours' },
-  { value: 86_400, label: 'days' },
-];
-
-function bestUnit(seconds: number): number {
-  return [...UNITS].reverse().find((u) => seconds % u.value === 0)?.value ?? 60;
-}
+const UNIT_LABELS: Record<number, string> = { 1: 'seconds', 60: 'minutes', 3600: 'hours', 86_400: 'days' };
 
 export function DelayPanel({ step }: { step: DelayStep }) {
   const { def, apply, manifests, flow } = useBuilder();
   const variables = buildVariableTree(def, step.key, manifests, flow.trigger?.sample);
   const mode = step.until !== undefined ? 'until' : 'for';
   const seconds = step.seconds ?? 3600;
-  const unit = bestUnit(seconds);
+  // The unit sticks once chosen, so typing 120 (minutes) is not re-shown as 2 hours mid-edit.
+  const [chosenUnit, setChosenUnit] = useState(() => bestDelayUnit(seconds));
+  const unit = delayUnit(seconds, chosenUnit);
+  const units: readonly number[] = unit === 1 ? [1, ...DELAY_UNITS] : DELAY_UNITS;
   const set = (next: DelayStep, tag?: string) => apply(updateStep(def, step.key, () => next), tag);
   const base = { key: step.key, name: step.name, type: 'delay' as const };
   return (
@@ -42,15 +41,24 @@ export function DelayPanel({ step }: { step: DelayStep }) {
         <div className="inline-fields">
           <Field label="Amount">
             {(id) => (
-              <input id={id} className="input" type="number" min={1} value={seconds / unit} onChange={(e) => set({ ...base, seconds: Math.max(1, Math.round(Number(e.target.value) * unit)) }, `delay:${step.key}`)} />
+              <IntInput id={id} min={1} max={Math.floor(MAX_DELAY_SECS / unit)} value={seconds / unit} onChange={(n) => n !== undefined && set({ ...base, seconds: delaySeconds(n, unit) }, `delay:${step.key}`)} />
             )}
           </Field>
           <Field label="Unit">
             {(id) => (
-              <select id={id} className="input" value={unit} onChange={(e) => set({ ...base, seconds: (seconds / unit) * Number(e.target.value) })}>
-                {UNITS.map((u) => (
-                  <option key={u.value} value={u.value}>
-                    {u.label}
+              <select
+                id={id}
+                className="input"
+                value={unit}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  setChosenUnit(next);
+                  set({ ...base, seconds: changeDelayUnit(seconds, unit, next) });
+                }}
+              >
+                {units.map((u) => (
+                  <option key={u} value={u}>
+                    {UNIT_LABELS[u]}
                   </option>
                 ))}
               </select>
@@ -66,6 +74,8 @@ export function DelayPanel({ step }: { step: DelayStep }) {
     </div>
   );
 }
+
+const assignmentText = (v: JsonValue | undefined) => (typeof v === 'string' ? v : JSON.stringify(v ?? ''));
 
 export function SetVariablePanel({ step }: { step: SetVariableStep }) {
   const { def, apply, manifests, flow } = useBuilder();
@@ -83,9 +93,11 @@ export function SetVariablePanel({ step }: { step: SetVariableStep }) {
             onChange={(e) => setAssignments(step.assignments.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)), `var:${step.key}`)}
           />
           <span aria-hidden="true">=</span>
-          <MappingInput
+          <ParsedMappingInput
             ariaLabel={`Variable ${i + 1} value`}
-            value={typeof a.value === 'string' ? a.value : JSON.stringify(a.value)}
+            value={a.value}
+            parse={parseLooseValue}
+            format={assignmentText}
             onChange={(value) => setAssignments(step.assignments.map((x, j) => (j === i ? { ...x, value } : x)), `var:${step.key}`)}
             variables={variables}
           />
@@ -98,7 +110,7 @@ export function SetVariablePanel({ step }: { step: SetVariableStep }) {
         <Plus size={14} aria-hidden="true" />
         Add variable
       </button>
-      <p className="field-help">Later steps read these as {'{{ vars.<name> }}'}.</p>
+      <p className="field-help">Later steps read these as {'{{ vars.<name> }}'}. Values that are JSON (numbers, true/false, lists, objects) keep their type.</p>
     </div>
   );
 }

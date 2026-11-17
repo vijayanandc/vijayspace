@@ -1,6 +1,12 @@
+// Schedule trigger settings: friendly presets (every N minutes, daily, weekly, monthly, once) or a cron expression.
+
+import { useState } from 'react';
+
 import type { ScheduleSpec } from '../../../api/types';
 import { Field } from '../../../components/Field';
-import { type Preset, type PresetState, detectPreset, presetToSpec } from '../model/schedule';
+import { IntInput } from '../forms/IntInput';
+import { type Preset, type PresetState, detectPreset, presetToSpec, scheduleView } from '../model/schedule';
+import { U32_MAX } from '../model/values';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const PRESETS: { value: Preset; label: string }[] = [
@@ -18,8 +24,14 @@ function timeZones(): string[] {
 }
 
 export function SchedulePanel({ spec, onChange }: { spec: ScheduleSpec; onChange: (s: ScheduleSpec) => void }) {
-  const state = detectPreset(spec);
-  const set = (patch: Partial<PresetState>) => onChange(presetToSpec({ ...state, ...patch }));
+  // The preset is detected once, when the panel opens; after that the user's choice sticks.
+  const [mode, setMode] = useState<Preset>(() => detectPreset(spec).preset);
+  const state = scheduleView(spec, mode);
+  const set = (patch: Partial<PresetState>) => {
+    const next = { ...state, ...patch };
+    setMode(next.preset);
+    onChange(presetToSpec(next));
+  };
   return (
     <div>
       <Field label="Repeat">
@@ -35,7 +47,7 @@ export function SchedulePanel({ spec, onChange }: { spec: ScheduleSpec; onChange
       </Field>
       {state.preset === 'interval' && (
         <Field label="Minutes">
-          {(id) => <input id={id} className="input" type="number" min={1} value={state.minutes} onChange={(e) => set({ minutes: Number(e.target.value) })} />}
+          {(id) => <IntInput id={id} min={1} max={U32_MAX} value={state.minutes} onChange={(minutes) => minutes !== undefined && set({ minutes })} />}
         </Field>
       )}
       {(state.preset === 'daily' || state.preset === 'weekly' || state.preset === 'monthly') && (
@@ -56,7 +68,7 @@ export function SchedulePanel({ spec, onChange }: { spec: ScheduleSpec; onChange
       )}
       {state.preset === 'monthly' && (
         <Field label="Day of month">
-          {(id) => <input id={id} className="input" type="number" min={1} max={31} value={state.dayOfMonth} onChange={(e) => set({ dayOfMonth: Number(e.target.value) })} />}
+          {(id) => <IntInput id={id} min={1} max={31} value={state.dayOfMonth} onChange={(dayOfMonth) => dayOfMonth !== undefined && set({ dayOfMonth })} />}
         </Field>
       )}
       {state.preset === 'once' && (

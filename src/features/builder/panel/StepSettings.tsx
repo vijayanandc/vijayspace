@@ -7,9 +7,13 @@ import type { ActionStep, Step } from '../../../api/types';
 import { Button } from '../../../components/Button';
 import { Field } from '../../../components/Field';
 import { useBuilder } from '../BuilderContext';
+import { IntInput } from '../forms/IntInput';
 import { isValidKey } from '../model/keys';
 import { renameStep } from '../model/rename';
 import { allSteps, updateStep } from '../model/tree';
+
+/** The UI's cap on attempts (the server stores a u16). */
+const MAX_ATTEMPTS = 20;
 
 function ErrorHandling({ step }: { step: ActionStep }) {
   const { def, apply } = useBuilder();
@@ -28,15 +32,15 @@ function ErrorHandling({ step }: { step: ActionStep }) {
       </Field>
       <Field label="Max attempts" help="Automatic retries for temporary errors (default 9: one try + 8 retries over ~16 h)">
         {(id) => (
-          <input
+          <IntInput
             id={id}
             className="input input-narrow"
-            type="number"
             min={1}
-            max={20}
-            value={step.retry?.max_attempts ?? ''}
+            max={MAX_ATTEMPTS}
+            optional
+            value={step.retry?.max_attempts}
             placeholder="9"
-            onChange={(e) => set({ retry: e.target.value ? { max_attempts: Math.max(1, Number(e.target.value)) } : undefined }, `retry:${step.key}`)}
+            onChange={(n) => set({ retry: n === undefined ? undefined : { max_attempts: n } }, `retry:${step.key}`)}
           />
         )}
       </Field>

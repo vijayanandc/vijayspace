@@ -14,6 +14,8 @@ import { Field } from '../../../components/Field';
 import { JsonView } from '../../../components/JsonView';
 import { useToast } from '../../../components/Toast';
 import { useBuilder } from '../BuilderContext';
+import { IntInput } from '../forms/IntInput';
+import { U32_MAX } from '../model/values';
 import { CopyField } from './CopyField';
 
 type OnChange = (t: TriggerNode, tag?: string) => void;
@@ -39,10 +41,10 @@ function AppSettings({ trigger, onChange }: { trigger: AppTriggerNode; onChange:
     <section className="panel-section">
       <h3 className="section-title">Polling</h3>
       <Field label="Polling / reconciliation interval (seconds)" help="Polling triggers check this often; instant triggers re-check for missed events">
-        {(id) => <input id={id} className="input input-narrow" type="number" min={60} placeholder="300" value={trigger.poll_interval_secs ?? ''} onChange={(e) => onChange({ ...trigger, poll_interval_secs: e.target.value ? Number(e.target.value) : undefined }, 'app-adv')} />}
+        {(id) => <IntInput id={id} className="input input-narrow" min={60} max={U32_MAX} optional placeholder="300" value={trigger.poll_interval_secs} onChange={(n) => onChange({ ...trigger, poll_interval_secs: n }, 'app-adv')} />}
       </Field>
       <Field label="Debounce (seconds)" help="Collapse bursts of events for the same record into one run">
-        {(id) => <input id={id} className="input input-narrow" type="number" min={0} placeholder="0" value={trigger.debounce_secs ?? ''} onChange={(e) => onChange({ ...trigger, debounce_secs: e.target.value ? Number(e.target.value) : undefined }, 'app-adv')} />}
+        {(id) => <IntInput id={id} className="input input-narrow" min={0} max={U32_MAX} optional placeholder="0" value={trigger.debounce_secs} onChange={(n) => onChange({ ...trigger, debounce_secs: n }, 'app-adv')} />}
       </Field>
     </section>
   );

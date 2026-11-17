@@ -7,7 +7,7 @@ import type { VarNode } from '../model/variables';
 import { insertToken, tokenize } from './env';
 import { VariablePicker } from './VariablePicker';
 
-interface Props {
+export interface MappingInputProps {
   id?: string;
   value: string;
   onChange: (value: string) => void;
@@ -17,7 +17,7 @@ interface Props {
   ariaLabel?: string;
 }
 
-export function MappingInput({ id, value, onChange, variables, multiline, placeholder, ariaLabel }: Props) {
+export function MappingInput({ id, value, onChange, variables, multiline, placeholder, ariaLabel }: MappingInputProps) {
   const [picking, setPicking] = useState(false);
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const pick = (path: string) => {

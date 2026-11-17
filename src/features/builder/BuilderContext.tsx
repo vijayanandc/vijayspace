@@ -29,6 +29,11 @@ export interface BuilderCtx {
 
 export const BuilderContext = createContext<BuilderCtx | null>(null);
 
+/** The builder context when rendered inside the builder, else null (for components shared with other pages). */
+export function useOptionalBuilder(): BuilderCtx | null {
+  return useContext(BuilderContext);
+}
+
 export function useBuilder(): BuilderCtx {
   const ctx = useContext(BuilderContext);
   if (!ctx) throw new Error('useBuilder must be used inside the builder');

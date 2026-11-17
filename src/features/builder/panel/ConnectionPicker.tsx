@@ -1,8 +1,11 @@
+// Connection select for an app, with "+ New connection" (from the builder, OAuth saves the flow first and returns to it).
+
 import { useState } from 'react';
 
 import { useConnections } from '../../../api/hooks';
 import { Field } from '../../../components/Field';
 import { ConnectionDialog } from '../../connections/ConnectionDialog';
+import { useOptionalBuilder } from '../BuilderContext';
 
 interface Props {
   connector: string;
@@ -13,6 +16,7 @@ interface Props {
 export function ConnectionPicker({ connector, value, onChange }: Props) {
   const { data: connections = [], isLoading } = useConnections();
   const [creating, setCreating] = useState(false);
+  const builder = useOptionalBuilder();
   const mine = connections.filter((c) => c.connector === connector);
   const current = mine.find((c) => c.id === value);
   return (
@@ -40,7 +44,14 @@ export function ConnectionPicker({ connector, value, onChange }: Props) {
           </select>
         )}
       </Field>
-      <ConnectionDialog open={creating} onClose={() => setCreating(false)} connector={connector} onCreated={(c) => onChange(c.id)} />
+      <ConnectionDialog
+        open={creating}
+        onClose={() => setCreating(false)}
+        connector={connector}
+        onCreated={(c) => onChange(c.id)}
+        returnTo={builder ? `/flows/${builder.flowId}` : undefined}
+        beforeRedirect={builder?.flush}
+      />
     </>
   );
 }

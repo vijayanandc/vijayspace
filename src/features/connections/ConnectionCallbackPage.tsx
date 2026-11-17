@@ -1,23 +1,36 @@
 // Landing page after an OAuth redirect: `?status=connected&connection_id=…` or `?status=error&message=…`.
+// With `next` (an OAuth started from the builder), a success goes straight back to that page.
 
 import { useQueryClient } from '@tanstack/react-query';
 import { CircleCheck, CircleX } from 'lucide-react';
-import { useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { qk } from '../../api/hooks';
 import { LinkButton } from '../../components/Button';
+import { useToast } from '../../components/Toast';
+import { safeNextPath } from './oauth';
 
 export function ConnectionCallbackPage() {
   const [params] = useSearchParams();
   const qc = useQueryClient();
+  const toast = useToast();
+  const navigate = useNavigate();
   const status = params.get('status');
   const id = params.get('connection_id');
   const message = params.get('message');
-  useEffect(() => {
-    void qc.invalidateQueries({ queryKey: qk.connections });
-  }, [qc]);
+  const next = safeNextPath(params.get('next'));
   const ok = status === 'connected';
+  const handled = useRef(false);
+  useEffect(() => {
+    if (handled.current) return;
+    handled.current = true;
+    void qc.invalidateQueries({ queryKey: qk.connections });
+    if (ok && next) {
+      toast.show('success', 'Connected. Choose the new connection in the step.');
+      navigate(next, { replace: true });
+    }
+  }, [qc, ok, next, toast, navigate]);
   return (
     <div className="page">
       <section className={`result-card ${ok ? 'result-ok' : 'result-error'}`}>
@@ -28,8 +41,8 @@ export function ConnectionCallbackPage() {
         ) : (
           <p role="alert">{message ?? 'The app did not grant access.'}</p>
         )}
-        <LinkButton to="/connections" variant="primary">
-          Back to connections
+        <LinkButton to={next ?? '/connections'} variant="primary">
+          {next ? 'Back to the flow' : 'Back to connections'}
         </LinkButton>
       </section>
     </div>

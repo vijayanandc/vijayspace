@@ -5,13 +5,20 @@ import { useState } from 'react';
 
 import { Button } from '../../../components/Button';
 import { Field } from '../../../components/Field';
+import { useToast } from '../../../components/Toast';
+import { COPY_FAILED, copyText } from '../../../lib/clipboard';
 
 export function CopyField({ label, value, help }: { label: string; value: string; help?: string }) {
   const [copied, setCopied] = useState(false);
+  const toast = useToast();
   const copy = () => {
-    void navigator.clipboard?.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    copyText(value).then(
+      () => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      },
+      () => toast.show('error', COPY_FAILED),
+    );
   };
   return (
     <Field label={label} help={help}>

@@ -1,6 +1,7 @@
 // Condition builder model: one top-level AND/OR group of rows and one level of sub-groups.
 
 import type { Comparison, Condition, JsonValue, Op } from '../../../api/types';
+import { OPS } from '../../../api/types';
 
 export type Mode = 'all' | 'any';
 
@@ -50,12 +51,47 @@ function isComparison(c: Condition): c is Comparison {
   return 'op' in c;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const OP_SET: ReadonlySet<string> = new Set(OPS);
+
+/**
+ * Why `value` is not a condition the server accepts (the first problem found), or null when it is one.
+ * Mirrors the backend's untagged enum: `all`, then `any`, then `not`, then a `{left, op, right?}` comparison.
+ */
+export function conditionProblem(value: unknown, at = 'condition'): string | null {
+  if (!isRecord(value)) return `${at} must be an object`;
+  for (const key of ['all', 'any'] as const) {
+    if (!(key in value)) continue;
+    const children = value[key];
+    if (!Array.isArray(children)) return `${at}.${key} must be a list of conditions`;
+    for (const [i, child] of children.entries()) {
+      const problem = conditionProblem(child, `${at}.${key}[${i}]`);
+      if (problem) return problem;
+    }
+    return null;
+  }
+  if ('not' in value) return conditionProblem(value.not, `${at}.not`);
+  if (!('left' in value) || !('op' in value)) return `${at} needs "left" and "op" (or "all", "any" or "not")`;
+  if (typeof value.op !== 'string' || !OP_SET.has(value.op)) return `${at}.op must be one of ${OPS.join(', ')}`;
+  if ('case_insensitive' in value && typeof value.case_insensitive !== 'boolean') return `${at}.case_insensitive must be true or false`;
+  return null;
+}
+
+/** Type guard for conditions coming from untyped JSON (the "Edit as JSON" editor). */
+export function isCondition(value: unknown): value is Condition {
+  return conditionProblem(value) === null;
+}
+
 function toRow(c: Comparison): Row {
   return { left: text(c.left), op: c.op, right: text(c.right), case_insensitive: c.case_insensitive === true };
 }
 
 /** True when the condition fits the builder (otherwise the panel shows a JSON editor). */
 export function isEditable(c: Condition): boolean {
+  if (!isCondition(c)) return false;
   if (isComparison(c)) return true;
   if ('not' in c) return false;
   const children = 'all' in c ? c.all : c.any;
@@ -67,6 +103,7 @@ export function isEditable(c: Condition): boolean {
 }
 
 export function toModel(c: Condition): Group {
+  if (!isCondition(c)) return { mode: 'all', items: [] };
   if (isComparison(c)) return { mode: 'all', items: [toRow(c)] };
   if ('not' in c) return { mode: 'all', items: [] };
   const mode: Mode = 'all' in c ? 'all' : 'any';

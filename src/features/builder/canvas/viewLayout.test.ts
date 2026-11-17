@@ -39,4 +39,10 @@ describe('viewLayout', () => {
     expect(styled.filter((e) => e.target.startsWith('ins:')).every((e) => e.markerEnd === undefined)).toBe(true);
     expect(styled.find((e) => e.target === 'end')?.markerEnd).toBeDefined();
   });
+
+  it('keeps insert-point and End wrappers out of the tab order (the + is its own button)', () => {
+    expect(view.get('ins:root:0')?.focusable).toBe(false);
+    expect(view.get('end')?.focusable).toBe(false);
+    expect(view.get('trigger')?.focusable).toBeUndefined();
+  });
 });

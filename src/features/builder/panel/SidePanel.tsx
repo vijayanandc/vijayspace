@@ -58,8 +58,9 @@ export function SidePanel() {
   if (!step) return null;
   const tabs = step.type === 'action' ? ALL_TABS : ALL_TABS.filter((t) => t.key !== 'test');
   const shown = tabs.some((t) => t.key === tab) ? tab : 'configure';
+  // Keyed by step: nothing typed or run in one step's panel (test results, JSON drafts, rows) carries into another.
   return (
-    <aside className="side-panel" aria-label="Step settings">
+    <aside key={step.key} className="side-panel" aria-label="Step settings">
       <PanelHeader label={stepLabel(step, manifests)} step={step} onClose={close} />
       <Tabs label="Step panel" tabs={tabs} value={shown} onChange={setTab} className="panel-tabs" />
       <div className="panel-scroll">

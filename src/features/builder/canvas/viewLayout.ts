@@ -29,7 +29,9 @@ export function toViewNodes(nodes: BuilderNode[]): BuilderNode[] {
   return nodes.map((n) => {
     const w = widths(n.type);
     const centre = (n.position.x + w.model / 2) * sx;
-    return { ...n, position: { x: centre - w.view / 2, y: n.position.y * ROW_STRETCH } };
+    // Insert points carry their own focusable button and the End is inert: their wrappers stay out of the tab order.
+    const focusable = n.type === 'insert' || n.type === 'end' ? false : undefined;
+    return { ...n, focusable, position: { x: centre - w.view / 2, y: n.position.y * ROW_STRETCH } };
   });
 }
 

@@ -4,6 +4,8 @@ import { Check, ChevronDown, ChevronRight, Copy } from 'lucide-react';
 import { useState } from 'react';
 
 import type { JsonValue } from '../api/types';
+import { COPY_FAILED, copyText } from '../lib/clipboard';
+import { useToast } from './Toast';
 
 function summary(value: JsonValue): string {
   if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? '' : 's'}`;
@@ -18,12 +20,17 @@ function summary(value: JsonValue): string {
 export function JsonView({ value, label, collapsed = false }: { value: JsonValue | undefined; label?: string; collapsed?: boolean }) {
   const [open, setOpen] = useState(!collapsed);
   const [copied, setCopied] = useState(false);
+  const toast = useToast();
   if (value === undefined) return null;
   const text = JSON.stringify(value, null, 2);
   const copy = () => {
-    void navigator.clipboard?.writeText(text);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    copyText(text).then(
+      () => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      },
+      () => toast.show('error', COPY_FAILED),
+    );
   };
   return (
     <div className={`json-view${open ? ' json-open' : ''}`}>

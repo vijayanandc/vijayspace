@@ -1,7 +1,8 @@
 // App shell: global header, collapsible left rail (hidden in the builder) and the routed page.
 
-import { Outlet, useMatch } from 'react-router-dom';
+import { Outlet, useLocation, useMatch } from 'react-router-dom';
 
+import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { useStoredChoice } from '../../lib/storage';
 import { GlobalHeader } from './GlobalHeader';
 import { NavRail } from './NavRail';
@@ -10,6 +11,7 @@ const NAV_STATES = ['expanded', 'collapsed'] as const;
 
 export function Layout() {
   const inBuilder = useMatch('/flows/:flowId') !== null;
+  const { pathname } = useLocation();
   const [nav, setNav] = useStoredChoice('weft.nav', 'expanded', NAV_STATES);
   return (
     <div className="app">
@@ -17,7 +19,9 @@ export function Layout() {
       <div className="app-body">
         {!inBuilder && <NavRail collapsed={nav === 'collapsed'} onToggle={() => setNav(nav === 'collapsed' ? 'expanded' : 'collapsed')} />}
         <main className={`content${inBuilder ? ' content-builder' : ''}`}>
-          <Outlet />
+          <ErrorBoundary resetKey={pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>

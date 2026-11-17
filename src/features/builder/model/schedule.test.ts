@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { detectPreset, presetToSpec } from './schedule';
+import type { ScheduleSpec } from '../../../api/types';
+import { detectPreset, presetToSpec, scheduleView } from './schedule';
 
 describe('schedule presets', () => {
   it('detects daily, weekly and monthly cron shapes', () => {
@@ -21,5 +22,27 @@ describe('schedule presets', () => {
     ] as const) {
       expect(presetToSpec(detectPreset(spec))).toEqual(spec);
     }
+  });
+
+  it('keeps the cron editor once chosen, with the expression exactly as typed', () => {
+    const daily: ScheduleSpec = { kind: 'cron', expr: '0 9 * * *', timezone: 'UTC' };
+    const chosen = scheduleView(daily, 'cron');
+    expect(chosen).toMatchObject({ preset: 'cron', expr: '0 9 * * *' });
+    expect(presetToSpec(chosen)).toEqual(daily);
+    // Typing "0 9 * * 1-5" one key at a time never leaves the cron editor or loses a space.
+    let spec: ScheduleSpec = { kind: 'cron', expr: '', timezone: 'UTC' };
+    for (const ch of '0 9 * * 1-5') {
+      const view = scheduleView(spec, 'cron');
+      expect(view.preset).toBe('cron');
+      spec = presetToSpec({ ...view, expr: view.expr + ch });
+    }
+    expect(spec).toEqual({ kind: 'cron', expr: '0 9 * * 1-5', timezone: 'UTC' });
+    expect(scheduleView({ kind: 'cron', expr: '0 ' }, 'cron').expr).toBe('0 ');
+  });
+
+  it('detects the preset when the spec is not a cron the user is editing', () => {
+    expect(scheduleView({ kind: 'cron', expr: '0 9 * * 1' }, 'daily').preset).toBe('weekly');
+    expect(scheduleView({ kind: 'interval', minutes: 5 }, 'cron').preset).toBe('interval');
+    expect(detectPreset({ kind: 'cron', expr: ' */5 * * * *' }).expr).toBe(' */5 * * * *');
   });
 });

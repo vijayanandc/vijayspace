@@ -1,12 +1,12 @@
 // The flow builder: top bar, then palette | canvas | side panel, with autosave and undo/redo.
 
-import { useQuery } from '@tanstack/react-query';
+import { useIsMutating, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
 import { errorMessage } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
-import { qk, useConnectors } from '../../api/hooks';
+import { mk, qk, useConnectors } from '../../api/hooks';
 import type { ConnectorManifest, Flow, FlowDefinition } from '../../api/types';
 import { Button } from '../../components/Button';
 import { ErrorBox, Loading } from '../../components/Empty';
@@ -17,6 +17,7 @@ import { IssuesPanel } from './IssuesPanel';
 import { createStep, type DragPayload, type PaletteItem } from './model/factories';
 import { historyReducer, initHistory } from './model/history';
 import { issuesByNode } from './model/paths';
+import { followSelection } from './model/selection';
 import { type InsertionPoint, ROOT, deleteStep as removeStep, findStep, insertStep, moveStep } from './model/tree';
 import { Palette } from './Palette';
 import { SidePanel } from './panel/SidePanel';
@@ -25,31 +26,67 @@ import { useAutosave } from './useAutosave';
 
 export function BuilderPage() {
   const { flowId = '' } = useParams();
-  const flowQ = useQuery({ queryKey: qk.flow(flowId), queryFn: () => endpoints.flow(flowId) });
+  return <BuilderLoader key={flowId} flowId={flowId} />;
+}
+
+/**
+ * Opens the builder only on fresh data: the cached flow can predate the last autosave, so it waits for a
+ * save still in flight from a previous visit and always refetches on mount. Once open, a failed background
+ * refetch (listening for a sample, after publish) is reported without replacing the builder.
+ */
+function BuilderLoader({ flowId }: { flowId: string }) {
+  const [opened, setOpened] = useState(false);
+  const saving = useIsMutating({ mutationKey: mk.saveDraft(flowId) }) > 0;
+  const flowQ = useQuery({
+    queryKey: qk.flow(flowId),
+    queryFn: () => endpoints.flow(flowId),
+    enabled: opened || !saving,
+    refetchOnMount: 'always',
+  });
   const connectors = useConnectors();
-  if (flowQ.isLoading || connectors.isLoading) return <Loading label="Opening the builder…" />;
-  if (flowQ.error) {
-    return (
-      <div className="page">
-        <ErrorBox message={errorMessage(flowQ.error)} />
-      </div>
-    );
+  if (!opened && !saving && flowQ.isFetchedAfterMount && flowQ.data && !flowQ.error) setOpened(true);
+  if (!opened || connectors.isLoading) {
+    if (!opened && flowQ.error && !flowQ.isFetching && !saving) {
+      return (
+        <div className="page">
+          <ErrorBox message={errorMessage(flowQ.error)} />
+        </div>
+      );
+    }
+    return <Loading label="Opening the builder…" />;
   }
   if (!flowQ.data) return null;
-  return <LoadedBuilder key={flowId} flow={flowQ.data} manifests={connectors.data ?? []} refetch={() => flowQ.refetch()} />;
+  return (
+    <LoadedBuilder
+      key={flowId}
+      flow={flowQ.data}
+      manifests={connectors.data ?? []}
+      refetch={() => flowQ.refetch()}
+      refreshError={flowQ.error ? errorMessage(flowQ.error) : null}
+    />
+  );
 }
 
 interface LoadedProps {
   flow: Flow;
   manifests: ConnectorManifest[];
   refetch: () => Promise<{ data?: Flow }>;
+  /** A background refetch failed; the builder keeps working on the data it has. */
+  refreshError: string | null;
 }
 
-function LoadedBuilder({ flow, manifests, refetch }: LoadedProps) {
+function LoadedBuilder({ flow, manifests, refetch, refreshError }: LoadedProps) {
   const [history, dispatch] = useReducer(historyReducer, flow.draft, initHistory);
   const def = history.present;
   const autosave = useAutosave(flow.id, def, flow.draft_revision);
   const [selected, select] = useState<string | null>(null);
+  // Undo/redo can remove the selected key (e.g. undoing a rename): follow it, or clear the selection.
+  const [shownDef, setShownDef] = useState(def);
+  if (shownDef !== def) {
+    setShownDef(def);
+    const kept = followSelection(shownDef, def, selected);
+    if (kept !== selected) select(kept);
+  }
   const [activePoint, setActivePoint] = useState<InsertionPoint | null>(null);
   const [showIssues, setShowIssues] = useState(false);
   const issues = useMemo(() => issuesByNode(def, autosave.issues), [def, autosave.issues]);
@@ -136,6 +173,11 @@ function LoadedBuilder({ flow, manifests, refetch }: LoadedProps) {
             setShowIssues(true);
           }}
         />
+        {refreshError && (
+          <MessageBar intent="warning" role="status" className="builder-banner" actions={<Button size="sm" onClick={() => void refetch()}>Try again</Button>}>
+            Could not refresh this flow from the server ({refreshError}). You can keep editing.
+          </MessageBar>
+        )}
         {autosave.status === 'conflict' && (
           <MessageBar intent="warning" role="alert" className="builder-banner" actions={<Button size="sm" onClick={() => void reload()}>Reload the latest version</Button>}>
             This flow was changed somewhere else, so your latest edits were not saved.

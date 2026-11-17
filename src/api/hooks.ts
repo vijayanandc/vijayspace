@@ -16,6 +16,11 @@ export const qk = {
   org: ['org'] as const,
 };
 
+/** Mutation keys, for mutations other components wait on (e.g. the builder waits for a draft save). */
+export const mk = {
+  saveDraft: (flowId: string) => ['save-draft', flowId] as const,
+};
+
 export function useConnectors() {
   return useQuery({ queryKey: qk.connectors, queryFn: endpoints.connectors, staleTime: 5 * 60_000 });
 }

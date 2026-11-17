@@ -42,4 +42,24 @@ describe('ConditionBuilder', () => {
     renderWithProviders(<Harness initial={{ not: { left: 'a', op: 'eq', right: 'b' } }} onCondition={vi.fn()} />);
     expect(screen.getByDisplayValue(/"not"/)).toBeInTheDocument();
   });
+
+  it('shows an inline error for JSON that is not a condition, instead of crashing', () => {
+    const onCondition = vi.fn();
+    renderWithProviders(<Harness initial={{ all: [{ left: 'a', op: 'eq', right: 'b' }] }} onCondition={onCondition} />);
+    fireEvent.click(screen.getByText('Edit as JSON'));
+    const editor = screen.getByRole('textbox');
+    for (const text of ['{"all":[{"left":"a","right":"b"}]}', '{}', '[]']) {
+      fireEvent.change(editor, { target: { value: text } });
+      expect(screen.getByText(/condition/)).toHaveClass('field-error-text');
+      expect(editor).toHaveValue(text);
+    }
+    fireEvent.change(editor, { target: { value: '{"all":[' } });
+    expect(screen.getByText(/^Invalid JSON/)).toBeInTheDocument();
+    expect(onCondition).not.toHaveBeenCalled();
+
+    fireEvent.change(editor, { target: { value: '{"any":[{"left":"a","op":"is_true"}]}' } });
+    expect(onCondition).toHaveBeenLastCalledWith({ any: [{ left: 'a', op: 'is_true' }] });
+    fireEvent.click(screen.getByText('Back to visual editor'));
+    expect(screen.getByLabelText('Condition 1 operator')).toHaveValue('is_true');
+  });
 });

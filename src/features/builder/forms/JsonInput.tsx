@@ -1,9 +1,19 @@
+// JSON text editor: keeps the text while it does not parse (or fails `validate`); emits parsed values.
+
 import { useEffect, useState } from 'react';
 
 import type { JsonValue } from '../../../api/types';
 
-/** JSON editor: keeps the text while it does not parse; emits parsed values. */
-export function JsonInput({ id, value, onChange, rows = 6 }: { id: string; value: JsonValue | undefined; onChange: (v: JsonValue) => void; rows?: number }) {
+interface Props {
+  id: string;
+  value: JsonValue | undefined;
+  onChange: (v: JsonValue) => void;
+  rows?: number;
+  /** Shape check for parsed JSON: a message keeps the text and blocks `onChange`. */
+  validate?: (v: JsonValue) => string | null;
+}
+
+export function JsonInput({ id, value, onChange, rows = 6, validate }: Props) {
   const serialized = value === undefined ? '' : JSON.stringify(value, null, 2);
   const [text, setText] = useState(serialized);
   const [error, setError] = useState<string | null>(null);
@@ -11,6 +21,11 @@ export function JsonInput({ id, value, onChange, rows = 6 }: { id: string; value
     // Accept outside changes (undo, test samples) when the text is not mid-edit.
     if (!error) setText(serialized);
   }, [serialized, error]);
+  const accept = (v: JsonValue) => {
+    const problem = validate?.(v) ?? null;
+    setError(problem);
+    if (!problem) onChange(v);
+  };
   return (
     <div>
       <textarea
@@ -19,22 +34,21 @@ export function JsonInput({ id, value, onChange, rows = 6 }: { id: string; value
         rows={rows}
         spellCheck={false}
         value={text}
+        aria-invalid={error ? true : undefined}
         onChange={(e) => {
           setText(e.target.value);
-          if (e.target.value.trim() === '') {
-            setError(null);
-            onChange(null);
-            return;
-          }
+          if (e.target.value.trim() === '') return accept(null);
+          let parsed: JsonValue;
           try {
-            onChange(JSON.parse(e.target.value) as JsonValue);
-            setError(null);
+            parsed = JSON.parse(e.target.value) as JsonValue;
           } catch (err) {
-            setError(err instanceof Error ? err.message : 'Invalid JSON');
+            setError(`Invalid JSON: ${err instanceof Error ? err.message : 'it does not parse'}`);
+            return undefined;
           }
+          return accept(parsed);
         }}
       />
-      {error && <div className="field-error-text">Invalid JSON: {error}</div>}
+      {error && <div className="field-error-text">{error}</div>}
     </div>
   );
 }
