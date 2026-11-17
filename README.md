@@ -35,7 +35,7 @@ The run appears under **History** with each step's input and output.
 | `WEFT_CLIENT_ORIGINS` | `http://localhost:5173` | CORS origins (comma-separated) |
 | `WEFT_MASTER_KEYS`, `WEFT_ACTIVE_KEY_ID` | development key | `id:base64key,…` for encrypting connection secrets. **Set in production.** |
 | `WEFT_ALLOW_PRIVATE_NETWORKS` | `false` | Let HTTP steps reach private/loopback addresses (local testing only) |
-| `WEFT_HTTP_PROXY` | none | Egress proxy for calls to apps (`HTTP(S)_PROXY` is ignored on purpose). The proxy resolves hosts itself, so it must enforce its own destination policy. |
+| `WEFT_HTTP_PROXY` | none | Egress proxy for calls to apps (`HTTP(S)_PROXY` is ignored on purpose). With a proxy set, Weft no longer checks the addresses that hostnames resolve to (only literal IPs and redirects), so the proxy must block private destinations itself. |
 | `WEFT_SMTP_URL`, `WEFT_MAIL_FROM` | log only | Email step delivery (Mailpit: `smtp://localhost:1025`) |
 | `WEFT_WORKER_CONCURRENCY` | `16` | Jobs processed in parallel |
 | `WEFT_OAUTH_ZOHO_CRM_CLIENT_ID` / `_SECRET` | — | Zoho CRM OAuth app (redirect URI: `<public url>/oauth/callback`) |
