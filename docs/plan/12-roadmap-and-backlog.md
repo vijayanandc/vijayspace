@@ -109,7 +109,7 @@ Sizes in the backlog: **S** fits one agent session (≤ ~400 changed lines), **M
 | T54 | Fetch/search actions with `create_if_missing` | M |
 | T55 | Custom Apps: `custom_connectors` storage, versioning, API, Flutter editor (form plus YAML) and test console | L |
 | T56 | Loops: IR `LoopEnter`/`LoopNext`, iteration keys, limits, property tests; builder UI | L 🔒 |
-| T57 | Custom functions: the `weft-script` crate (rquickjs sandbox), `core.script` action, code editor | L 🔒 |
+| T57 | Custom functions in Rhai, split into several prompts:<br>• the `weft-script` crate (sandbox limits, helpers shared with `weft-expr`, AST cache, hostile-script tests, fuzz target)<br>• the `ScriptRunner` port, with the pooled runner in `weft-infra`<br>• the `core.script.run` action<br>• a syntax check on publish<br>• the Flutter code editor | L 🔒 |
 | T58 | Flow folders, search, duplicate, export and import | M |
 | T59 | Bulk re-run; per-flow retry policy settings; in-app notifications | M |
 | T60 | SSE live execution updates (`execution_events` tail) | M |
@@ -129,7 +129,7 @@ Sizes in the backlog: **S** fits one agent session (≤ ~400 changed lines), **M
 | T70 | OpenTelemetry, dashboards, alert rules; partitioning ADR and migration; read replica for history | L 🔒 |
 | T71 | Mobile app (monitoring, toggle, rerun) plus push notifications on failure | L |
 | T72 | 2FA (TOTP), OIDC SSO, session management; payload masking; retention settings; org export and delete | L 🔒 |
-| T73 | Version diff and restore UI; synchronous webhook response step; error-handler paths | M |
+| T73 | Version diff and restore UI; synchronous webhook response step; error-handler paths; reusable org-level custom functions (Rhai) with a guarded `http_request` helper | M |
 
 ### P4: Advanced
 | ID | Task |

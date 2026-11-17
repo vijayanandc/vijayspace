@@ -10,7 +10,7 @@ Zoho Flow is an integration platform (iPaaS). A user connects apps by building *
 |---|---|
 | **Flow** | One trigger plus an ordered tree of steps. It has a mutable *draft*, immutable published *versions*, and an on/off switch. |
 | **Trigger** | What starts an execution: `webhook`, `schedule`, `app` (polling or instant), or `manual`. |
-| **Step** | One node in a flow: `action`, `decision`, `delay`, `set_variable`, `stop`, and later `loop`, `script`, `call_subflow`. |
+| **Step** | One node in a flow: `action`, `decision`, `delay`, `set_variable`, `stop`, and later `loop` and `call_subflow`. Custom functions are actions of the built-in `core.script` connector. |
 | **Connector** (UI: "App") | An integration package: auth method, triggers, actions, and dynamic option sources. |
 | **Action** | One operation of a connector, such as *create record*, *send message* or *fetch record*. |
 | **Connection** | Encrypted credentials for one connector, owned by an org and reusable across flows. |
@@ -54,7 +54,7 @@ The legend for the **Phase** column:
 | **Set variable** | Zoho | **MVP** | Flow-scoped variables |
 | Stop flow (with success or failure) | Extra | **MVP** | |
 | **Notification** (email to org members) | Zoho | **MVP** | In-app in P2, SMS and push through connectors |
-| **Custom function** (Zoho uses Deluge; we use sandboxed JavaScript) | Zoho | P2 | QuickJS sandbox with no network in P2 and a guarded fetch in P3 |
+| **Custom function** (Zoho uses Deluge; we use **Rhai**, a sandboxed scripting language written in Rust) | Zoho | P2 | No IO in P2; a guarded `http_request` and a reusable org-level function library in P3 |
 | Loop / iterate over a list, plus aggregate | Extra | P2 | Capped iteration count |
 | **Subflow**: call it and wait, or call it without waiting; a *Return data* step | Zoho | P3 | |
 | Error-handler path per step ("on error, go to…") | Extra | P3 | MVP has `on_error: fail_flow | continue` |

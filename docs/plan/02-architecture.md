@@ -90,6 +90,7 @@ weft/
 │   ├── engine/                   # weft-engine        (pure)
 │   ├── connector-sdk/            # weft-connector-sdk
 │   ├── connectors/               # weft-connectors
+│   ├── script/                   # weft-script        (pure; Rhai sandbox; added in P2)
 │   ├── app/                      # weft-app           (use cases + ports)
 │   ├── db/                       # weft-db            (MySQL adapters)
 │   ├── infra/                    # weft-infra         (non-DB adapters)
@@ -119,9 +120,10 @@ weft/
 | `weft-engine` | Compiling a definition into a `Plan` (IR); the pure interpreter; retry decisions | domain, expr | async, IO crates |
 | `weft-connector-sdk` | `Connector`/`Action`/`Trigger` traits, manifest and field schema, `ConnectorError`, the `HttpSender` trait, test harness helpers | domain | sqlx, axum, app |
 | `weft-connectors` | Built-in connectors (native Rust and YAML) and the declarative runtime | connector-sdk, domain, expr | sqlx, axum, app |
+| `weft-script` (P2) | The Rhai engine for custom functions: sandbox limits, registered helpers, JSON ↔ `Dynamic`, AST cache (doc 08 §7) | expr | tokio, sqlx, reqwest, axum, any IO |
 | `weft-app` | Use cases, ports (traits), `Deps`, `Actor`, `AppError`, the execution **runner** that drives the engine | domain, expr, engine, connector-sdk | sqlx, axum, reqwest, lettre |
 | `weft-db` | MySQL implementations of the repository ports, the job queue, migration embedding, a `testing` feature with fixtures | app, domain | axum, reqwest |
-| `weft-infra` | Crypto (AES-GCM), argon2, JWT, mailer (lettre), the SSRF-guarded HTTP sender (reqwest), system clock, ID generator, script runtime (P2) | app, domain, connector-sdk | sqlx, axum |
+| `weft-infra` | Crypto (AES-GCM), argon2, JWT, mailer (lettre), the SSRF-guarded HTTP sender (reqwest), system clock, ID generator, the pooled `ScriptRunner` (P2, wraps `weft-script`) | app, domain, connector-sdk, script | sqlx, axum |
 | `weft-api` | axum router, handlers, DTOs, extractors (auth, pagination, If-Match), the problem+json mapping, OpenAPI | app, domain | sqlx, db, infra |
 | `weft-worker` | Job claim loop, scheduler, poller, reaper, retention sweeper, graceful shutdown | app, domain | sqlx, axum |
 | `weft-server` | Configuration, the **composition root**, CLI (clap), telemetry setup | everything | — |
@@ -138,6 +140,8 @@ flowchart BT
   app --> sdk
   db[weft-db] --> app
   infra[weft-infra] --> app
+  script[weft-script · P2] --> expr
+  infra --> script
   api[weft-api] --> app
   worker[weft-worker] --> app
   server[weft-server] --> api & worker & db & infra & connectors
@@ -368,7 +372,7 @@ There is no generic unit-of-work abstraction. **If a use case needs two writes t
 | Email | `lettre` | SMTP; Mailpit in dev and tests |
 | Observability | `tracing`, `tracing-subscriber` (JSON), `metrics` + Prometheus exporter; OpenTelemetry in P3 | |
 | Config / CLI | `figment`, `clap` | |
-| Scripting (P2) | `rquickjs` (QuickJS) in its own crate, `weft-script` | Memory and time limits |
+| Scripting (P2) | `rhai` (pure Rust) in its own crate, `weft-script`, with features `sync`, `serde`, `no_time` and `no_module`. **Never `unchecked`.** | Operation, depth and size limits; no IO; deterministic (doc 08 §7) |
 | Tests | `cargo-nextest`, `insta`, `proptest`, `rstest`, `wiremock`, `fake`, `tokio` test-util, `cargo-llvm-cov`, `cargo-mutants`, `cargo-fuzz` | See doc 09 |
 | Supply chain | `cargo-deny`, `cargo-machete` | |
 

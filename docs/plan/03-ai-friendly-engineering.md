@@ -142,7 +142,7 @@ AC2. …
 | 010 | Everything is a connector; the engine knows only control flow |
 | 011 | At-least-once action execution with idempotency keys |
 | 012 | Flutter: Riverpod, go_router, pub workspace |
-| 013 | JavaScript (QuickJS) for custom functions (P2) |
+| 013 | Rhai (pure-Rust, sandboxed) for custom functions (P2), behind a `ScriptRunner` port; JavaScript possible later |
 
 ---
 

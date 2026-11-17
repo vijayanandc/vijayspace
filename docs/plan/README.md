@@ -112,7 +112,7 @@ The two branches share no history. Feature work branches off one of them and mer
 - One region. The UI is English first but ready for i18n.
 - A team of 1–3 humans reviews and steers, and AI agents write most of the code.
 - By the end of Phase 3, scale is up to ~1k orgs and ~1M executions/day, which fits on one well-sized MySQL primary.
-- Custom functions use **JavaScript** in a sandbox, not a clone of Zoho's Deluge language.
+- Custom functions use **Rhai**, a sandboxed scripting language written in Rust with JavaScript-like syntax, in the role of Zoho's Deluge. JavaScript can be added later behind the same `ScriptRunner` port.
 - Billing and payments are not part of the MVP; usage is counted from day one.
 
 ## Open questions for you

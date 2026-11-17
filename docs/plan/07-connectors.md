@@ -29,7 +29,7 @@ Namespaces: `core.*` holds built-in utilities that need no connection; a bare ke
 | `key_value` | Repeating key/value rows | Headers, query parameters |
 | `object` | Nested group of fields | |
 | `array` | Repeating group of `item` fields | e.g. line items |
-| `code` (P2) | Script editor | For `core.script` |
+| `code` (P2) | Script editor (Rhai) | For `core.script.run` (§9) |
 
 Every field has: `key`, `label`, `help`, `required`, `default`, `placeholder`, `mappable` (default true), `depends_on` (re-fetch options when these fields change), `advanced` (collapsed by default) and `strict` (undefined variables are errors).
 
@@ -230,8 +230,45 @@ The runtime supports templated method, path, query, headers and body; auth injec
 | Phase | Connectors | Exercises |
 |---|---|---|
 | **MVP** | `core.http` (request; doubles as outgoing webhook), `core.email` (send via platform SMTP), `core.formatter` (text, number, date), **Slack** (OAuth2: post message, list channels), **Telegram** (bot token: send message) | The native SDK, OAuth2, API key, dynamic options |
-| **P2** | **Google Sheets** and **Gmail** (Google OAuth; native), **GitHub** (instant trigger with HMAC), **Discord** (webhook URL), **RSS** (polling), **MySQL/Postgres** query, and YAML connectors: **Trello, Airtable, Notion, Stripe, Twilio, Mailchimp, HubSpot, Jira, Asana, ClickUp** | Polling, instant triggers, declarative runtime, fetch-or-create |
+| **P2** | **`core.script`** (custom functions, §9), **Google Sheets** and **Gmail** (Google OAuth; native), **GitHub** (instant trigger with HMAC), **Discord** (webhook URL), **RSS** (polling), **MySQL/Postgres** query, and YAML connectors: **Trello, Airtable, Notion, Stripe, Twilio, Mailchimp, HubSpot, Jira, Asana, ClickUp** | Polling, instant triggers, declarative runtime, fetch-or-create |
 | **P3** | Microsoft 365 (Outlook, Teams, OneDrive), Shopify, WooCommerce, Salesforce, Zendesk, Freshdesk, Calendly, Typeform, Google Forms, Dropbox, Box, Zoom, plus **Weft** itself (call a subflow) | Breadth |
 | **P4** | LLM providers (prompt, extract, classify, summarize), on-prem agent connectors (local DB, file share) | AI steps, agent channel |
 
 Choose the Phase 2 order based on your target users (open question 3 in the README).
+
+## 9. Custom functions (`core.script`, P2)
+
+Zoho's custom functions are written in Deluge; ours are written in **Rhai** (sandbox and limits in doc 08 §7; decision in ADR-013). A custom function is an ordinary action of the built-in `core.script` connector, so the engine stays control-flow only. The builder still lists it under *Logic → Custom function*.
+
+| Field | Type | Notes |
+|---|---|---|
+| `language` | fixed `"rhai"` | Stored so another language can be added later without migrating flows |
+| `code` | `code` (not mappable) | The Rhai source, up to 64 KB. It is parsed on **publish**, and syntax errors appear inline with line and column. |
+| `input` | `key_value` (mappable) | Named values; in the script they are `input.<name>` |
+
+**Contract:**
+- **In scope:** `input` (a map) and `context` (`flow` and `execution`). Use `context.execution.started_at` as "now"; the script has no clock.
+- **Output:** the value of the last expression becomes the step output. A map becomes the output object as-is; any other value becomes `{ "result": value }`.
+- **Failure:** `throw "message"` fails the step with `script.error`.
+- **Logging:** `print(...)` lines appear in the step's history log.
+- **Determinism:** the same code and input always give the same output, so test-step results are reproducible.
+
+```rhai
+// Sum the line items and flag big orders.
+let total = 0.0;
+for item in input.items {
+    total += item.price * item.qty.to_float();
+}
+if total < 0.0 { throw "negative total"; }
+#{ total: total, is_big: total > 100.0, currency: input.currency }
+```
+
+**Testing:**
+- `weft-script` has table tests for every helper and every hostile script (doc 09 §10), plus a `script_run` fuzz target.
+- `core.script.run` gets the usual action tests.
+- The example above is kept as a fixture and executed in CI, so the documentation can't go stale.
+
+**P3:**
+- A reusable, versioned **org-level function library**: define a function once and call it from many flows, as with Zoho's custom functions.
+- A guarded `http_request` helper.
+- P4: the AI flow builder can write Rhai, validated by the same publish-time parse.

@@ -461,7 +461,7 @@ async fn order_alert_demo(pool: MySqlPool) {
 - **Refresh rotation:** reuse revokes the family.
 - **Webhook:** 5 MB + 1 byte gives 413; rate limit gives 429; HMAC valid, invalid and replayed (P2).
 - **Templates:** fuel exhaustion returns an error, not a hang; a payload with `{{ 7*7 }}` is passed through literally.
-- **Script sandbox (P2):** a memory bomb, `while(true){}`, and attempts to reach `require`, `fetch` or `std` all fail cleanly within their limits.
+- **Script sandbox (P2, Rhai):** table-driven hostile scripts must each fail cleanly with a stable code and within the limits. The cases: `loop {}`, unbounded recursion, string and array doubling bombs, `eval(...)`, `import "x"`, calls to unregistered functions (`open`, `exec`, `timestamp`) and print flooding. Property: the same source and input always give the same output (no time, no randomness). A test also asserts that the `unchecked` feature is not enabled in `cargo metadata`.
 
 ---
 
@@ -483,6 +483,7 @@ async fn order_alert_demo(pool: MySqlPool) {
 | `declarative_spec` | Arbitrary YAML connector spec, then validate |
 | `webhook_body` | Arbitrary content type and body, then normalized trigger output |
 | `cron_parse` | Arbitrary cron expression plus time zone, then `next_after` |
+| `script_run` (P2) | Arbitrary Rhai source plus JSON input; must never panic and must always stop within the operation budget |
 
 The corpus is committed. Every crash becomes a regular regression test before it is fixed.
 

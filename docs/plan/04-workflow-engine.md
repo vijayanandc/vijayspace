@@ -113,8 +113,10 @@ pub enum StepKind {
     Delay(DelayStep),            // mode: for(duration) | until(template datetime)
     SetVariable(SetVariableStep),// assignments[{name, value template}]
     Stop(StopStep),              // status: succeeded | failed, message
-    // P2+: Loop(LoopStep), Script(ScriptStep); P3: CallSubflow(CallSubflowStep), Respond(RespondStep)
+    // P2: Loop(LoopStep); P3: CallSubflow(CallSubflowStep), Respond(RespondStep)
 }
+// Custom functions are NOT a step kind: they are the `core.script.run` action (Rhai, doc 07 §9),
+// so the engine stays control-flow only.
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]

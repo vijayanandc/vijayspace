@@ -8,7 +8,7 @@ An iPaaS holds **other systems' credentials** and makes **outbound requests on u
 | Credential theft | A DB dump exposes OAuth tokens | AES-256-GCM encryption with AAD binding; secrets never returned or logged |
 | SSRF | An HTTP action calls `169.254.169.254` or internal services | A DNS-resolving IP filter in the HTTP client; redirect checks |
 | Webhook abuse | Flooding a flow; guessing tokens | 256-bit tokens, rate limits, size limits, optional HMAC |
-| Script escape | A custom function reads files or the network | QuickJS sandbox with no host APIs, memory and time limits |
+| Script escape | A custom function reads files or the network | Rhai sandbox: only registered functions exist; operation, depth and size limits |
 | Account takeover | Credential stuffing; stolen refresh tokens | argon2id, login rate limits, refresh rotation with reuse detection, 2FA (P3) |
 | Template injection | User data rendered as template code | Templates come only from the definition; payload values are data, never templates |
 | Supply chain | A malicious crate | cargo-deny (advisories, licenses, sources), lockfile, minimal dependencies |
@@ -76,13 +76,46 @@ Every use case begins with `actor.require(Permission::…)`. An API-level test m
 - Optional verification (P2): a shared-secret header, or an HMAC-SHA256 signature over the raw body with a timestamp tolerance (replay protection).
 - Ingress logs never record full bodies, only the size, content type and token prefix.
 
-## 7. Script sandbox (P2 custom functions)
-- `weft-script` is a separate crate wrapping `rquickjs`, with one fresh runtime per invocation:
-  - memory limit 64 MB, stack limit, an interrupt handler for a 2 s CPU/wall limit
-  - **no host functions** except `input` (JSON in) and `return` (JSON out)
-  - no `eval` of remote code, no timers, no filesystem, no network
-- P3 adds a guarded `fetch` that delegates to the SSRF-protected HTTP sender and counts as a task.
-- For defence in depth, scripts run in a worker thread pool with a bounded queue, so a hostile script cannot starve async tasks.
+## 7. Script sandbox (P2 custom functions, Rhai)
+Custom functions run in **[Rhai](https://rhai.rs)**, an embedded scripting language written in pure Rust with JavaScript-like syntax. In our product it plays the role of Zoho's Deluge. Rhai is sandboxed by construction: a script can only call functions the host registers. There is no file, network, process or environment access to take away, and no `unsafe` FFI boundary. The usage contract is in doc 07 §9; ADR-013 records the decision.
+
+**Engine configuration** (`weft-script`, a pure crate with no IO):
+- **Cargo features:**
+  - `sync`: the engine and ASTs can be shared across threads.
+  - `serde`: JSON ↔ `Dynamic` conversion.
+  - `no_time`: no `timestamp()`. Scripts get "now" only from their input, so runs are deterministic.
+  - `no_module`: no `import`.
+  - **Never enable `unchecked`.** It removes every limit below. `cargo-deny` bans it.
+- **Limits** (defaults, configurable per plan):
+
+  | Limit | Default |
+  |---|---|
+  | `set_max_operations` | 1,000,000 (the CPU budget, deterministic) |
+  | `set_max_call_levels` | 32 |
+  | `set_max_expr_depths` | 64 / 32 |
+  | `set_max_string_size` | 1 MB |
+  | `set_max_array_size` | 10,000 |
+  | `set_max_map_size` | 10,000 |
+  | Source code size | 64 KB |
+  | Output size | 1 MB, the same as any step output |
+- `disable_symbol("eval")`.
+- **Output redirected:** `print` and `debug` go through `on_print`/`on_debug` into the step's history log (at most 100 lines or 10 KB), never to stdout.
+- **Registered helpers only:**
+  - JSON parse and stringify
+  - date formatting and arithmetic on values passed in
+  - regex with size limits
+  - base64, URL encoding, SHA-256, HMAC
+
+  They reuse the pure implementations behind `weft-expr`'s template filters, so templates and scripts behave the same.
+- **Per run:** a fresh `Engine` is built for every run from packages built once at startup. This is cheap because packages are shared, and it keeps log capture and the time guard per run. Compiled ASTs are shared through an LRU cache keyed by the SHA-256 of the source.
+
+**Runtime guards:**
+- **Time:** the operation budget is the primary, deterministic limit. As a backup, `on_progress` aborts after 2 s of wall time. This uses monotonic `Instant`; it's a safety net, not business logic.
+- **Memory:** Rhai has no direct memory cap. The string, array and map size limits bound what one script can allocate, and the bounded pool below caps how many run at once.
+- **Isolation from async work:** the `ScriptRunner` port (in `weft-connector-sdk`) is implemented in `weft-infra` by a pooled runner: a semaphore (default: CPU count) around `spawn_blocking`. Scripts therefore never block async worker threads. This is the one sanctioned use of `spawn_blocking` outside `weft-worker`/`weft-server`.
+- **Errors are never auto-retried.** A syntax error or `throw` gives `script.error`, with line and column. Hitting a limit gives `script.limit_exceeded`. Both count as configuration errors, like mapping errors in Zoho.
+- **P3:** a guarded `http_request(...)` helper that delegates to the SSRF-protected HTTP sender and counts as a task. Until then scripts have no network access at all.
+- **Later option:** JavaScript (QuickJS or Boa) can be added behind the same `ScriptRunner` port if customers ask for it. Flows store `language: "rhai"`, so that addition would be backward compatible.
 
 ## 8. Data protection and privacy
 - Encryption in transit everywhere: TLS at the load balancer, and TLS to MySQL in production. Encryption at rest comes from the managed database or the disk, plus application-level encryption for secrets.
@@ -106,5 +139,5 @@ Every use case begins with `actor.require(Permission::…)`. An API-level test m
 - [ ] JWTs that are expired, have a wrong signature, `alg: none` or a tampered `sub` are rejected.
 - [ ] Refresh token reuse revokes the family.
 - [ ] Webhook body limit, rate limit and HMAC verification (P2) are enforced.
-- [ ] Script limits are enforced (memory bomb, infinite loop, host API access attempts) (P2).
+- [ ] Script limits are enforced: infinite loops, deep recursion, string and array growth bombs, `eval`, `import`, calls to unregistered functions, print flooding; the `unchecked` feature is banned (P2).
 - [ ] Template sandbox: fuel exhaustion and recursion are handled, and a payload that contains `{{ }}` is **not** evaluated.
