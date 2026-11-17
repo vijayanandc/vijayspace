@@ -32,7 +32,7 @@ What is built on the `backend` and `client` branches, how it deviates from the p
   - R7–R9: CRM ↔ Forma.
 
 ### Web client (`client` branch)
-- React 18, TypeScript and Vite.
+- React 18, TypeScript and Vite, styled after enterprise integration tools (Zoho Flow, Lightning, Fluent / Power Automate) with Weft's own branding (doc 10 §3).
 - **Drag-and-drop builder** (React Flow): drag from the palette onto any `+`, or click to insert. It also has:
   - dynamic forms generated from connector field specs, with variable pickers;
   - a condition builder;
