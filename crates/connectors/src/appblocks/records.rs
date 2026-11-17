@@ -7,6 +7,7 @@ use super::{
     client::{Client, check_id, check_module, with_trigger},
     fields::{field_specs, module_options},
 };
+use crate::list_cursor::ListCursor;
 
 /// Max page size of list/search endpoints (`openapi.yaml` `Limit`: maximum 100).
 pub(super) const PAGE_LIMIT: u32 = 100;
@@ -183,14 +184,19 @@ pub(super) async fn modified_since(
     module: &str,
     cursor: Option<&str>,
     limit: u32,
+    offset: u32,
 ) -> Result<Vec<Value>, ConnectorError> {
     let c = Client::new(ctx).await?;
     let limit = limit.clamp(1, PAGE_LIMIT).to_string();
+    let offset = offset.to_string();
     let mut params = vec![
         ("sort_by", "modified_time"),
         ("sort_type", "asc"),
         ("limit", limit.as_str()),
     ];
+    if offset != "0" {
+        params.push(("offset", offset.as_str()));
+    }
     if let Some(cursor) = cursor {
         params.push(("filter[modified_time][gte]", cursor));
     }
@@ -286,17 +292,13 @@ impl RecordObjects for AppblocksConnector {
         limit: u32,
     ) -> Result<Page, ConnectorError> {
         let limit = limit.clamp(1, PAGE_LIMIT);
-        let rows = modified_since(ctx, object, cursor.and_then(Value::as_str), limit).await?;
+        let at = ListCursor::parse(cursor);
+        let rows = modified_since(ctx, object, at.since.as_deref(), limit, at.skip).await?;
         let records: Vec<Record> = rows.iter().filter_map(to_record).collect();
         let full = u32::try_from(rows.len()).unwrap_or(u32::MAX) >= limit;
-        let next_cursor = if full {
-            records
-                .last()
-                .and_then(|r| r.modified_at.clone())
-                .map(Value::String)
-        } else {
-            None
-        };
+        let times: Vec<Option<String>> = records.iter().map(|r| r.modified_at.clone()).collect();
+        // Appblocks accepts offsets up to 10,000.
+        let next_cursor = full.then(|| at.next(&times, 10_000 - limit, true).to_value());
         Ok(Page {
             records,
             next_cursor,

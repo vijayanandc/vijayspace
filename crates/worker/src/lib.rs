@@ -28,13 +28,13 @@ pub struct WorkerConfig {
 /// so a slow app API can never delay schedules or lease recovery.
 pub async fn tick(deps: &Deps) {
     match deps.store.reap(deps.clock.now()).await {
-        Ok(dead) => {
-            for payload in dead {
-                if let Err(e) = mark_dead_execution(deps, &payload).await {
-                    tracing::warn!(error = %e, "failing the execution of a dead job");
-                }
-            }
+        Ok(dead) if !dead.is_empty() => {
+            tracing::warn!(
+                jobs = dead.len(),
+                "jobs whose worker kept dying are now dead"
+            );
         }
+        Ok(_) => {}
         Err(e) => tracing::warn!(error = %e, "reap"),
     }
     if let Err(e) = fire_due_schedules(deps).await {

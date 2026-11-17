@@ -1,4 +1,4 @@
-//! Trigger-event inserts used inside the execution-creation transaction (dedupe, debounce).
+//! Creating executions from trigger events in one transaction: dedupe, debounce coalescing.
 
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -7,7 +7,13 @@ use uuid::Uuid;
 use weft_app::ports::{NewExecution, NewTriggerEvent, Res};
 use weft_domain::ids::{ExecutionId, OrgId};
 
-use crate::codec::{db_err, is_duplicate};
+use crate::{
+    MySqlStore,
+    codec::{db_err, is_duplicate},
+    executions::insert_execution,
+    jobs::insert_job,
+    usage::bump_usage,
+};
 
 /// Inserts a trigger event; `Ok(false)` when its dedupe key already exists for the registration
 /// (`InnoDB` rolls back only the failed statement, so the transaction continues).
@@ -44,10 +50,22 @@ pub(crate) async fn coalesce_into_queued(
     ev: &NewTriggerEvent,
     trigger_data: &Value,
 ) -> Res<bool> {
-    let execution: Option<Uuid> = sqlx::query_scalar("SELECT e.id FROM executions e JOIN trigger_events t ON t.id = e.trigger_event_id WHERE e.org_id = ? AND t.registration_id = ? AND t.dedupe_key = ? AND e.status = 'queued' AND e.started_at IS NULL FOR UPDATE")
+    // Find the burst's execution with a plain read: locking through `trigger_events` would take
+    // an exclusive lock on the event row that every concurrent delivery of the burst already
+    // holds a shared lock on (from its duplicate insert), which deadlocks.
+    let found: Option<Uuid> = sqlx::query_scalar("SELECT e.id FROM executions e JOIN trigger_events t ON t.id = e.trigger_event_id WHERE e.org_id = ? AND t.registration_id = ? AND t.dedupe_key = ?")
         .bind(org.as_uuid())
         .bind(ev.registration_id.as_uuid())
         .bind(&ev.dedupe_key)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(db_err)?;
+    let Some(found) = found else {
+        return Ok(false);
+    };
+    // Then lock only the execution and its job (the same order as requeueing).
+    let execution: Option<Uuid> = sqlx::query_scalar("SELECT id FROM executions WHERE id = ? AND status = 'queued' AND started_at IS NULL FOR UPDATE")
+        .bind(found)
         .fetch_optional(&mut **tx)
         .await
         .map_err(db_err)?;
@@ -72,4 +90,59 @@ pub(crate) async fn coalesce_into_queued(
         .await
         .map_err(db_err)?;
     Ok(true)
+}
+
+impl MySqlStore {
+    /// One attempt of `ExecutionRepo::create_executions`.
+    pub(crate) async fn create_executions_once(
+        &self,
+        org: OrgId,
+        items: &[NewExecution],
+        now: DateTime<Utc>,
+    ) -> Res<Vec<ExecutionId>> {
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        let mut created = Vec::with_capacity(items.len());
+        for item in items {
+            if let Some(seen) = &item.seen
+                && !insert_event(&mut tx, org, item, seen, now).await?
+            {
+                continue; // this exact version was already delivered
+            }
+            if let Some(ev) = &item.event
+                && !insert_event(&mut tx, org, item, ev, now).await?
+            {
+                if !item.coalesce {
+                    continue; // already seen (dedupe)
+                }
+                if coalesce_into_queued(&mut tx, org, ev, &item.execution.trigger_data).await? {
+                    continue; // the burst's queued execution now carries the newest data
+                }
+                // The burst's execution already started: run this event on its own (the event
+                // keeps its ID, so the execution's `trigger_event_id` stays valid).
+                let unkeyed = NewTriggerEvent {
+                    dedupe_key: None,
+                    ..ev.clone()
+                };
+                insert_event(&mut tx, org, item, &unkeyed, now).await?;
+            }
+            insert_execution(&mut tx, &item.execution, now)
+                .await
+                .map_err(db_err)?;
+            insert_job(&mut *tx, &item.job, now).await.map_err(db_err)?;
+            created.push(item.execution.id);
+        }
+        if !created.is_empty() {
+            bump_usage(
+                &mut tx,
+                org,
+                now,
+                0,
+                u32::try_from(created.len()).unwrap_or(u32::MAX),
+            )
+            .await
+            .map_err(db_err)?;
+        }
+        tx.commit().await.map_err(db_err)?;
+        Ok(created)
+    }
 }

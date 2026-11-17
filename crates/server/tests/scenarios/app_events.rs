@@ -90,3 +90,57 @@ async fn debounced_app_events_keep_the_newest_state_and_reconciliation_does_not_
     assert_eq!(app.executions(flow_id).await.len(), 2);
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn concurrent_deliveries_in_one_burst_all_succeed_and_coalesce() {
+    let app = TestApp::spawn().await;
+    let src = app.connection("memsrc", "Source").await;
+    let flow = app
+        .live_flow("Records", json!({
+            "trigger": {"type": "app", "connector": "memsrc", "trigger": "record_event", "connection_id": src,
+                "input": {}, "debounce_secs": 30},
+            "steps": [{"key": "s", "type": "stop"}]
+        }))
+        .await;
+    let url = flow["trigger"]["app_event_url"].as_str().unwrap();
+    let path = &url[url.find("/hooks/").unwrap()..];
+    for record in 0..10 {
+        let id = format!("R{record}");
+        post_event(
+            &app,
+            path,
+            json!({"id": id, "modified": "v0", "record": {}}),
+        )
+        .await;
+        // Three more versions of the same record arrive at the same moment.
+        let (a, b, c) = tokio::join!(
+            app.req(
+                "POST",
+                path,
+                Some(json!({"id": id, "modified": "v1", "record": {}}))
+            ),
+            app.req(
+                "POST",
+                path,
+                Some(json!({"id": id, "modified": "v2", "record": {}}))
+            ),
+            app.req(
+                "POST",
+                path,
+                Some(json!({"id": id, "modified": "v3", "record": {}}))
+            ),
+        );
+        for (status, body) in [a, b, c] {
+            assert!(
+                status.is_success(),
+                "a concurrent delivery failed: {status} {body}"
+            );
+        }
+    }
+    assert_eq!(
+        app.executions(flow["id"].as_str().unwrap()).await.len(),
+        10,
+        "one run per record burst"
+    );
+    app.cleanup().await;
+}

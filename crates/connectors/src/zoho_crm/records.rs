@@ -7,6 +7,7 @@ use super::{
     client::{base, check_id, check_module, first_result, request, send},
     fields::{field_specs, list_field_names, module_options},
 };
+use crate::list_cursor::ListCursor;
 
 /// Zoho list/search page size limit.
 pub(super) const PAGE_LIMIT: u32 = 200;
@@ -180,10 +181,12 @@ pub(super) async fn modified_since(
     module: &str,
     since: Option<&str>,
     limit: u32,
+    page: u32,
 ) -> Result<Vec<Value>, ConnectorError> {
     let url = format!("{}/{}", base(ctx)?, check_module(module)?);
     let names = list_field_names(&field_specs(&fields(ctx, module).await?));
     let per_page = limit.clamp(1, PAGE_LIMIT).to_string();
+    let page = page.max(1).to_string();
     let since = since.map(str::to_owned);
     let body = send(ctx, |t| {
         let req = request(Method::Get, &url, t).query(&[
@@ -191,6 +194,7 @@ pub(super) async fn modified_since(
             ("sort_by", "Modified_Time"),
             ("sort_order", "asc"),
             ("per_page", &per_page),
+            ("page", &page),
         ]);
         match &since {
             Some(s) => req.header("If-Modified-Since", s.clone()),
@@ -337,17 +341,14 @@ impl RecordObjects for ZohoCrmConnector {
         limit: u32,
     ) -> Result<Page, ConnectorError> {
         let limit = limit.clamp(1, PAGE_LIMIT);
-        let rows = modified_since(ctx, object, cursor.and_then(Value::as_str), limit).await?;
+        let at = ListCursor::parse(cursor);
+        let page = at.skip / limit + 1;
+        let rows = modified_since(ctx, object, at.since.as_deref(), limit, page).await?;
         let records: Vec<Record> = rows.iter().filter_map(to_record).collect();
         let full = u32::try_from(rows.len()).unwrap_or(u32::MAX) >= limit;
-        let next_cursor = if full {
-            records
-                .last()
-                .and_then(|r| r.modified_at.clone())
-                .map(Value::String)
-        } else {
-            None
-        };
+        let times: Vec<Option<String>> = records.iter().map(|r| r.modified_at.clone()).collect();
+        // Zoho pages by number (up to 2,000 records); restart from the last time before that.
+        let next_cursor = full.then(|| at.next(&times, 2_000 - limit, false).to_value());
         Ok(Page {
             records,
             next_cursor,

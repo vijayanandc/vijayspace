@@ -353,3 +353,43 @@ async fn record_objects_capability() {
             .is_none()
     );
 }
+
+#[tokio::test]
+async fn changed_since_pages_by_offset_so_records_sharing_a_time_never_stall() {
+    let server = MockServer::start().await;
+    let page = |from: usize| {
+        let rows: Vec<Value> = (from..from + 100)
+            .map(|i| json!({"api_id": format!("01ACC{i:04}"), "modified_time": "2026-01-01T00:00:00Z"}))
+            .collect();
+        Value::Array(rows)
+    };
+    authed(
+        Mock::given(method("GET"))
+            .and(path("/api/accounts"))
+            .and(query_param("offset", "100")),
+    )
+    .respond_with(ResponseTemplate::new(200).set_body_json(page(100)))
+    .mount(&server)
+    .await;
+    authed(Mock::given(method("GET")).and(path("/api/accounts")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(page(0)))
+        .mount(&server)
+        .await;
+    let c = AppblocksConnector::new();
+    let cx = appblocks_ctx(&server);
+    let records = c.records().unwrap();
+    let first = records
+        .changed_since(&cx, "accounts", None, 100)
+        .await
+        .unwrap();
+    assert_eq!(first.records[0].id, "01ACC0000");
+    let cursor = first.next_cursor.unwrap();
+    let second = records
+        .changed_since(&cx, "accounts", Some(&cursor), 100)
+        .await
+        .unwrap();
+    assert_eq!(
+        second.records[0].id, "01ACC0100",
+        "the second page moves on even though every time is equal"
+    );
+}

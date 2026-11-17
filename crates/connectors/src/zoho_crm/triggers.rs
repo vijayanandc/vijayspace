@@ -241,7 +241,7 @@ pub(super) async fn poll(
             )),
         });
     };
-    let rows = modified_since(ctx, &module, Some(cursor), PAGE_LIMIT).await?;
+    let rows = modified_since(ctx, &module, Some(cursor), PAGE_LIMIT, 1).await?;
     let mut next = cursor.to_owned();
     let items: Vec<EventItem> = rows
         .into_iter()

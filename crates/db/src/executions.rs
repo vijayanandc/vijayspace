@@ -5,8 +5,7 @@ use chrono::{DateTime, Utc};
 use serde_json::{Map, Value, json};
 use sqlx::{FromRow, MySql, QueryBuilder, Transaction, types::Json};
 use weft_app::ports::{
-    Checkpoint, ExecutionFilter, ExecutionRepo, Finish, NewExecution, NewJob, NewTriggerEvent, Res,
-    StepCompletion,
+    Checkpoint, ExecutionFilter, ExecutionRepo, Finish, NewExecution, NewJob, Res, StepCompletion,
 };
 use weft_domain::{
     ids::{ExecutionId, FlowId, OrgId},
@@ -16,7 +15,6 @@ use weft_domain::{
 use crate::{
     MySqlStore,
     codec::{db_err, enum_str},
-    events::{coalesce_into_queued, insert_event},
     jobs::insert_job,
     rows::{ExecutionRow, StepRunRow},
     usage::bump_usage,
@@ -32,7 +30,7 @@ struct ExecutionListRow {
     flow_name: String,
 }
 
-async fn insert_execution(
+pub(crate) async fn insert_execution(
     tx: &mut Transaction<'_, MySql>,
     e: &Execution,
     now: DateTime<Utc>,
@@ -82,50 +80,17 @@ impl ExecutionRepo for MySqlStore {
         items: &[NewExecution],
         now: DateTime<Utc>,
     ) -> Res<Vec<ExecutionId>> {
-        let mut tx = self.pool.begin().await.map_err(db_err)?;
-        let mut created = Vec::with_capacity(items.len());
-        for item in items {
-            if let Some(seen) = &item.seen
-                && !insert_event(&mut tx, org, item, seen, now).await?
-            {
-                continue; // this exact version was already delivered
-            }
-            if let Some(ev) = &item.event
-                && !insert_event(&mut tx, org, item, ev, now).await?
-            {
-                if !item.coalesce {
-                    continue; // already seen (dedupe)
+        // Concurrent deliveries for one record can deadlock (InnoDB picks a victim): the whole
+        // transaction is safe to repeat, so retry a few times before giving up.
+        let mut attempt = 0;
+        loop {
+            match self.create_executions_once(org, items, now).await {
+                Err(e) if e.code == weft_domain::error_codes::DB_DEADLOCK && attempt < 3 => {
+                    attempt += 1;
                 }
-                if coalesce_into_queued(&mut tx, org, ev, &item.execution.trigger_data).await? {
-                    continue; // the burst's queued execution now carries the newest data
-                }
-                // The burst's execution already started: run this event on its own (the event
-                // keeps its ID, so the execution's `trigger_event_id` stays valid).
-                let unkeyed = NewTriggerEvent {
-                    dedupe_key: None,
-                    ..ev.clone()
-                };
-                insert_event(&mut tx, org, item, &unkeyed, now).await?;
+                other => return other,
             }
-            insert_execution(&mut tx, &item.execution, now)
-                .await
-                .map_err(db_err)?;
-            insert_job(&mut *tx, &item.job, now).await.map_err(db_err)?;
-            created.push(item.execution.id);
         }
-        if !created.is_empty() {
-            bump_usage(
-                &mut tx,
-                org,
-                now,
-                0,
-                u32::try_from(created.len()).unwrap_or(u32::MAX),
-            )
-            .await
-            .map_err(db_err)?;
-        }
-        tx.commit().await.map_err(db_err)?;
-        Ok(created)
     }
 
     async fn get_execution(&self, org: OrgId, id: ExecutionId) -> Res<Option<Execution>> {

@@ -4,6 +4,8 @@
 use chrono::Duration;
 use serde_json::{Value, json};
 
+use sha2::Digest as _;
+
 use crate::harness::TestApp;
 
 fn sync_flow(src: &str, dst: &str, object: &str, values: Value, extra: Value) -> Value {
@@ -236,6 +238,20 @@ async fn a_target_linked_to_another_source_is_never_taken_over() {
         "Ann"
     );
     assert_eq!(app.dst.count("contacts"), 1);
+    // The refused sync released its lease on the target (it is not held for 5 minutes).
+    let key =
+        sha2::Sha256::digest(format!("contacts_link|target|{dst}|contacts|{target_id}").as_bytes())
+            .to_vec();
+    let org = weft_domain::ids::OrgId::from_uuid(weft_server::wiring::DEFAULT_ORG);
+    let now = weft_app::ports::Clock::now(&app.clock);
+    assert!(
+        app.deps
+            .store
+            .acquire_lease(org, &key, "next-sync", now + Duration::seconds(60), now)
+            .await
+            .unwrap(),
+        "target lease leaked"
+    );
 
     // A1's link is intact: an unchanged re-sync is still skipped.
     let again = run(

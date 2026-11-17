@@ -77,11 +77,13 @@ impl ReqwestSender {
         // An HTTP(S)_PROXY from the environment would resolve hosts itself and bypass the
         // guarded resolver below, so it is ignored; a proxy is used only when configured.
         let mut builder = reqwest::Client::builder().no_proxy();
-        if let Some(url) = proxy {
-            builder = builder.proxy(reqwest::Proxy::all(url).map_err(|e| e.to_string())?);
-        }
+        builder = match proxy {
+            // Only the proxy's own host is resolved here (usually a private address), and the
+            // proxy resolves destinations: it must enforce the destination policy itself.
+            Some(url) => builder.proxy(reqwest::Proxy::all(url).map_err(|e| e.to_string())?),
+            None => builder.dns_resolver(Arc::new(GuardedResolver { policy })),
+        };
         let client = builder
-            .dns_resolver(Arc::new(GuardedResolver { policy }))
             .redirect(redirect_policy)
             .connect_timeout(Duration::from_secs(10))
             .user_agent("Weft/0.1 (+integration platform)")
@@ -210,6 +212,27 @@ mod tests {
             .unwrap();
         assert_eq!(resp.status, 201);
         assert_eq!(resp.json().unwrap(), serde_json::json!({"ok": true}));
+    }
+
+    #[tokio::test]
+    async fn a_configured_egress_proxy_on_a_private_host_is_reachable() {
+        // The proxy is addressed by name and resolves to a private address, as internal egress
+        // proxies do; the destination is resolved by the proxy.
+        let proxy = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/x"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"via": "proxy"})),
+            )
+            .mount(&proxy)
+            .await;
+        let url = format!("http://localhost:{}", proxy.address().port());
+        let sender = ReqwestSender::with_proxy(SsrfPolicy::public_only(), Some(&url)).unwrap();
+        let resp = sender
+            .send(HttpRequest::get("http://destination.example/x"))
+            .await
+            .unwrap();
+        assert_eq!(resp.json().unwrap(), serde_json::json!({"via": "proxy"}));
     }
 
     #[tokio::test]

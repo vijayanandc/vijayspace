@@ -106,6 +106,14 @@ pub async fn backfill(
         if !items.is_empty() {
             ingress_items(deps, &reg, &flow, &version, &items, ExecutionMode::Backfill).await?;
         }
+        if page.next_cursor.is_some() && page.next_cursor == cursor {
+            // A connector whose cursor does not move would make callers loop forever.
+            return Err(AppError::new(
+                crate::ErrorKind::BadGateway,
+                error_codes::BACKFILL_STALLED,
+                "The app returned the same page again; backfill cannot continue",
+            ));
+        }
         cursor = page.next_cursor;
         if cursor.is_none() {
             break;

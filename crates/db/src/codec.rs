@@ -6,7 +6,19 @@ use weft_domain::text::{enum_from_str, enum_to_str};
 
 /// Maps a database error to an internal app error (the message is logged, not shown to clients).
 pub(crate) fn db_err(e: sqlx::Error) -> AppError {
-    AppError::internal(format!("database: {e}"))
+    let deadlock = e
+        .as_database_error()
+        .and_then(sqlx::error::DatabaseError::code)
+        .is_some_and(|code| code == "40001");
+    if deadlock {
+        AppError::new(
+            weft_app::ErrorKind::Internal,
+            weft_domain::error_codes::DB_DEADLOCK,
+            format!("database: {e}"),
+        )
+    } else {
+        AppError::internal(format!("database: {e}"))
+    }
 }
 
 /// True for duplicate-key errors (MySQL 1062).

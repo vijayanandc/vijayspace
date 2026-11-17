@@ -12,7 +12,8 @@ use weft_connector_sdk::Connector;
 pub mod appblocks;
 pub mod autodesk_forma;
 pub mod core;
-pub(crate) mod util;
+pub(crate) mod list_cursor;
+mod util;
 pub mod zoho_crm;
 
 /// Every built-in connector, in catalog order.

@@ -64,7 +64,8 @@ pub trait JobQueue: Send + Sync {
     ) -> Res<Option<bool>>;
     async fn heartbeat(&self, job: &ClaimedJob, lease_until: DateTime<Utc>) -> Res<bool>;
     /// Returns expired leases to `ready`, or marks them dead after `max_attempts` (poison jobs).
-    /// Returns the payloads of the jobs that went dead, so their executions can be failed.
+    /// Executions of jobs that went dead are failed in the same transaction; returns the dead
+    /// jobs' payloads.
     async fn reap(&self, now: DateTime<Utc>) -> Res<Vec<Value>>;
     async fn delete_jobs_for_execution(&self, execution: ExecutionId) -> Res<()>;
 }

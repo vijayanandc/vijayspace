@@ -96,7 +96,7 @@ pub(super) async fn poll(
             cursor: Some(Value::String(ctx.now.to_rfc3339())),
         });
     };
-    let rows = modified_since(ctx, &module, Some(cursor), PAGE_LIMIT).await?;
+    let rows = modified_since(ctx, &module, Some(cursor), PAGE_LIMIT, 0).await?;
     let mut next = cursor.to_owned();
     let items = rows
         .into_iter()

@@ -3,6 +3,8 @@
 pub const VALIDATION_FAILED: &str = "validation.failed";
 pub const NOT_FOUND: &str = "not_found";
 pub const INTERNAL: &str = "internal.error";
+/// A database deadlock (retried inside the adapter; surfaces only if retries run out).
+pub const DB_DEADLOCK: &str = "internal.deadlock";
 
 pub const FLOW_NOT_FOUND: &str = "flow.not_found";
 pub const FLOW_INVALID: &str = "flow.invalid";
@@ -43,3 +45,4 @@ pub const CANCELLED: &str = "execution.cancelled";
 pub const SYNC_BUSY: &str = "sync.busy";
 pub const SYNC_AMBIGUOUS_MATCH: &str = "sync.ambiguous_match";
 pub const SYNC_LOOKUP_MISSING: &str = "sync.lookup_missing";
+pub const BACKFILL_STALLED: &str = "sync.backfill_stalled";

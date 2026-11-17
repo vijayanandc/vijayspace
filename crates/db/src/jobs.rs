@@ -187,6 +187,24 @@ impl JobQueue for MySqlStore {
             .execute(&mut *tx)
             .await
             .map_err(db_err)?;
+        // Their executions fail in the same transaction, so none is left queued or running
+        // without a job (a crash between two separate writes would strand it).
+        for payload in &dying {
+            let Some(execution) = payload
+                .0
+                .get("execution_id")
+                .and_then(Value::as_str)
+                .and_then(|s| s.parse::<ExecutionId>().ok())
+            else {
+                continue;
+            };
+            sqlx::query("UPDATE executions SET status = 'failed', error_code = 'internal.poison_job', error_message = 'The execution could not be processed after many attempts', waiting_until = NULL, finished_at = ? WHERE id = ? AND status IN ('queued', 'running', 'waiting')")
+                .bind(now)
+                .bind(execution.as_uuid())
+                .execute(&mut *tx)
+                .await
+                .map_err(db_err)?;
+        }
         tx.commit().await.map_err(db_err)?;
         Ok(dying.into_iter().map(|p| p.0).collect())
     }

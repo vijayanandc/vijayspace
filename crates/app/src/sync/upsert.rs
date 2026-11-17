@@ -9,6 +9,7 @@ use weft_connector_sdk::{ConnectorError, RecordObjects};
 use weft_domain::{error_codes, ids::OrgId};
 
 use super::link::{connection_id, open, text};
+use super::target::{TargetRef, busy, claim_target};
 use crate::{
     Deps,
     ports::{RecordLink, RecordSide},
@@ -113,7 +114,7 @@ async fn apply_lookups(
 /// How long one sync of a record holds its lease. It must outlast the slowest path
 /// (update → not found → find → create, each up to a 30 s call, plus lookups), or a second
 /// sync of the same record could start and create a duplicate.
-const LEASE_SECS: i64 = 300;
+pub(super) const LEASE_SECS: i64 = 300;
 
 pub(crate) async fn upsert_linked_record(
     deps: &Deps,
@@ -222,84 +223,51 @@ async fn upsert_locked(
         }
     }
     // A record found through the match field is leased like the source record, so two source
-    // records matching the same target cannot both write it before one of them is linked.
+    // records matching the same target cannot both write it before one of them is linked. The
+    // lease is released on every path, errors included.
     let target_holder = deps.new_link_id().to_string();
-    if written.is_none() {
-        let claim_target = |candidate: String| {
-            let holder = target_holder.clone();
-            async move {
-                let key = target_lease_key(set, target_conn, target_object, &candidate);
-                let now = deps.clock.now();
-                let until = now + Duration::seconds(LEASE_SECS);
-                let leased = deps
-                    .store
-                    .acquire_lease(org, &key, &holder, until, now)
-                    .await
-                    .map_err(|e| ConnectorError::transient(e.to_string()))?;
-                if !leased {
-                    return Err(busy());
-                }
-                let side = RecordSide {
-                    connection_id: target_conn,
-                    object: target_object.to_owned(),
-                    record_id: candidate,
+    let claimed: std::sync::Mutex<Option<Vec<u8>>> = std::sync::Mutex::new(None);
+    let outcome = async {
+        let written = if let Some(w) = written {
+            w
+        } else {
+            let claim = |candidate: String| {
+                let target = TargetRef {
+                    org,
+                    set,
+                    conn: target_conn,
+                    object: target_object,
                 };
-                let owner = deps
-                    .store
-                    .find_link_by_b(org, set, &side)
-                    .await
-                    .map_err(|e| ConnectorError::transient(e.to_string()))?;
-                Ok::<bool, ConnectorError>(owner.is_some_and(|l| l.a != *source))
-            }
+                claim_target(deps, target, source, &target_holder, &claimed, candidate)
+            };
+            create_or_recover(target, &ctx, input, target_object, values, claim).await?
         };
-        written = Some(
-            create_or_recover(target, &ctx, input, target_object, values, claim_target).await?,
-        );
+        let (target_id, action) = written;
+        let new_link = RecordLink {
+            id: link.as_ref().map_or_else(|| deps.new_link_id(), |l| l.id),
+            org_id: org,
+            link_set: set.to_owned(),
+            a: source.clone(),
+            b: RecordSide {
+                connection_id: target_conn,
+                object: target_object.to_owned(),
+                record_id: target_id.clone(),
+            },
+            b_hash: Some(hash),
+            b_written_at: Some(deps.clock.now()),
+        };
+        deps.store
+            .upsert_link(&new_link, deps.clock.now())
+            .await
+            .map_err(|e| link_save_error(&e))?;
+        Ok(json!({"action": action, "target_id": target_id, "link_set": set}))
     }
-    let (target_id, action) = written.unwrap_or_default();
-    let new_link = RecordLink {
-        id: link.as_ref().map_or_else(|| deps.new_link_id(), |l| l.id),
-        org_id: org,
-        link_set: set.to_owned(),
-        a: source.clone(),
-        b: RecordSide {
-            connection_id: target_conn,
-            object: target_object.to_owned(),
-            record_id: target_id.clone(),
-        },
-        b_hash: Some(hash),
-        b_written_at: Some(deps.clock.now()),
-    };
-    let saved = deps
-        .store
-        .upsert_link(&new_link, deps.clock.now())
-        .await
-        .map_err(|e| link_save_error(&e));
-    let key = target_lease_key(set, target_conn, target_object, &target_id);
-    let _ = deps.store.release_lease(org, &key, &target_holder).await;
-    saved?;
-    Ok(json!({"action": action, "target_id": target_id, "link_set": set}))
-}
-
-/// Lease key of a target record (distinct from source-record keys).
-fn target_lease_key(
-    set: &str,
-    conn: weft_domain::ids::ConnectionId,
-    object: &str,
-    id: &str,
-) -> Vec<u8> {
-    Sha256::digest(format!("{set}|target|{conn}|{object}|{id}").as_bytes()).to_vec()
-}
-
-/// Another sync of the same record is running: retried shortly.
-fn busy() -> ConnectorError {
-    ConnectorError::RateLimited {
-        retry_after_secs: Some(10),
-        message: format!(
-            "{}: another sync of this record is running",
-            error_codes::SYNC_BUSY
-        ),
+    .await;
+    let key = claimed.lock().ok().and_then(|mut slot| slot.take());
+    if let Some(key) = key {
+        let _ = deps.store.release_lease(org, &key, &target_holder).await;
     }
+    outcome
 }
 
 /// A conflict (side B taken by another source record) is permanent; anything else may pass.

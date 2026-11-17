@@ -5,6 +5,7 @@ mod backfill;
 mod connector;
 mod link;
 mod pickers;
+mod target;
 mod upsert;
 
 pub use backfill::backfill;
