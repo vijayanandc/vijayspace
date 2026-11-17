@@ -23,6 +23,42 @@ weft-api = { path = "crates/api" }
 weft-worker = { path = "crates/worker" }
 weft-testkit = { path = "crates/testkit" }
 
+# External crates (major versions pinned; see docs/dependencies.md)
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+anyhow = "1"
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+chrono-tz = "0.10"
+croner = "2"
+minijinja = { version = "2", features = ["json", "urlencode", "fuel", "loop_controls"] }
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+base64 = "0.22"
+rand = "0.8"
+regex = "1"
+async-trait = "0.1"
+futures = "0.3"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+axum = { version = "0.8", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "limit", "request-id", "util"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "mysql", "json", "chrono", "uuid", "migrate", "macros"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+aes-gcm = "0.10"
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls-tls"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+clap = { version = "4", features = ["derive", "env"] }
+url = "2"
+urlencoding = "2"
+# Test-only
+proptest = "1"
+wiremock = "0.6"
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 missing_debug_implementations = "warn"
@@ -42,6 +78,10 @@ wildcard_enum_match_arm = "deny"
 large_futures = "warn"
 module_name_repetitions = "allow"
 missing_errors_doc = "allow"
+# Framework signatures (minijinja filters, axum extractors) take owned arguments.
+needless_pass_by_value = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
 
 [profile.dev.package."*"]
 debug = false
