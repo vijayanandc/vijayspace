@@ -1,4 +1,4 @@
-# 13: The MVP: Zoho CRM ↔ Appblocks apps (FSM, HMS), then Autodesk
+# 13: The MVP: Zoho CRM ↔ Appblocks apps (FSM, HMS), then Autodesk Forma
 
 > **This document replaces the generic MVP in doc 01 §3 and the original Phase 1 backlog in doc 12.**
 > The engine, crates, test strategy and security model in docs 02–11 still apply. This doc adds what the new focus needs: record-oriented connectors, a sync layer, Logto multi-tenancy, and the Zoho CRM, Appblocks and Autodesk connectors.
@@ -56,7 +56,7 @@
 - **Recipes** R1–R6 (§3), installed through a wizard.
 - A Flutter web client covering: Logto login, an org switcher, connections, recipes, the builder with a two-pane field mapper, and history.
 
-**MVP 1.1 (right after):** Autodesk (BuildingConnected and/or Autodesk Construction Cloud), recipe R7.
+**MVP 1.1 (right after):** **Autodesk Forma** (Forma Build: projects, issues, RFIs, cost; formerly Autodesk Construction Cloud), recipes R7–R9.
 
 **Not in the MVP:**
 - True two-way sync of the *same* field with conflict resolution. In the MVP each field has one owning direction (§4.4).
@@ -78,8 +78,11 @@ A recipe is a set of flow templates with connection placeholders, field mappings
 | **R4** | FSM invoice **Paid** → Zoho CRM Deal fields + Note | Appblocks webhook (`invoices` `field_update` on `status`) | Updates "Payment status" and "Paid on" on the deal | MVP |
 | **R5** | Zoho CRM Products → FSM items | Zoho notification `Products.all` + backfill | Upserts on `external_id`. Price and tax mapping use a tax value map. | MVP |
 | **R6** | HMS → Zoho CRM (needs consent, allowlisted fields only) | Appblocks webhooks on `patients` and `appointments` | A patient registered with CRM consent becomes a Contact (name, mobile, email, city, UHID). An online or phone appointment becomes a Zoho Event, or a Lead for a first visit. Insurance providers become Accounts. | MVP (HMS track) |
-| **R7** | Autodesk → Zoho CRM | Autodesk Platform Services (APS) webhooks / Zoho notification | BuildingConnected `opportunity.created` / `opportunity.status.updated` create or update a Zoho Deal; a Zoho Deal Closed Won creates an Autodesk Construction Cloud (ACC) project (to be confirmed, §13) | 1.1 |
-| R8 | Zoho Quotes/Invoices ↔ FSM quotes/invoices with line items | — | Child-record sync; respects FSM finance locks | P2 |
+| **R7** | Zoho CRM Deal **Closed Won** → **Forma Build project** | Zoho notification `Deals.edit` (Stage condition) | Creates the Forma project (Hub Admin API) from template settings, optionally adds the client's contacts as project members, links Deal ↔ project, and writes the project link and number back to the Deal | 1.1 |
+| **R8** | Forma **Issues** → Zoho CRM | Forma Issues webhooks (`issue.created-1.0`, `issue.updated-1.0`) | Client-relevant issues (filtered by issue type) become Zoho Tasks or Notes on the linked Deal; closing the issue in Forma completes the task | 1.1 |
+| **R9** | Forma **Cost Management** change orders → Zoho CRM | Cost webhooks (event names confirmed in spike M37a) | An approved change order updates "Contract value" on the Deal, or creates an upsell Deal | 1.1 |
+| R10 | Forma warranty or punch-list issue → Appblocks FSM service request; FSM job completed → Forma issue closed | Forma Issues webhook / Appblocks webhook | Turns post-handover defects into field-service jobs | P2 candidate |
+| R11 | Zoho Quotes/Invoices ↔ FSM quotes/invoices with line items | — | Child-record sync; respects FSM finance locks | P2 |
 
 ---
 
@@ -239,17 +242,47 @@ The UI is a two-pane mapper: target fields on the left, a source expression on t
   - `TOO_MANY_REQUESTS` → `RateLimited`.
   - 5xx → `Transient`.
 
-### 5.3 Autodesk (`autodesk_bc`, `autodesk_acc`, MVP 1.1)
-- **Auth:** Autodesk Platform Services (APS) OAuth 2.0, **3-legged**. BuildingConnected webhooks require 3-legged tokens.
-- **BuildingConnected:**
-  - Triggers through APS webhooks (`autodesk.construction.bc`): `opportunity.created`, `opportunity.status.updated`, `bid.created`. Subscriptions are scoped by `companyId`.
-  - Payloads carry IDs, so the record is fetched afterwards.
-  - Requires Bid Board Pro or BuildingConnected Pro.
-- **Autodesk Construction Cloud (ACC):**
-  - Action: create a project (Admin API).
-  - Triggers: `autodesk.construction.issues` `issue.created-1.0` / `issue.updated-1.0`.
-- **Recipe R7:** BuildingConnected opportunity → Zoho Deal (pipeline sync); Zoho Deal Closed Won → ACC project.
-- **Confirm the Autodesk product and direction before building (§13).**
+### 5.3 Autodesk Forma (`autodesk_forma`, MVP 1.1)
+**Naming:**
+- On 24 March 2026 **Autodesk Construction Cloud was renamed Autodesk Forma**:
+  - Autodesk Build → **Forma Build**
+  - Autodesk Docs → **Forma Data Management**
+  - BIM Collaborate Pro → **Forma Design Collaboration**
+- The earlier conceptual-design product that used to be called "Forma" is now **Forma Site Design**. It has a separate extension SDK and is out of scope.
+- **The APIs kept their paths and docs.** For example `https://developer.api.autodesk.com/construction/issues/v1/projects/{projectId}/…`, documented under APS `docs/acc/v1`. Our connector `autodesk_forma` targets these Forma Build APIs.
+
+**Auth (APS OAuth 2.0):**
+- **3-legged:** a Forma user authorises Weft. Used for user-context actions: creating issues and RFIs, and the webhooks that require it. Forma Reviews webhooks accept only 3-legged tokens, and creating Forma Issues webhooks needs Project Admin.
+- **2-legged:** for account-admin operations such as creating projects, after the Forma **account admin enables Weft as a custom integration**. The exact requirement is verified in spike M37a.
+- **Data region** (US / EMEA / …): stored on the connection. Webhook calls carry the region; the exact header is verified in the spike.
+
+**Objects** (exposed through `RecordObjects` where they fit):
+- **Projects:** list, get, create (Hub Admin "Create Projects"), add members.
+- **Issues:** list, get, create, update. Creating one needs the issue type/subtype from `GET …/issue-types`.
+- **RFIs (v3):** `POST /rfis`, `PATCH /rfis/:id`.
+- **Companies and project users.**
+
+**Triggers (APS Webhooks):**
+- **Issues** (`autodesk.construction.issues`): `issue.created-1.0`, `issue.updated-1.0`. Comment and attachment events are in beta.
+- **Cost Management** (`autodesk.construction.cost`): versioned events for budgets, contracts, change orders.
+- **Reviews:** `review.created-1.0`, `review.closed-1.0`.
+- **Data Management:** `dm.version.added`, i.e. new document or drawing versions.
+- Payloads carry IDs, so the record is fetched afterwards (like Zoho notifications).
+- Subscriptions are scoped per project and stored in `app_subscriptions` (provider `autodesk_aps`). A project created by R7 gets its subscriptions automatically.
+
+**Reconciliation:** list issues changed since the cursor (verify filter support in the spike), through the same reconciliation loop as §4.3.
+
+**Errors and limits:**
+- 429 with `Retry-After` → `RateLimited`.
+- 403 on a project the user can't access → `InvalidInput("autodesk.permission")`, with a message naming the project and the missing permission.
+- Missing issue subtype → `InvalidInput("autodesk.issue_type")`.
+
+**Spike M37a (do this first, using an APS developer account plus a Forma trial or sandbox project).** Confirm:
+1. The token type and headers for Hub Admin "Create Projects".
+2. The webhook region header.
+3. The Cost Management change-order event names.
+4. The issues "updated since" filter.
+5. Rate limits per endpoint.
 
 ---
 
@@ -512,12 +545,12 @@ Size: **S** ≤ 1 agent session; **M** 1–2 sessions; **L** split by AC groups.
 | M35 | Scenario suite for the **exit demo** (§12) plus multi-tenant isolation and fairness scenarios | M27, M28 | L |
 | M36 | e2e against staging Appblocks (FSM/HMS) and a Zoho sandbox org (nightly); load baseline with backfill of 10k records | M35 | M |
 
-### MVP 1.1: Autodesk
+### MVP 1.1: Autodesk Forma
 | ID | Task | Depends | Size |
 |---|---|---|---|
-| M37 | APS OAuth (3-legged) and APS webhook subscriptions (via `app_subscriptions`) | M19, M20 | M |
-| M38 | `autodesk_bc` connector (opportunity and bid triggers; get opportunity) and `autodesk_acc` (create project; issue triggers) | M37 | L |
-| M39 | Recipe **R7** plus scenarios | M38, M26 | M |
+| M37 | **Spike M37a** (§5.3), then APS OAuth (3-legged + 2-legged custom integration), data region, APS webhook subscriptions through `app_subscriptions` (auto-subscribe new projects) | M19, M20 | M |
+| M38 | `autodesk_forma` connector: projects (create, list, members), issues (types, create, update, list), RFIs v3, webhook triggers (issues, cost, reviews), reconciliation, error mapping | M37 | L |
+| M39 | Recipes **R7–R9** plus scenarios (wiremock APS) | M38, M26 | M |
 
 **Critical path:**
 ```
@@ -562,10 +595,15 @@ There are two tenants. **Acme Services** runs Zoho CRM (IN DC) and Appblocks FSM
 | The 10k/day Appblocks token cap blocks backfills | Throttled backfills, a budget view in the UI, AB-7 |
 | Manual Appblocks workflow setup is error-prone | A generated config with a "Send test event" check; AB-1 removes the manual step |
 | PHI leaking into the CRM | §8 guards, review, CODEOWNERS on the HMS recipe and guard code |
-| Autodesk scope unclear | Confirm before M37 |
+| Forma APIs in flux after the March 2026 rebrand | Pin endpoints and token types in spike M37a; run a nightly live smoke test against a Forma sandbox project |
 
 **Open questions for you**
-1. **Autodesk:** which product and direction? BuildingConnected bid board → Zoho Deals, Autodesk Construction Cloud (Build) projects and issues, or Fusion? And what is the business trigger, e.g. "Deal won → create the ACC project"?
+1. **Autodesk Forma (confirmed).** Which flows matter most:
+   - **R7:** Deal won → Forma project.
+   - **R8:** Forma issues → CRM tasks.
+   - **R9:** change orders → Deal value.
+
+   Also: is **R10** (Forma defects → FSM jobs) interesting? And do your customers' Forma accounts sit in the US or the EMEA region?
 2. **Zoho CRM editions and data centres** your customers use: this sets the default budgets. Do any customers use Zoho **Books** for invoices instead of CRM?
 3. **Logto:** confirm Weft joins the **same Logto tenant** as Appblocks (single sign-on), using JWT for the Weft API resource.
 4. **Where Weft runs:** its own domain (e.g. `integrations.appblocks.in`)? Should it be branded "Appblocks Integrations"?

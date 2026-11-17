@@ -20,7 +20,7 @@
 
 | # | Document | What it covers |
 |---|---|---|
-| **13** | **[The MVP: Zoho CRM ↔ Appblocks (FSM, HMS), then Autodesk](13-mvp-zoho-crm-appblocks.md)** | **Start here for the current MVP**: recipes, sync layer, connectors, Logto multi-tenancy, backlog M01–M39 |
+| **13** | **[The MVP: Zoho CRM ↔ Appblocks (FSM, HMS), then Autodesk Forma](13-mvp-zoho-crm-appblocks.md)** | **Start here for the current MVP**: recipes, sync layer, connectors, Logto multi-tenancy, backlog M01–M39 |
 | 01 | [Product scope](01-product-scope.md) | What Zoho Flow does, which features we clone and in what order, the MVP |
 | 02 | [Architecture](02-architecture.md) | System shape, Cargo workspace, crate boundaries, canonical code shapes |
 | 03 | [AI-friendly engineering](03-ai-friendly-engineering.md) | How to keep AI-written code from rotting: docs, recipes, guardrails, prompts |
@@ -81,7 +81,7 @@ The two branches share no history. Feature work branches off one of them and mer
    - Accounts, contacts and products synced into FSM.
    - HMS patients with consent → CRM contacts.
 
-   It is multi-tenant from day one, with Logto (single sign-on with Appblocks) and `X-Org-ID` orgs. It adds metadata-driven record connectors and a sync layer: links, no duplicates, no loops, backfill, reconciliation. **MVP 1.1** adds Autodesk (BuildingConnected / ACC ↔ Zoho CRM). Phases 2–4 add more apps, custom apps, loops, Rhai scripts, templates, subflows, a public API, the on-prem agent and AI-assisted building.
+   It is multi-tenant from day one, with Logto (single sign-on with Appblocks) and `X-Org-ID` orgs. It adds metadata-driven record connectors and a sync layer: links, no duplicates, no loops, backfill, reconciliation. **MVP 1.1** adds **Autodesk Forma** ↔ Zoho CRM. Forma is the former Autodesk Construction Cloud. The flows are: Deal won → Forma Build project; Forma issues → CRM tasks; change orders → Deal value. Phases 2–4 add more apps, custom apps, loops, Rhai scripts, templates, subflows, a public API, the on-prem agent and AI-assisted building.
 
 ---
 

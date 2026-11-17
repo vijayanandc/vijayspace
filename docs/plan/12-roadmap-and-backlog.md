@@ -6,7 +6,7 @@
 |---|---|---|---|
 | **P0** Foundations | Scaffold, guardrails, golden slice | 2 weeks | Folders CRUD works end to end (API, DB, Flutter), CI green, recipes written |
 | **P1** MVP | Zoho CRM ↔ Appblocks (FSM, HMS): multi-tenant with Logto, record connectors, sync layer, recipes R1–R6 (**doc 13**) | 10–12 weeks | Doc 13 §12: Deal won → FSM request, job done → Deal updated, backfill with no duplicates, no loops, crash-safe, two isolated tenants |
-| **P1.1** Autodesk | APS OAuth, BuildingConnected and ACC connectors, recipe R7 | 3–4 weeks | BuildingConnected opportunity → Zoho Deal; Deal won → ACC project |
+| **P1.1** Autodesk Forma | APS OAuth, `autodesk_forma` connector (Forma Build: projects, issues, RFIs, cost), recipes R7–R9 | 3–4 weeks | Deal won → Forma project created and linked; a Forma issue appears as a CRM task; an approved change order updates the Deal value |
 | **P2** Connect apps | App triggers, declarative and custom connectors, loops, scripts | 8 weeks | "New Google Sheet row → loop line items → Airtable upsert → Slack summary"; a custom app built in the UI |
 | **P3** Teams and scale | Orgs and roles, audit, public API, templates, subflows, billing, mobile | 8 weeks | A team of 3 shares connections; a subflow is reused by 2 flows; the public API creates a flow; a mobile push arrives on failure |
 | **P4** Advanced | On-prem agent, AI building, MCP, approvals, environments | Ongoing | "Describe your flow" produces a valid draft; an on-prem MySQL query through the agent |

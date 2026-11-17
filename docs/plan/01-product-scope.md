@@ -64,7 +64,7 @@ The legend for the **Phase** column:
 
 | Feature | Source | Phase | Notes |
 |---|---|---|---|
-| App actions: create, update, send | Zoho | **MVP** (Zoho CRM, Appblocks, email); 1.1 Autodesk; P2 adds more apps | |
+| App actions: create, update, send | Zoho | **MVP** (Zoho CRM, Appblocks, email); 1.1 Autodesk Forma; P2 adds more apps | |
 | **Fetch** (search) actions, optionally creating the record when it is not found | Zoho | **MVP** for record connectors (`find_by` + `upsert_linked_record`) | |
 | Outgoing webhook / generic HTTP request | Zoho | **MVP** | `core.http.request`, with SSRF protection |
 | Formatter: text, number, date utilities | Extra (common) | **MVP** | `core.formatter.*` |
@@ -134,7 +134,7 @@ The legend for the **Phase** column:
 
 ## 3. MVP definition (Phase 1)
 
-> **Superseded by [doc 13](13-mvp-zoho-crm-appblocks.md).** The MVP is now Zoho CRM ↔ Appblocks apps (FSM, HMS), multi-tenant with Logto, with Autodesk in MVP 1.1. The generic stories below remain the long-term scope; Slack and Telegram move to P2.
+> **Superseded by [doc 13](13-mvp-zoho-crm-appblocks.md).** The MVP is now Zoho CRM ↔ Appblocks apps (FSM, HMS), multi-tenant with Logto, with Autodesk Forma in MVP 1.1. The generic stories below remain the long-term scope; Slack and Telegram move to P2.
 
 ### Personas
 - **Builder**: an ops, marketing or support person, or a developer, who automates work between apps.

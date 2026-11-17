@@ -230,7 +230,7 @@ The runtime supports templated method, path, query, headers and body; auth injec
 | Phase | Connectors | Exercises |
 |---|---|---|
 | **MVP** | `core.http`, `core.email`, `core.formatter`, **`core.sync`**, **Zoho CRM** and **Appblocks** (FSM, HMS, any appkit app), both metadata-driven `RecordObjects` connectors (doc 13 §4–§5) | The native SDK, OAuth2 multi-DC, API tokens, dynamic fields, instant and polling triggers, sync |
-| **MVP 1.1** | **Autodesk**: BuildingConnected and Autodesk Construction Cloud (APS OAuth, 3-legged) | APS webhooks |
+| **MVP 1.1** | **Autodesk Forma** (`autodesk_forma`; Forma Build, formerly ACC): projects, issues, RFIs, cost (APS OAuth, 3- and 2-legged) | APS webhooks, region handling |
 | **P2** | **Slack**, **Telegram**, **`core.script`** (custom functions, §9), **Google Sheets** and **Gmail** (Google OAuth; native), **GitHub** (instant trigger with HMAC), **Discord** (webhook URL), **RSS** (polling), **MySQL/Postgres** query, and YAML connectors: **Trello, Airtable, Notion, Stripe, Twilio, Mailchimp, HubSpot, Jira, Asana, ClickUp** | Polling, instant triggers, declarative runtime, fetch-or-create |
 | **P3** | Microsoft 365 (Outlook, Teams, OneDrive), Shopify, WooCommerce, Salesforce, Zendesk, Freshdesk, Calendly, Typeform, Google Forms, Dropbox, Box, Zoom, plus **Weft** itself (call a subflow) | Breadth |
 | **P4** | LLM providers (prompt, extract, classify, summarize), on-prem agent connectors (local DB, file share) | AI steps, agent channel |
