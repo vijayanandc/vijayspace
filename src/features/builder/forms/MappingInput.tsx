@@ -15,9 +15,10 @@ export interface MappingInputProps {
   multiline?: boolean;
   placeholder?: string;
   ariaLabel?: string;
+  onBlur?: () => void;
 }
 
-export function MappingInput({ id, value, onChange, variables, multiline, placeholder, ariaLabel }: MappingInputProps) {
+export function MappingInput({ id, value, onChange, variables, multiline, placeholder, ariaLabel, onBlur }: MappingInputProps) {
   const [picking, setPicking] = useState(false);
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const pick = (path: string) => {
@@ -37,9 +38,9 @@ export function MappingInput({ id, value, onChange, variables, multiline, placeh
     <div className="mapping">
       <div className="mapping-row">
         {multiline ? (
-          <textarea id={id} ref={ref} className="input mapping-input" rows={3} value={value} placeholder={placeholder} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value)} />
+          <textarea id={id} ref={ref} className="input mapping-input" rows={3} value={value} placeholder={placeholder} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
         ) : (
-          <input id={id} ref={ref} className="input mapping-input" value={value} placeholder={placeholder} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value)} />
+          <input id={id} ref={ref} className="input mapping-input" value={value} placeholder={placeholder} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
         )}
         <button type="button" className="map-btn" title="Insert variable" aria-label="Insert variable" onClick={() => setPicking(!picking)}>
           <Braces size={14} aria-hidden="true" />

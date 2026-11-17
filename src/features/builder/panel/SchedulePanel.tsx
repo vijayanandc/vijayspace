@@ -6,7 +6,7 @@ import type { ScheduleSpec } from '../../../api/types';
 import { Field } from '../../../components/Field';
 import { IntInput } from '../forms/IntInput';
 import { type Preset, type PresetState, detectPreset, presetToSpec, scheduleView } from '../model/schedule';
-import { U32_MAX } from '../model/values';
+import { MAX_INTERVAL_MINUTES } from '../model/values';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const PRESETS: { value: Preset; label: string }[] = [
@@ -47,7 +47,7 @@ export function SchedulePanel({ spec, onChange }: { spec: ScheduleSpec; onChange
       </Field>
       {state.preset === 'interval' && (
         <Field label="Minutes">
-          {(id) => <IntInput id={id} min={1} max={U32_MAX} value={state.minutes} onChange={(minutes) => minutes !== undefined && set({ minutes })} />}
+          {(id) => <IntInput id={id} min={1} max={MAX_INTERVAL_MINUTES} value={state.minutes} onChange={(minutes) => minutes !== undefined && set({ minutes })} />}
         </Field>
       )}
       {(state.preset === 'daily' || state.preset === 'weekly' || state.preset === 'monthly') && (

@@ -10,6 +10,8 @@ export interface IntRange {
 
 export const U16_MAX = 65_535;
 export const U32_MAX = 4_294_967_295;
+/** The server's longest "every N minutes" interval (one year). */
+export const MAX_INTERVAL_MINUTES = 525_600;
 /** The server rejects delays longer than this (`MAX_DELAY_SECS`). */
 export const MAX_DELAY_SECS = 30 * 86_400;
 

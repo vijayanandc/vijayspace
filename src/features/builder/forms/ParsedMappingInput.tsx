@@ -34,6 +34,10 @@ export function ParsedMappingInput({ value, onChange, parse, format = valueText,
         const parsed = parse(next);
         if (parsed !== undefined) onChange(parsed);
       }}
+      // Leaving a half-typed number ("2.", "-") shows the value that is actually stored.
+      onBlur={() => {
+        if (parse(text) === undefined) setText(format(value));
+      }}
     />
   );
 }

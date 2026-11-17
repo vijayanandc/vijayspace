@@ -6,6 +6,7 @@ import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-q
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiError, errorMessage } from '../../api/client';
+import { useToast } from '../../components/Toast';
 import { endpoints } from '../../api/endpoints';
 import { mk, qk } from '../../api/hooks';
 import type { Flow, FlowDefinition, Issue } from '../../api/types';
@@ -45,6 +46,10 @@ export function useAutosave(flowId: string, def: FlowDefinition, initialRevision
   const inFlight = useRef<Promise<boolean> | null>(null);
   const conflict = useRef(false);
   const runRef = useRef<() => Promise<boolean>>(() => Promise.resolve(true));
+  // The save on leaving runs after the builder is gone: only a toast can report its failure.
+  const toast = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
   defRef.current = def;
 
   const schedule = useCallback(() => {
@@ -149,7 +154,11 @@ export function useAutosave(flowId: string, def: FlowDefinition, initialRevision
     return () => {
       window.removeEventListener('beforeunload', onBeforeUnload);
       window.clearTimeout(timer.current);
-      if (unsaved()) void runRef.current();
+      if (unsaved()) {
+        void runRef.current().then((saved) => {
+          if (!saved) toastRef.current.show('error', 'Your last changes to this flow could not be saved. Open the flow again to check it.');
+        });
+      }
     };
   }, []);
 
