@@ -25,7 +25,10 @@ export function safeNextPath(raw: string | null, origin: string = window.locatio
     return null;
   }
   if (url.origin !== origin) return null;
-  return `${url.pathname}${url.search}${url.hash}`;
+  // Check the normalised path too: dot segments can collapse into `//` ("/.//evil.example").
+  const path = `${url.pathname}${url.search}${url.hash}`;
+  if (!path.startsWith('/') || path.startsWith('//')) return null;
+  return path;
 }
 
 /** The `return_to` for `oauth/start`: the callback page, which then continues to `next` (e.g. the flow being edited). */
