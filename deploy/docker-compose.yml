@@ -1,0 +1,23 @@
+# Local development dependencies. `just db-up` starts them.
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: weft
+      MYSQL_DATABASE: weft
+      MYSQL_USER: weft
+      MYSQL_PASSWORD: weft
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    ports: ["3306:3306"]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pweft"]
+      interval: 5s
+      retries: 20
+    volumes: ["mysql-data:/var/lib/mysql"]
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["1025:1025", "8025:8025"]   # SMTP, web UI
+
+volumes:
+  mysql-data:

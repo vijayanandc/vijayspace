@@ -1,0 +1,12 @@
+[package]
+name = "weft-expr"
+description = "Template rendering, typed expressions, condition trees and filters (pure)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

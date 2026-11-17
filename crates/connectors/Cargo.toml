@@ -1,0 +1,15 @@
+[package]
+name = "weft-connectors"
+description = "Built-in connectors (native Rust and declarative YAML) and the declarative runtime."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+weft-connector-sdk.workspace = true
+weft-domain.workspace = true
+weft-expr.workspace = true
+
+[lints]
+workspace = true

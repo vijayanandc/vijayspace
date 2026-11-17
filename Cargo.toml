@@ -1,0 +1,47 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+publish = false
+
+# Internal crates. Allowed edges are listed in docs/plan/02-architecture.md §4
+# and will be enforced by `cargo xtask check-arch` (backlog T01).
+[workspace.dependencies]
+weft-expr = { path = "crates/expr" }
+weft-domain = { path = "crates/domain" }
+weft-engine = { path = "crates/engine" }
+weft-connector-sdk = { path = "crates/connector-sdk" }
+weft-connectors = { path = "crates/connectors" }
+weft-app = { path = "crates/app" }
+weft-db = { path = "crates/db" }
+weft-infra = { path = "crates/infra" }
+weft-api = { path = "crates/api" }
+weft-worker = { path = "crates/worker" }
+weft-testkit = { path = "crates/testkit" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+wildcard_enum_match_arm = "deny"
+large_futures = "warn"
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+
+[profile.dev.package."*"]
+debug = false

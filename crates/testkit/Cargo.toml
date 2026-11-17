@@ -1,0 +1,17 @@
+[package]
+name = "weft-testkit"
+description = "Test-only helpers: builders, fakes, contract suites, ManualClock, wiremock helpers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+weft-domain.workspace = true
+weft-expr.workspace = true
+weft-engine.workspace = true
+weft-connector-sdk.workspace = true
+weft-app.workspace = true
+
+[lints]
+workspace = true

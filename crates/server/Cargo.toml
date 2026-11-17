@@ -1,0 +1,23 @@
+[package]
+name = "weft-server"
+description = "Composition root and the weft binary: config, wiring, CLI, telemetry."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "weft"
+path = "src/main.rs"
+
+[dependencies]
+weft-api.workspace = true
+weft-worker.workspace = true
+weft-db.workspace = true
+weft-infra.workspace = true
+weft-connectors.workspace = true
+weft-app.workspace = true
+weft-domain.workspace = true
+
+[lints]
+workspace = true

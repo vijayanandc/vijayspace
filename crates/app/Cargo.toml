@@ -1,0 +1,16 @@
+[package]
+name = "weft-app"
+description = "Use cases, ports (traits), Deps, Actor, AppError and the execution runner."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+weft-domain.workspace = true
+weft-expr.workspace = true
+weft-engine.workspace = true
+weft-connector-sdk.workspace = true
+
+[lints]
+workspace = true

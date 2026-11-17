@@ -1,0 +1,13 @@
+[package]
+name = "weft-domain"
+description = "IDs, entities, FlowDefinition and its validation, schedules, permissions, error codes (pure)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+weft-expr.workspace = true
+
+[lints]
+workspace = true

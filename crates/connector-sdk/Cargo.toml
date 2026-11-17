@@ -1,0 +1,13 @@
+[package]
+name = "weft-connector-sdk"
+description = "Connector, Action, Trigger and OptionSource traits, manifests, field schema, ConnectorError."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+weft-domain.workspace = true
+
+[lints]
+workspace = true

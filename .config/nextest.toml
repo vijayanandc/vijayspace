@@ -1,0 +1,15 @@
+# See docs/plan/09-rust-test-strategy.md §3.
+[profile.default]
+retries = 0                      # flaky tests are fixed or quarantined, never retried silently
+fail-fast = false
+slow-timeout = { period = "30s", terminate-after = 4 }
+
+[test-groups]
+mysql = { max-threads = 8 }      # sqlx::test DBs are isolated; cap parallelism for the server
+
+[[profile.default.overrides]]
+filter = 'binary(db) | binary(http) | binary(scenarios)'
+test-group = 'mysql'
+
+[profile.ci]
+junit = { path = "junit.xml" }

@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+.env
+*.pending-snap
+/fuzz/artifacts
+/fuzz/corpus/*/.tmp*
+.DS_Store
+.idea/
+.vscode/

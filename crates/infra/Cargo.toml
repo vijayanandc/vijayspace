@@ -1,0 +1,15 @@
+[package]
+name = "weft-infra"
+description = "Non-database adapters: crypto, password hashing, JWT, mailer, SSRF-guarded HTTP, clock, IDs."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+weft-app.workspace = true
+weft-domain.workspace = true
+weft-connector-sdk.workspace = true
+
+[lints]
+workspace = true
