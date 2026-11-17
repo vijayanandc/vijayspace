@@ -54,7 +54,7 @@ What is built on the `backend` and `client` branches, how it deviates from the p
 | Retention sweeps (doc 05 §4, M29) | Not built: `trigger_events`, `executions`, `step_runs`, dead `jobs` and test snapshots grow without limit | Add the sweep before production volumes. |
 | Backfill as a background job | One call backfills at most 2,000 records, inside the HTTP request | Move to a `sync_bulk` job with progress. |
 | OAuth refresh across processes | Refreshes are serialised per process. A forced refresh is skipped if the token already changed. Separate `weft api` and `weft worker` processes can still race on single-use refresh tokens. | Use a database lock (`GET_LOCK`) when running split processes. `weft serve` (one process) is not affected. |
-| Files ≤ 400 lines (AGENTS.md) | A few older files are over: `engine/interpreter.rs` and `domain/flow/validate.rs` (both including tests), `connectors/core/formatter.rs`, `app/runner/run.rs`, `connector-sdk/manifest.rs` and two connector test files | Split them in a refactor-only change. |
+| Files ≤ 400 lines (AGENTS.md) | All files comply except `crates/engine/src/interpreter.rs` (706 lines, about 160 of them tests) | The engine is 🔒: splitting it needs human review. Moving its tests out alone would still leave ~540 lines. |
 
 ## Needs checking against live accounts
 - **Autodesk Forma:** request and response shapes marked `VERIFY (spike M37a)` in `crates/connectors/src/autodesk_forma/` (10 places):

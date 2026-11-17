@@ -2,6 +2,7 @@
 //! See `docs/plan/04-workflow-engine.md` §6.
 
 pub mod action;
+mod persist;
 pub mod plan_cache;
 mod run;
 

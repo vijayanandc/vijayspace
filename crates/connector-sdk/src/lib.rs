@@ -7,6 +7,7 @@
 mod connector;
 mod context;
 mod error;
+mod field;
 mod http;
 mod manifest;
 pub mod oauth;
