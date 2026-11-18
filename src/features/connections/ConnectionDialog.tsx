@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CircleCheck, ExternalLink, Lock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { errorMessage } from '../../api/client';
+import { errorMessage, getCurrentOrg } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
 import { qk, useConnectors } from '../../api/hooks';
 import type { Connection, JsonObject } from '../../api/types';
@@ -53,7 +53,7 @@ export function ConnectionDialog({ open, onClose, connector, onCreated, returnTo
       const label = name.trim() || manifest.name;
       if (isOauth) {
         if (beforeRedirect && !(await beforeRedirect())) throw new Error('Your latest flow changes could not be saved, so sign-in was not started. Fix the save error first.');
-        const res = await endpoints.oauthStart({ connector: manifest.key, name: label, fields, return_to: oauthReturnUrl(window.location.origin, returnTo) });
+        const res = await endpoints.oauthStart({ connector: manifest.key, name: label, fields, return_to: oauthReturnUrl(window.location.origin, returnTo, getCurrentOrg()) });
         window.location.assign(res.authorize_url);
         return undefined;
       }

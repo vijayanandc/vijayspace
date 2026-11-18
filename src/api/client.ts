@@ -91,10 +91,16 @@ async function send(method: HttpMethod, path: string, body: unknown, token: stri
 const unavailable = () =>
   new ApiError(0, 'auth.unavailable', 'Your sign-in could not be refreshed. Check your connection and try again.');
 
-export async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
+/** Per-request options. */
+export interface RequestOptions {
+  /** Act in this org instead of the current one (e.g. a draft save that belongs to the org the page was opened in). */
+  org?: string;
+}
+
+export async function request<T>(method: HttpMethod, path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
   // Both taken before any await: a request belongs to the org (and sign-in) it was made in, even if
   // the user switches organisation or signs out while it waits for a token.
-  const org = currentOrg ?? ORG;
+  const org = options.org ?? currentOrg ?? ORG;
   const hooks = auth;
   const token = hooks ? await hooks.token() : undefined;
   // Signed in but no token (the identity provider was unreachable): never send the request unsigned.
@@ -121,11 +127,11 @@ export async function request<T>(method: HttpMethod, path: string, body?: unknow
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>('GET', path),
-  post: <T>(path: string, body?: unknown) => request<T>('POST', path, body ?? {}),
-  put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
-  patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
-  del: (path: string) => request<void>('DELETE', path),
+  get: <T>(path: string, options?: RequestOptions) => request<T>('GET', path, undefined, options),
+  post: <T>(path: string, body?: unknown, options?: RequestOptions) => request<T>('POST', path, body ?? {}, options),
+  put: <T>(path: string, body: unknown, options?: RequestOptions) => request<T>('PUT', path, body, options),
+  patch: <T>(path: string, body: unknown, options?: RequestOptions) => request<T>('PATCH', path, body, options),
+  del: (path: string, options?: RequestOptions) => request<void>('DELETE', path, undefined, options),
 };
 
 /** Human-readable message for any thrown value. */

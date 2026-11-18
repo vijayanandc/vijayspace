@@ -32,20 +32,22 @@ const MODES: { mode: LimitMode; label: string }[] = [
   { mode: 'custom', label: 'Custom' },
 ];
 
-function LimitRow({ name, field, onChange, defaultValue, effective, showError }: {
+function LimitRow({ name, field, onChange, defaultValue, effective, showError, readOnly }: {
   name: LimitKey;
   field: LimitField;
   onChange: (f: LimitField) => void;
   defaultValue: number | null;
   effective: number | null;
   showError: boolean;
+  /** Shown but not editable (the caller may not change this connection). */
+  readOnly: boolean;
 }) {
   const { label, unit, help } = LIMIT_LABELS[name];
   const error = showError || field.value.trim() !== '' ? limitError(field) : null;
   const inputId = `limit-${name}`;
   const hintId = `${inputId}-hint`;
   return (
-    <fieldset className={`limit-row${error ? ' field-error' : ''}`}>
+    <fieldset className={`limit-row${error ? ' field-error' : ''}`} disabled={readOnly}>
       <legend className="field-label">{label}</legend>
       <div className="limit-controls">
         <div className="limit-modes" role="radiogroup" aria-label={`${label} setting`}>
@@ -142,6 +144,7 @@ export function LimitsDialog({ connection, appName, onClose }: Props) {
           view={limits.data}
           form={form}
           submitted={state.submitted}
+          readOnly={!canManage}
           onChange={(key, f) => setState((s) => (s ? { ...s, form: { ...s.form, [key]: f } } : s))}
         />
       )}
@@ -150,7 +153,7 @@ export function LimitsDialog({ connection, appName, onClose }: Props) {
   );
 }
 
-function LimitsEditor({ view, form, submitted, onChange }: { view: LimitsView; form: LimitsForm; submitted: boolean; onChange: (key: LimitKey, f: LimitField) => void }) {
+function LimitsEditor({ view, form, submitted, readOnly, onChange }: { view: LimitsView; form: LimitsForm; submitted: boolean; readOnly: boolean; onChange: (key: LimitKey, f: LimitField) => void }) {
   return (
     <>
       <section className="limits-usage" aria-label="Today’s usage">
@@ -172,6 +175,7 @@ function LimitsEditor({ view, form, submitted, onChange }: { view: LimitsView; f
           defaultValue={view.defaults[key]}
           effective={view.effective[key]}
           showError={submitted}
+          readOnly={readOnly}
         />
       ))}
       <p className="field-help with-icon limits-note">

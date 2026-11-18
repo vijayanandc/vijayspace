@@ -53,6 +53,9 @@ export const endpoints = {
   testConnection: (id: string) => api.post<ConnectionTestResult>(`/api/v1/connections/${enc(id)}/test`),
   oauthStart: (body: { connector: string; name: string; connection_id?: string; fields?: JsonObject; return_to: string }) =>
     api.post<{ authorize_url: string }>('/api/v1/connections/oauth/start', body),
+  /** The signed-in step after the provider sent the browser back (`status=finish`), in the org the sign-in began in. */
+  oauthFinish: (state: string, finish: string, org?: string) =>
+    api.post<{ connection_id: string }>('/api/v1/connections/oauth/finish', { state, finish }, { org }),
 
   // Flows
   flows: () => api.get<FlowSummary[]>('/api/v1/flows'),
@@ -62,8 +65,9 @@ export const endpoints = {
   updateFlow: (id: string, body: { name?: string; description?: string }) =>
     api.patch<Flow>(`/api/v1/flows/${enc(id)}`, body),
   deleteFlow: (id: string) => api.del(`/api/v1/flows/${enc(id)}`),
-  saveDraft: (id: string, definition: FlowDefinition, revision: number) =>
-    api.put<SaveDraftResult>(`/api/v1/flows/${enc(id)}/draft`, { definition, revision }),
+  /** `org`: the org the builder was opened in (a save that finishes after an org switch still lands there). */
+  saveDraft: (id: string, definition: FlowDefinition, revision: number, org?: string) =>
+    api.put<SaveDraftResult>(`/api/v1/flows/${enc(id)}/draft`, { definition, revision }, { org }),
   validate: (id: string) => api.post<{ issues: Issue[] }>(`/api/v1/flows/${enc(id)}/validate`),
   publish: (id: string) => api.post<PublishResult>(`/api/v1/flows/${enc(id)}/publish`),
   enable: (id: string) => api.post<Flow>(`/api/v1/flows/${enc(id)}/enable`),

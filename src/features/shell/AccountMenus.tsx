@@ -50,8 +50,9 @@ export function OrgSwitcher() {
             <Building2 size={16} aria-hidden="true" />
             <span className="header-org-name">{name}</span>
             {waiting > 0 && (
-              <span className="count-badge" aria-label={`${waiting} invitation${waiting === 1 ? '' : 's'} waiting`}>
-                {waiting}
+              <span className="count-badge">
+                <span aria-hidden="true">{waiting}</span>
+                <span className="sr-only">{`${waiting} invitation${waiting === 1 ? '' : 's'} waiting`}</span>
               </span>
             )}
             <ChevronDown size={14} aria-hidden="true" />

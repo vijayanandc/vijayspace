@@ -31,8 +31,15 @@ export function safeNextPath(raw: string | null, origin: string = window.locatio
   return path;
 }
 
-/** The `return_to` for `oauth/start`: the callback page, which then continues to `next` (e.g. the flow being edited). */
-export function oauthReturnUrl(origin: string, next?: string): string {
+/**
+ * The `return_to` for `oauth/start`: the callback page, which finishes the sign-in in `org` (the org it was started
+ * in) and then continues to `next` (e.g. the flow being edited).
+ */
+export function oauthReturnUrl(origin: string, next?: string, org?: string | null): string {
+  const query = new URLSearchParams();
   const safe = safeNextPath(next ?? null);
-  return `${origin}${OAUTH_RETURN_PATH}${safe ? `?next=${encodeURIComponent(safe)}` : ''}`;
+  if (safe) query.set('next', safe);
+  if (org) query.set('org', org);
+  const q = query.toString();
+  return `${origin}${OAUTH_RETURN_PATH}${q ? `?${q}` : ''}`;
 }

@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Gauge, KeyRound, PlugZap, Trash2 } from 'lucide-react';
 
-import { errorMessage } from '../../api/client';
+import { errorMessage, getCurrentOrg } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
 import { qk } from '../../api/hooks';
 import type { Connection, ConnectionUsage, ConnectorManifest, JsonObject } from '../../api/types';
@@ -53,7 +53,7 @@ export function ConnectionRow({ connection, manifest, usage, onLimits }: RowProp
         name: connection.name,
         connection_id: connection.id,
         fields: oauthSettings(connection, manifest),
-        return_to: oauthReturnUrl(window.location.origin),
+        return_to: oauthReturnUrl(window.location.origin, undefined, getCurrentOrg()),
       });
       window.location.assign(res.authorize_url);
     },

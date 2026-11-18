@@ -5,7 +5,7 @@
 import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ApiError, errorMessage } from '../../api/client';
+import { ApiError, errorMessage, getCurrentOrg } from '../../api/client';
 import { useToast } from '../../components/Toast';
 import { endpoints } from '../../api/endpoints';
 import { mk, qk } from '../../api/hooks';
@@ -31,9 +31,12 @@ async function adoptSavedDraft(qc: QueryClient, flowId: string, draft: FlowDefin
 
 export function useAutosave(flowId: string, def: FlowDefinition, initialRevision: number) {
   const qc = useQueryClient();
+  // The flow belongs to the org the builder opened in: a save that runs as the page closes for an org switch
+  // must not land in (or 404 from) the next org.
+  const [org] = useState(() => getCurrentOrg() ?? undefined);
   const { mutateAsync } = useMutation({
     mutationKey: mk.saveDraft(flowId),
-    mutationFn: (v: DraftSave) => endpoints.saveDraft(flowId, v.definition, v.revision),
+    mutationFn: (v: DraftSave) => endpoints.saveDraft(flowId, v.definition, v.revision, org),
     onSuccess: (res, v) => adoptSavedDraft(qc, flowId, v.definition, res.revision),
   });
   const [status, setStatus] = useState<SaveStatus>('saved');

@@ -7,16 +7,24 @@ import { useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import { configureAuth } from '../../api/client';
+import { type AuthHooks, configureAuth } from '../../api/client';
 import type { SignInConfig } from '../../api/tenancy';
 import { CALLBACK_PATH, redirectUris } from './config';
 import { MeGate } from './MeGate';
 import { SignInPage } from './SignInPage';
+import { draftSavesSettled } from './session';
 import { Splash } from './Splash';
 
 const RETURN_KEY = 'weft.return';
 /** How long a navigation to Logto may take before the page offers the button again. */
 const STUCK_MS = 8000;
+
+/** After signing out: every request fails with `auth.unavailable` instead of going out unsigned. */
+const SIGNED_OUT: AuthHooks = {
+  token: async () => undefined,
+  refresh: async () => undefined,
+  onSignedOut: () => undefined,
+};
 
 function rememberReturnPath(pathname: string, search: string): void {
   try {
@@ -83,6 +91,8 @@ export function LogtoGate({ signIn: settings, children }: { signIn: SignInConfig
   const [opening, setOpening] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const signedOut = useRef(false);
+  // The SDK keeps its last error: only an error that appears after a sign-in starts ends it.
+  const errorAtStart = useRef<Error | undefined>(undefined);
   const uris = useMemo(
     () =>
       redirectUris(window.location.origin, {
@@ -95,14 +105,15 @@ export function LogtoGate({ signIn: settings, children }: { signIn: SignInConfig
 
   const startSignIn = useCallback(() => {
     rememberReturnPath(pathname, search);
+    errorAtStart.current = error;
     setOpening(true);
     void signIn(uris.signIn);
-  }, [pathname, search, signIn, uris.signIn]);
+  }, [pathname, search, signIn, uris.signIn, error]);
 
   // The SDK reports failures through `error` (its calls never reject): a failed start re-enables the button.
   useEffect(() => {
     if (!opening) return undefined;
-    if (error) {
+    if (error && error !== errorAtStart.current) {
       setOpening(false);
       return undefined;
     }
@@ -112,7 +123,7 @@ export function LogtoGate({ signIn: settings, children }: { signIn: SignInConfig
 
   const endLocally = useCallback(() => {
     signedOut.current = true;
-    configureAuth(null);
+    configureAuth(SIGNED_OUT);
     qc.clear();
     void clearAllTokens().finally(() => window.location.assign('/'));
   }, [qc, clearAllTokens]);
@@ -122,17 +133,25 @@ export function LogtoGate({ signIn: settings, children }: { signIn: SignInConfig
     if (isAuthenticated && sessionEnded(error)) endLocally();
   }, [isAuthenticated, error, endLocally]);
 
-  // Signing out first takes the app off the screen, so nothing asks the API once the tokens are gone. If Logto's
-  // sign-out page cannot be reached, the tokens are cleared here instead.
+  // Signing out first takes the app off the screen; a draft the closing page saves still goes out signed in. Then
+  // nothing reaches the API, and if Logto's sign-out page does not open, the tokens are cleared here instead.
   useEffect(() => {
     if (!leaving) return undefined;
-    signedOut.current = true;
-    void qc.cancelQueries();
-    configureAuth(null);
-    qc.clear();
-    void signOut(uris.signOut);
-    const timer = window.setTimeout(endLocally, STUCK_MS);
-    return () => window.clearTimeout(timer);
+    let cancelled = false;
+    let timer: number | undefined;
+    void draftSavesSettled(qc).then(async () => {
+      if (cancelled) return;
+      signedOut.current = true;
+      void qc.cancelQueries();
+      configureAuth(SIGNED_OUT);
+      qc.clear();
+      await signOut(uris.signOut);
+      if (!cancelled) timer = window.setTimeout(endLocally, STUCK_MS);
+    });
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [leaving, qc, signOut, uris.signOut, endLocally]);
 
   // Registered while rendering so the first queries of the page already carry the token.

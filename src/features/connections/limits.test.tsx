@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Connection, ConnectionUsage, ConnectorManifest, LimitsView } from '../../api/types';
 import { renderWithProviders } from '../../test/render';
+import { TestSession } from '../auth/session';
 import { ConnectionsPage } from './ConnectionsPage';
 import { UsageMeter } from './UsageMeter';
 
@@ -44,6 +45,18 @@ function stubApi() {
 
 describe('connection limits and usage', () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it('shows the limits read-only to someone who may not change this connection', async () => {
+    const api = stubApi();
+    renderWithProviders(<TestSession role="viewer"><ConnectionsPage /></TestSession>);
+    fireEvent.click(await screen.findByRole('button', { name: /Limits and usage of Acme FSM/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Limits & usage' });
+    const perMinute = await within(dialog).findByLabelText('Requests per minute (custom value)');
+    expect(perMinute).toBeDisabled();
+    expect(within(dialog).getByRole('radio', { name: 'Use app default (10,000)' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Save limits' })).not.toBeInTheDocument();
+    expect(api.puts).toHaveLength(0);
+  });
 
   it('shows today’s usage with its level and refused requests in the table', async () => {
     stubApi();

@@ -1,15 +1,17 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useMutation } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { configureAuth, setCurrentOrg } from '../../api/client';
+import { api, configureAuth, request, setCurrentOrg } from '../../api/client';
+import { mk } from '../../api/hooks';
 import type { Me, Membership } from '../../api/tenancy';
 import { renderWithProviders } from '../../test/render';
 import { OrgSwitcher } from '../shell/AccountMenus';
 import { AuthRoot } from './AuthRoot';
+import { useSession } from './session';
 
 const logto = vi.hoisted(() => ({
   isAuthenticated: false,
@@ -122,11 +124,69 @@ describe('sign-in', () => {
     }));
     renderWithProviders(<AuthRoot><OrgSwitcher /></AuthRoot>);
     fireEvent.click(await screen.findByRole('button', { name: /Alpha/ }));
-    expect(screen.getByLabelText('1 invitation waiting')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Alpha.*1 invitation waiting/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Accept Gamma' }));
     await waitFor(() => expect(window.localStorage.getItem('weft.org')).toBe('org_c'));
   });
 });
+
+describe('signing out', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+    configureAuth(null);
+    logto.error = undefined;
+  });
+
+  it('lets a draft save finish signed in, then sends nothing unsigned', async () => {
+    logto.isAuthenticated = true;
+    const calls = stubApi(true, { user, orgs: [org('org_a', 'Alpha')], invitations: [] });
+    let release = () => undefined as void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    renderWithProviders(<AuthRoot><SaveThenSignOut gate={gate} /></AuthRoot>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByText('Signing you out…')).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(logto.signOut).not.toHaveBeenCalled();
+    release();
+    await waitFor(() => expect(logto.signOut).toHaveBeenCalled());
+    const save = calls.list.find((c) => c.url.endsWith('/flows/flw_1/draft'));
+    expect(save?.headers.Authorization).toBe('Bearer token-1');
+    const after = calls.list.length;
+    await expect(request('GET', '/api/v1/me')).rejects.toMatchObject({ code: 'auth.unavailable' });
+    expect(calls.list).toHaveLength(after);
+  });
+
+  it('keeps the button busy when an old sign-in error is still showing', async () => {
+    logto.isAuthenticated = false;
+    logto.error = new Error('an earlier failure');
+    stubApi(true, { user, orgs: [], invitations: [] });
+    renderWithProviders(<AuthRoot><p>the app</p></AuthRoot>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByRole('button', { name: 'Opening sign-in…' })).toBeDisabled();
+  });
+});
+
+function SaveThenSignOut({ gate }: { gate: Promise<void> }) {
+  const session = useSession();
+  const save = useMutation({
+    mutationKey: mk.saveDraft('flw_1'),
+    mutationFn: async () => {
+      await gate;
+      return api.put('/api/v1/flows/flw_1/draft', {});
+    },
+  });
+  return (
+    <>
+      <button type="button" onClick={() => save.mutate()}>Save</button>
+      <button type="button" onClick={() => session?.signOut()}>Sign out</button>
+    </>
+  );
+}
 
 describe('ending a session', () => {
   it('treats a refresh Logto rejects as signed out, and a network failure as not', async () => {
