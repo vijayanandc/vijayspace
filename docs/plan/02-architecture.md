@@ -119,12 +119,13 @@ weft/
 | `weft-domain` | IDs, entities, `FlowDefinition` and its validation, schedule math, the permission matrix, error codes | expr | async, IO crates |
 | `weft-engine` | Compiling a definition into a `Plan` (IR); the pure interpreter; retry decisions | domain, expr | async, IO crates |
 | `weft-connector-sdk` | `Connector`/`Action`/`Trigger` traits, manifest and field schema, `ConnectorError`, the `HttpSender` trait, test harness helpers | domain | sqlx, axum, app |
-| `weft-connectors` | Built-in connectors (native Rust and YAML) and the declarative runtime | connector-sdk, domain, expr | sqlx, axum, app |
+| `weft-connectors` | Built-in connectors (native Rust and YAML) and the declarative runtime | connector-sdk, domain, expr, script | sqlx, axum, app |
 | `weft-script` (P2) | The Rhai engine for custom functions: sandbox limits, registered helpers, JSON ↔ `Dynamic`, AST cache (doc 08 §7) | expr | tokio, sqlx, reqwest, axum, any IO |
 | `weft-app` | Use cases, ports (traits), `Deps`, `Actor`, `AppError`, the execution **runner** that drives the engine | domain, expr, engine, connector-sdk | sqlx, axum, reqwest, lettre |
-| `weft-db` | MySQL implementations of the repository ports, the job queue, migration embedding, a `testing` feature with fixtures | app, domain | axum, reqwest |
+| `weft-db` | MySQL implementations of the repository ports, the job queue, migration embedding, a `testing` feature with fixtures | app, domain, engine, connector-sdk | axum, reqwest |
 | `weft-infra` | Crypto (AES-GCM, per-org HKDF keys), Logto JWT verification (JWKS), mailer (lettre), the SSRF-guarded HTTP sender (reqwest), system clock, ID generator, the pooled `ScriptRunner` (P2, wraps `weft-script`) | app, domain, connector-sdk, script | sqlx, axum |
-| `weft-api` | axum router, handlers, DTOs, extractors (auth, pagination, If-Match), the problem+json mapping, OpenAPI | app, domain | sqlx, db, infra |
+| `weft-api` | axum router, handlers, DTOs, extractors (auth, pagination, If-Match), the problem+json mapping, OpenAPI | app, domain, connector-sdk | sqlx, db, infra |
+| `weft-http` | The reqwest-based `HttpSender` used by connectors | connector-sdk | sqlx, axum |
 | `weft-worker` | Job claim loop, scheduler, poller, reaper, retention sweeper, graceful shutdown | app, domain | sqlx, axum |
 | `weft-server` | Configuration, the **composition root**, CLI (clap), telemetry setup | everything | — |
 | `weft-testkit` | Builders, in-memory fakes, repository contract suites, `ManualClock`, wiremock helpers | domain, expr, engine, connector-sdk, app | db (to avoid dev-dependency cycles) |

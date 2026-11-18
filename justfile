@@ -41,5 +41,9 @@ test-unit:
 test:
     cargo nextest run --workspace --no-tests=pass
 
+# Architecture rules: crate dependencies, placement of the clock/IDs/spawn/SQL, SQL hygiene, headers, sizes
+arch:
+    cargo xtask check-arch
+
 # Everything CI runs. Must pass before a task is done.
-check: lint test-unit
+check: lint arch test-unit

@@ -1,0 +1,3 @@
+[alias]
+# `cargo xtask check-arch`: architecture rules (xtask/src).
+xtask = "run --quiet --package xtask --"

@@ -57,18 +57,28 @@ impl From<LinkRow> for RecordLink {
     }
 }
 
+fn find_by_a() -> String {
+    format!(
+        "SELECT {COLUMNS} FROM record_links WHERE org_id = ? AND link_set = ? AND a_connection_id = ? AND a_object = ? AND a_record_id = ?"
+    )
+}
+
+fn find_by_b() -> String {
+    format!(
+        "SELECT {COLUMNS} FROM record_links WHERE org_id = ? AND link_set = ? AND b_connection_id = ? AND b_object = ? AND b_record_id = ?"
+    )
+}
+
 impl MySqlStore {
+    /// `sql`: [`find_by_a`] or [`find_by_b`] (the side's columns are fixed in the statement, never interpolated).
     async fn find_link(
         &self,
+        sql: &str,
         org: OrgId,
         link_set: &str,
-        side: &str,
         s: &RecordSide,
     ) -> Res<Option<RecordLink>> {
-        let sql = format!(
-            "SELECT {COLUMNS} FROM record_links WHERE org_id = ? AND link_set = ? AND {side}_connection_id = ? AND {side}_object = ? AND {side}_record_id = ?"
-        );
-        let row: Option<LinkRow> = sqlx::query_as(&sql)
+        let row: Option<LinkRow> = sqlx::query_as(sql)
             .bind(org.as_uuid())
             .bind(link_set)
             .bind(s.connection_id.as_uuid())
@@ -89,7 +99,7 @@ impl LinkRepo for MySqlStore {
         link_set: &str,
         a: &RecordSide,
     ) -> Res<Option<RecordLink>> {
-        self.find_link(org, link_set, "a", a).await
+        self.find_link(&find_by_a(), org, link_set, a).await
     }
 
     async fn find_link_by_b(
@@ -98,7 +108,7 @@ impl LinkRepo for MySqlStore {
         link_set: &str,
         b: &RecordSide,
     ) -> Res<Option<RecordLink>> {
-        self.find_link(org, link_set, "b", b).await
+        self.find_link(&find_by_b(), org, link_set, b).await
     }
 
     async fn upsert_link(&self, l: &RecordLink, now: DateTime<Utc>) -> Res<()> {

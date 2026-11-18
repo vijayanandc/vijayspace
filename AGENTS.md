@@ -11,8 +11,8 @@ Weft is a Zoho Flow–style integration platform. Users build **flows**: one tri
 ## Current status (update this as backlog tasks land)
 - **Done:** the server runtime (flows, engine, executions, job queue, webhook/schedule/polling/app triggers, connections with OAuth), the sync layer, the Zoho CRM / Appblocks / Autodesk Forma connectors, recipes R1–R9 and the React client. Details and deviations: `docs/STATUS.md`.
 - **Sign-in:** Logto (doc 13 §6), with users, orgs, roles (owner, admin, member, viewer), invitations by email and ZeptoMail. Every API use case takes an `Actor` (`crates/app/src/tenancy/`). `WEFT_AUTH=off` keeps the old behaviour for local development: requests act as an owner of the default org or the org in `X-Org-ID`. Scenario tests sign in through `weft_testkit::FakeIdentityProvider` (`TestApp::spawn_signed_in`).
-- **Available now:** `just db-up`, `just db-down`, `just serve`, `just migrate`, `just fmt`, `just lint`, `just test-unit`, `just test`, `just check`.
-- **Not yet available:** `just db-reset`, `just gen`, the `xtask` checks, `docs/generated/map.md`, `docs/recipes/` and `docs/specs/`. Until they exist, use `docs/STATUS.md` and `docs/plan/`, and copy the shape of an existing use case (e.g. `crates/app/src/flows/`).
+- **Available now:** `just db-up`, `just db-down`, `just serve`, `just migrate`, `just fmt`, `just lint`, `just test-unit`, `just test`, `just arch` (`cargo xtask check-arch`), `just check`.
+- **Not yet available:** `just db-reset`, `just gen`, `docs/generated/map.md`, `docs/recipes/` and `docs/specs/`. Until they exist, use `docs/STATUS.md` and `docs/plan/`, and copy the shape of an existing use case (e.g. `crates/app/src/flows/`).
 
 ## Map
 | Need to… | Go to |
@@ -33,7 +33,7 @@ Weft is a Zoho Flow–style integration platform. Users build **flows**: one tri
 | SQL schema | `migrations/` (append-only, 🔒) |
 | Client feature | The `client` branch: `src/features/<feature>/` (React; see its `AGENTS.md`) |
 
-Crate dependency rules are in `docs/plan/02-architecture.md` §4 and are enforced by `cargo xtask check-arch`.
+Crate dependency rules are in `docs/plan/02-architecture.md` §4 and are enforced by `cargo xtask check-arch` (`xtask/src/`), with the placement rules below (clock, IDs, `tokio::spawn`, SQL only in `crates/db`, no `SELECT *` or database time, SQL that interpolates only constant column lists, `//!` headers, the 400-line limit, migration names). Never weaken a rule to make a change pass; a real exception goes in the rule's allow-list with its reason.
 
 ## Commands
 ```
