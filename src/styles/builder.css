@@ -113,3 +113,14 @@ h2.panel-title { margin: 0; padding: 4px 0; }
   .palette { width: 232px; }
   .side-panel { width: 340px; }
 }
+/* Phones: the top bar wraps instead of hiding its buttons, the palette sits above the canvas, and the side panel
+   covers the builder (with its close button in view) instead of squeezing the canvas to nothing. */
+@media (max-width: 760px) {
+  .builder-bar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 6px 8px; row-gap: 6px; }
+  .builder-name, .builder-bar .builder-name { flex: 1 1 140px; width: auto; max-width: none; }
+  .toolbar-spacer, .bar-divider { display: none; }
+  .builder-body { flex-direction: column; position: relative; }
+  .palette { width: auto; max-height: 38vh; border-right: none; border-bottom: 1px solid var(--stroke); }
+  .builder-stage { min-height: 320px; }
+  .side-panel { position: absolute; inset: 0; width: auto; z-index: 6; border-left: none; }
+}

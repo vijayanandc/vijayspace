@@ -17,6 +17,9 @@
 .node:hover { box-shadow: var(--shadow-8); border-color: #c7c7c7; }
 .node-step[draggable='true'] { cursor: grab; }
 .node-selected, .node-selected:hover { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand), var(--shadow-8); }
+/* Keyboard focus on a card (React Flow removes the wrapper's outline). */
+.canvas .react-flow__node:focus-visible { outline: none; }
+.canvas .react-flow__node:focus-visible .node { outline: 2px solid var(--brand); outline-offset: 3px; }
 .node-text { flex: 1; min-width: 0; }
 .node-kicker { display: flex; align-items: center; gap: 6px; color: var(--text-2); font: 600 10.5px/14px var(--font); text-transform: uppercase; letter-spacing: 0.06em; }
 .node-num { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--surface-sunken); color: var(--text); font-size: 10px; letter-spacing: 0; }

@@ -18,6 +18,13 @@ interface Props {
   beforeRedirect?: () => Promise<boolean>;
 }
 
+/** What a chosen connection that does not work means for the flow. */
+function statusHelp(status: 'needs_reauth' | 'error'): string {
+  return status === 'needs_reauth'
+    ? 'This connection needs signing in again (Connections → Reconnect); steps using it fail until then.'
+    : 'This connection’s last test failed; fix it under Connections, or steps using it fail.';
+}
+
 export function ConnectionPicker({ connector, value, onChange, returnTo, beforeRedirect }: Props) {
   const { data: connections = [], isLoading } = useConnections();
   const [creating, setCreating] = useState(false);
@@ -36,7 +43,7 @@ export function ConnectionPicker({ connector, value, onChange, returnTo, beforeR
             </button>
           ) : undefined
         }
-        help={current && current.status !== 'active' ? `This connection is ${current.status.replace('_', ' ')}.` : undefined}
+        help={current && current.status !== 'active' ? statusHelp(current.status) : undefined}
       >
         {(id) => (
           <select id={id} className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}>

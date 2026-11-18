@@ -45,7 +45,12 @@ export function Tabs<K extends string>({ tabs, value, onChange, className, label
           onClick={() => onChange(t.key)}
         >
           {t.label}
-          {t.count !== undefined && <span className="tab-count">{t.count}</span>}
+          {t.count !== undefined && (
+            <>
+              <span className="sr-only">, </span>
+              <span className="tab-count">{t.count}</span>
+            </>
+          )}
         </button>
       ))}
     </div>

@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { LogEntry } from '../../../api/types';
-import { detailRows, filterCounts, filterLog, formatBytes, logAsText, offsetLabel, stepKeysOf } from './runLog';
+import { detailRows, filterCounts, filterLog, formatBytes, lineKeys, logAsText, offsetLabel, stepKeysOf } from './runLog';
 
 const line = (over: Partial<LogEntry>): LogEntry => ({
   at: '2026-11-18T09:00:00.000Z',
@@ -41,6 +41,8 @@ describe('run log', () => {
     expect(offsetLabel('2026-11-18T09:00:00.182Z', '2026-11-18T09:00:00.000Z')).toBe('+182 ms');
     expect(offsetLabel('2026-11-18T09:00:02.400Z', '2026-11-18T09:00:00.000Z')).toBe('+2.4 s');
     expect(offsetLabel('2026-11-18T09:03:05.000Z', '2026-11-18T09:00:00.000Z')).toBe('+3 min 5 s');
+    expect(offsetLabel('2026-11-18T11:05:00.000Z', '2026-11-18T09:00:00.000Z')).toBe('+2 h 5 min');
+    expect(offsetLabel('2026-11-21T13:00:00.000Z', '2026-11-18T09:00:00.000Z')).toBe('+3 d 4 h');
     expect(formatBytes(512)).toBe('512 B');
     expect(formatBytes(2048)).toBe('2.0 KB');
   });
@@ -55,5 +57,12 @@ describe('run log', () => {
       'Received: 15 B',
     ]);
     expect(logAsText([http])).toBe('2026-11-18T09:00:01.500Z WARN  [crm #1] POST https://crm.example.com/v2/Leads → 503 in 120 ms\n    busy, try later');
+  });
+
+  it('keys each line by what it says, so its open details stay with it when filters change', () => {
+    const line = (message: string) => ({ at: '2026-11-18T09:00:00Z', level: 'info' as const, kind: 'http' as const, step_key: 'crm', attempt: 1, message, details: null });
+    const keys = lineKeys([line('GET a'), line('GET a'), line('GET b')]);
+    expect(new Set(keys).size).toBe(3);
+    expect(lineKeys([line('GET b')])[0]).toBe(keys[2]);
   });
 });

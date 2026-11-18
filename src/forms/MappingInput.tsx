@@ -21,6 +21,12 @@ export interface MappingInputProps {
 export function MappingInput({ id, value, onChange, variables, multiline, placeholder, ariaLabel, onBlur }: MappingInputProps) {
   const [picking, setPicking] = useState(false);
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const stopPicking = () => {
+    setPicking(false);
+    // Focus goes back to the button that opened the picker, not to the page.
+    window.requestAnimationFrame(() => button.current?.focus());
+  };
   const pick = (path: string) => {
     const el = ref.current;
     const start = el?.selectionStart ?? value.length;
@@ -42,7 +48,7 @@ export function MappingInput({ id, value, onChange, variables, multiline, placeh
         ) : (
           <input id={id} ref={ref} className="input mapping-input" value={value} placeholder={placeholder} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
         )}
-        <button type="button" className="map-btn" title="Insert variable" aria-label="Insert variable" onClick={() => setPicking(!picking)}>
+        <button ref={button} type="button" className="map-btn" title="Insert variable" aria-label="Insert variable" onClick={() => setPicking(!picking)}>
           <Braces size={14} aria-hidden="true" />
         </button>
       </div>
@@ -51,7 +57,7 @@ export function MappingInput({ id, value, onChange, variables, multiline, placeh
           {tokenize(value).map((seg, i) => (seg.token ? <mark key={i} className="token">{seg.text}</mark> : <span key={i}>{seg.text}</span>))}
         </div>
       )}
-      {picking && <VariablePicker tree={variables} onPick={pick} onClose={() => setPicking(false)} />}
+      {picking && <VariablePicker tree={variables} onPick={pick} onClose={stopPicking} />}
     </div>
   );
 }

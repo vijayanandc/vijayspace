@@ -23,6 +23,8 @@
 .cb-field { display: inline-flex; align-items: center; gap: 8px; }
 .cb-label { color: var(--text-2); font-size: 13px; }
 .cb-field .input { width: auto; min-width: 180px; }
+/* A long option (a flow name) must not stretch the command bar past its card. */
+.cb-field select.input { max-width: min(320px, 100%); text-overflow: ellipsis; }
 
 /* ---------- Tables ---------- */
 .table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); }
@@ -49,7 +51,7 @@
 .col-apps { width: 168px; }
 .col-name { min-width: 220px; max-width: 420px; }
 .col-actions { width: 48px; text-align: right; white-space: nowrap; }
-.row-title { font-weight: 600; color: var(--text); }
+.row-title { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
 a.row-title:hover { color: var(--brand); }
 .row-sub { color: var(--text-2); font-size: 12px; line-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 420px; }
 .row-sub.mono { font-size: 11px; }
@@ -86,7 +88,7 @@ a.row-title:hover { color: var(--brand); }
 .message-error .message-icon { color: var(--danger); }
 
 /* ---------- Toasts (Fluent, top-right) ---------- */
-.toasts { position: fixed; z-index: 1000; top: calc(var(--header-h) + 64px); right: 16px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toasts { position: fixed; z-index: 1000; bottom: 16px; right: 16px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
 .toast-region { display: flex; flex-direction: column; gap: 8px; }
 .toast {
   display: flex; align-items: flex-start; gap: 12px; width: 360px; padding: 12px 8px 12px 14px;
@@ -131,4 +133,14 @@ a.row-title:hover { color: var(--brand); }
 @media (max-width: 720px) {
   .page { padding: 12px 12px 24px; gap: 12px; }
   .page-header { flex-wrap: wrap; }
+  /* The title and its meta line keep a readable width; the actions go to the next line. */
+  .page-header-text { flex: 1 1 220px; }
+  .page-header-actions { justify-content: flex-start; }
+}
+
+/* Phones: a wide table scrolls inside its card, so the page header and filters stay in place. */
+@media (max-width: 760px) {
+  .table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table th { position: static; }
+  .cb-field .input { min-width: 0; }
 }

@@ -31,13 +31,29 @@ export function stepKeysOf(entries: LogEntry[]): string[] {
   return keys;
 }
 
-/** `+0 ms`, `+182 ms`, `+2.4 s`, `+3 min 5 s` after `start`. */
+/** `+0 ms`, `+182 ms`, `+2.4 s`, `+3 min 5 s`, `+2 h 5 min`, `+3 d 4 h` after `start` (runs can wait for days). */
 export function offsetLabel(at: string, start: string): string {
   const ms = Math.max(0, Date.parse(at) - Date.parse(start));
   if (!Number.isFinite(ms)) return '';
   if (ms < 1000) return `+${ms} ms`;
   if (ms < 60_000) return `+${(ms / 1000).toFixed(1)} s`;
-  return `+${Math.floor(ms / 60_000)} min ${Math.floor((ms % 60_000) / 1000)} s`;
+  if (ms < 3_600_000) return `+${Math.floor(ms / 60_000)} min ${Math.floor((ms % 60_000) / 1000)} s`;
+  if (ms < 86_400_000) return `+${Math.floor(ms / 3_600_000)} h ${Math.floor((ms % 3_600_000) / 60_000)} min`;
+  return `+${Math.floor(ms / 86_400_000)} d ${Math.floor((ms % 86_400_000) / 3_600_000)} h`;
+}
+
+/**
+ * A key per line that stays with the line when filters change or newer lines arrive (lines have no ID): what the
+ * line says, plus a counter for identical lines.
+ */
+export function lineKeys(entries: LogEntry[]): string[] {
+  const seen = new Map<string, number>();
+  return entries.map((e) => {
+    const base = `${e.at}|${e.kind}|${e.step_key ?? ''}|${e.attempt ?? ''}|${e.message}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n === 0 ? base : `${base}|${n}`;
+  });
 }
 
 /** `512 B`, `1.2 KB`, `3.4 MB`. */

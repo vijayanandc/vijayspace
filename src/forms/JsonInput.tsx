@@ -11,9 +11,12 @@ interface Props {
   rows?: number;
   /** Shape check for parsed JSON: a message keeps the text and blocks `onChange`. */
   validate?: (v: JsonValue) => string | null;
+  /** Told whether the text currently stands for a value (false while it does not parse or fails `validate`), so a
+   *  form can block submitting a value other than the one shown. */
+  onValidity?: (valid: boolean) => void;
 }
 
-export function JsonInput({ id, value, onChange, rows = 6, validate }: Props) {
+export function JsonInput({ id, value, onChange, rows = 6, validate, onValidity }: Props) {
   const serialized = value === undefined ? '' : JSON.stringify(value, null, 2);
   const [text, setText] = useState(serialized);
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +24,7 @@ export function JsonInput({ id, value, onChange, rows = 6, validate }: Props) {
     // Accept outside changes (undo, test samples) when the text is not mid-edit.
     if (!error) setText(serialized);
   }, [serialized, error]);
+  useEffect(() => onValidity?.(error === null), [error, onValidity]);
   const accept = (v: JsonValue) => {
     const problem = validate?.(v) ?? null;
     setError(problem);

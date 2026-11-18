@@ -167,7 +167,7 @@ describe('BuilderPage', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
     fireEvent.click(screen.getByRole('button', { name: 'Move to…' }));
     expect(screen.getByText(/Moving “second”/)).toBeInTheDocument();
-    const firstPlus = document.querySelector<HTMLElement>('.insert-node[aria-label="Insert a step here"]');
+    const firstPlus = document.querySelector<HTMLElement>('.insert-node[aria-label="Insert a step at position 1"]');
     if (!firstPlus) throw new Error('no insertion point');
     expect(firstPlus).toHaveFocus();
     fireEvent.keyDown(firstPlus, { key: 'Enter' });

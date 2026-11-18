@@ -29,7 +29,7 @@ describe('settings: run history', () => {
     renderWithProviders(<SettingsPage />);
     expect(await screen.findByRole('radio', { name: 'Use server default (30 days)' })).toBeChecked();
     expect(screen.getByText(/cleanup runs every 15 minutes/)).toBeInTheDocument();
-    expect(screen.getByText(/Queued, running and waiting runs are never deleted/)).toBeInTheDocument();
+    expect(screen.getByText(/a run must finish within 28 days of starting/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 

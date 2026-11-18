@@ -3,6 +3,7 @@
 import type { ConnectorManifest, Step, TriggerNode } from '../../../api/types';
 import { LOGIC_ITEMS } from '../../../domain/factories';
 import { isScriptStep } from '../../../domain/script';
+import type { InsertionPoint } from '../../../domain/tree';
 
 export interface NodeLabel {
   title: string;
@@ -77,4 +78,17 @@ export function stepLabel(s: Step, manifests: ConnectorManifest[]): NodeLabel {
   if (s.type === 'stop') subtitle = s.status === 'failed' ? 'End as failed' : 'End as succeeded';
   const label = logic?.label ?? s.type;
   return { title: s.name || label, subtitle, kind: label, icon: `logic:${s.type}`, iconName: label };
+}
+
+/** The accessible name of a "+" insertion point: where in the flow the new step goes. */
+export function insertLabel(point: InsertionPoint): string {
+  const at = `position ${point.index + 1}`;
+  switch (point.list.kind) {
+    case 'root':
+      return `Insert a step at ${at}`;
+    case 'branch':
+      return `Insert a step in branch ${point.list.branch} of ${point.list.decision}, ${at}`;
+    case 'otherwise':
+      return `Insert a step in Otherwise of ${point.list.decision}, ${at}`;
+  }
 }

@@ -2,3 +2,4 @@
 
 export { OrgSwitcher } from './AccountMenus';
 export { Layout } from './Layout';
+export { NotFoundPage } from './NotFoundPage';

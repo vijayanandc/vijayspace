@@ -1,7 +1,7 @@
 // Variable picker popover: a searchable tree of trigger, step and variable outputs with sample values.
 
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { VarNode } from '../domain/variables';
 import { previewJson } from '../lib/format';
@@ -61,8 +61,23 @@ export function VariablePicker({ tree, onPick, onClose }: { tree: VarNode[]; onP
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
   const visible = useMemo(() => tree.filter((n) => !q || matches(n, q)), [tree, q]);
+  const box = useRef<HTMLDivElement>(null);
+  // It opens below its input: bring all of it into view (the panel scrolls).
+  useEffect(() => box.current?.scrollIntoView?.({ block: 'nearest' }), []);
   return (
-    <div className="var-picker" role="dialog" aria-label="Insert variable" onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+    <div
+      ref={box}
+      className="var-picker"
+      role="dialog"
+      aria-label="Insert variable"
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape') return;
+        // Only the picker closes, not the side panel around it.
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }}
+    >
       <div className="var-picker-header">
         <input className="input" autoFocus placeholder="Search variables" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search variables" />
         <button type="button" className="icon-btn icon-btn-sm" aria-label="Close" onClick={onClose}>

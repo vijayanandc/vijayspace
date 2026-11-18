@@ -4,7 +4,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import { CircleAlert, CircleX, Copy, Info } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 
 import { errorMessage } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
@@ -17,11 +17,13 @@ import { useToast } from '../../components/Toast';
 import { COPY_FAILED, copyText } from '../../lib/clipboard';
 import { formatTime } from '../../lib/format';
 import type { LogFilter } from './model/runLog';
-import { TIME_KEYS, detailRows, excerptOf, filterCounts, filterLog, logAsText, offsetLabel, stepKeysOf } from './model/runLog';
+import { TIME_KEYS, detailRows, excerptOf, filterCounts, filterLog, lineKeys, logAsText, offsetLabel, stepKeysOf } from './model/runLog';
 import { executionPollMs } from './polling';
 
 const LEVEL_ICONS: Record<LogLevel, LucideIcon> = { info: Info, warn: CircleAlert, error: CircleX };
 const LEVEL_TEXT: Record<LogLevel, string> = { info: 'Info', warn: 'Warning', error: 'Error' };
+/** Lines rendered at first (a long run can have 2,000); more on request. */
+const PAGE = 300;
 const FILTERS: { key: LogFilter; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'problems', label: 'Problems' },
@@ -43,13 +45,23 @@ export function RunLog({ executionId, status, waitingUntil }: Props) {
   });
   const [filter, setFilter] = useState<LogFilter>('all');
   const [step, setStep] = useState<string | null>(null);
+  const [limit, setLimit] = useState(PAGE);
   const toast = useToast();
+  const entries = log.data?.entries;
+  // Recomputed only when the lines or the filters change, not on every poll that brings the same lines.
+  const view = useMemo(() => {
+    const all = entries ?? [];
+    const keys = lineKeys(all);
+    const keyed = all.map((entry, i) => ({ entry, key: keys[i] ?? String(i) }));
+    const inStep = step === null ? all : all.filter((e) => e.step_key === step);
+    const visible = new Set(filterLog(all, filter, step));
+    return { all, rows: keyed.filter((r) => visible.has(r.entry)), counts: filterCounts(inStep), steps: stepKeysOf(all) };
+  }, [entries, filter, step]);
   if (log.isLoading) return <Loading />;
   if (log.error) return <ErrorBox message={errorMessage(log.error)} />;
-  const entries = log.data?.entries ?? [];
-  const shown = filterLog(entries, filter, step);
-  const counts = filterCounts(entries);
-  const start = entries[0]?.at ?? '';
+  const shown = view.rows.map((r) => r.entry);
+  const counts = view.counts;
+  const start = view.all[0]?.at ?? '';
   const copy = () =>
     copyText(logAsText(shown)).then(
       () => toast.show('success', `Copied ${shown.length} line${shown.length === 1 ? '' : 's'}`),
@@ -67,9 +79,9 @@ export function RunLog({ executionId, status, waitingUntil }: Props) {
         </div>
         <label className="run-log-step">
           <span>Step</span>
-          <select value={step ?? ''} onChange={(e) => setStep(e.target.value === '' ? null : e.target.value)}>
+          <select className="input" value={step ?? ''} onChange={(e) => setStep(e.target.value === '' ? null : e.target.value)}>
             <option value="">All steps</option>
-            {stepKeysOf(entries).map((k) => (
+            {view.steps.map((k) => (
               <option key={k} value={k}>
                 {k}
               </option>
@@ -80,16 +92,22 @@ export function RunLog({ executionId, status, waitingUntil }: Props) {
           Copy log
         </Button>
       </div>
-      {log.data?.truncated && <MessageBar intent="info">This run has a very long log: the first 2,000 lines are shown.</MessageBar>}
+      {log.data?.truncated && <MessageBar intent="info">This run has a very long log: the latest 2,000 lines are shown, and the oldest are left out.</MessageBar>}
       {shown.length === 0 ? (
-        <p className="field-help">{entries.length === 0 ? 'Nothing has been logged yet.' : 'No lines match this filter.'}</p>
+        <p className="field-help">{view.all.length === 0 ? 'Nothing has been logged yet.' : 'No lines match this filter.'}</p>
       ) : (
-        <ol className="run-log-lines" aria-label="Log lines">
-          {shown.map((e, i) => (
-            // Lines have no ID; their position in this list is stable while the filter is unchanged.
-            <LogLine key={`${e.at}-${i}`} entry={e} start={start} />
-          ))}
-        </ol>
+        <>
+          <ol className="run-log-lines" aria-label="Log lines">
+            {view.rows.slice(0, limit).map((r) => (
+              <LogLine key={r.key} entry={r.entry} start={start} />
+            ))}
+          </ol>
+          {view.rows.length > limit && (
+            <Button onClick={() => setLimit((n) => n + PAGE)}>
+              Show {Math.min(PAGE, view.rows.length - limit)} more of {view.rows.length - limit} lines
+            </Button>
+          )}
+        </>
       )}
     </div>
   );

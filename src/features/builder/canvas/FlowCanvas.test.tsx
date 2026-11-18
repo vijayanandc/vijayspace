@@ -49,7 +49,7 @@ describe('FlowCanvas keyboard', () => {
 
   it('activates an insert point with Enter or Space, which is its only tab stop', () => {
     const { ctx, wrapper } = renderCanvas();
-    const plus = screen.getAllByLabelText('Insert a step here')[0];
+    const plus = screen.getAllByLabelText(/^Insert a step/)[0];
     if (!plus) throw new Error('no insert point');
     fireEvent.keyDown(plus, { key: 'Enter' });
     expect(ctx.setActivePoint).toHaveBeenLastCalledWith({ list: ROOT, index: 0 });

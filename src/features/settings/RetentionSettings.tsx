@@ -97,7 +97,7 @@ export function RetentionSettings({ org, editable = true }: { org: Org; editable
         </div>
       </fieldset>
       <MessageBar intent="info">
-        A cleanup runs every 15 minutes and deletes finished runs older than this, with their step history. Queued, running and waiting runs are never deleted.
+        A cleanup runs every 15 minutes and deletes finished runs older than this, with their step history. Runs that have not finished are kept while they wait, but a run must finish within 28 days of starting: history is kept 30 days at most.
       </MessageBar>
       {save.error && <ErrorBox message={errorMessage(save.error)} />}
       {!editable && <p className="muted small">Only owners change how long runs are kept.</p>}

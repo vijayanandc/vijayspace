@@ -1,7 +1,7 @@
 // One row of the connections table: app, status, today's usage (opens "Limits & usage") and row actions.
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Gauge, KeyRound, PlugZap, Trash2 } from 'lucide-react';
+import { Gauge, KeyRound, Pencil, PlugZap, Trash2 } from 'lucide-react';
 
 import { errorMessage, getCurrentOrg } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
@@ -33,9 +33,10 @@ interface RowProps {
   manifest: ConnectorManifest | undefined;
   usage: ConnectionUsage | undefined;
   onLimits: () => void;
+  onEdit: () => void;
 }
 
-export function ConnectionRow({ connection, manifest, usage, onLimits }: RowProps) {
+export function ConnectionRow({ connection, manifest, usage, onLimits, onEdit }: RowProps) {
   const role = useRole();
   const canUse = can(role, 'connection.use');
   // Reconnecting, editing and deleting are managing the connection: members only their own.
@@ -90,7 +91,9 @@ export function ConnectionRow({ connection, manifest, usage, onLimits }: RowProp
       </td>
       <td>{manifest?.name ?? connection.connector}</td>
       <td>
-        <StatusBadge status={connection.status} />
+        <span title={connection.status === 'error' ? 'The last test failed: use Test to see the app’s answer, or Edit to fix the details' : undefined}>
+          <StatusBadge status={connection.status} />
+        </span>
       </td>
       <td className="col-usage">
         <button type="button" className="usage-cell" onClick={onLimits} aria-label={usage ? `Limits and usage of ${connection.name}: ${usageSummary(usage)}` : `Limits and usage of ${connection.name}`} title="Limits & usage">
@@ -114,6 +117,7 @@ export function ConnectionRow({ connection, manifest, usage, onLimits }: RowProp
             label={`More actions for ${connection.name}`}
             items={[
               ...(canUse ? [{ label: 'Test connection', icon: PlugZap, onSelect: () => test.mutate(), disabled: test.isPending }] : []),
+              ...(canManage ? [{ label: 'Edit', icon: Pencil, onSelect: onEdit }] : []),
               { label: 'Limits & usage', icon: Gauge, onSelect: onLimits },
               ...(canManage && isOauth ? [{ label: 'Reconnect (sign in again)', icon: KeyRound, onSelect: () => reconnect.mutate(), disabled: reconnect.isPending }] : []),
               ...(canDelete ? [{ label: 'Delete', icon: Trash2, danger: true, onSelect: confirmDelete }] : []),

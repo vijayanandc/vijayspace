@@ -118,3 +118,16 @@ describe('MappingInput', () => {
     expect(input.value).toBe('Hi {{ trigger.email }}');
   });
 });
+
+describe('JSON input', () => {
+  it('reports when its text does not stand for a value, so a form cannot submit another one', async () => {
+    const { JsonInput } = await import('./JsonInput');
+    const validity = vi.fn();
+    renderWithProviders(<JsonInput id="j" value={{ a: 1 }} onChange={vi.fn()} onValidity={validity} />);
+    const box = screen.getByRole('textbox');
+    fireEvent.change(box, { target: { value: '{"a": ' } });
+    await waitFor(() => expect(validity).toHaveBeenLastCalledWith(false));
+    fireEvent.change(box, { target: { value: '{"a": 2}' } });
+    await waitFor(() => expect(validity).toHaveBeenLastCalledWith(true));
+  });
+});

@@ -17,6 +17,7 @@ import { MessageBar } from '../../components/MessageBar';
 import { Tabs } from '../../components/Tabs';
 import { useToast } from '../../components/Toast';
 import { formatDuration, formatTime, isTerminal } from '../../lib/format';
+import { useDocumentTitle } from '../../lib/useDocumentTitle';
 import { MODE_LABELS } from './labels';
 import { executionPollMs } from './polling';
 import { RunLog } from './RunLog';
@@ -72,6 +73,13 @@ function ExecutionView({ e }: { e: ExecutionDetail }) {
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const view = params.get('view') === 'log' ? 'log' : 'steps';
+  // A run of a deleted flow keeps its history, but there is no flow to open or run again.
+  const flowGone = !e.flow_name;
+  const flowName = e.flow_name || 'Deleted flow';
+  useDocumentTitle(`${flowName} · Execution`);
+  const confirmCancel = () => {
+    if (window.confirm('Cancel this run? Steps already done are not undone.')) cancel.mutate();
+  };
   const refresh = () => void qc.invalidateQueries({ queryKey: qk.execution(e.id) });
   const retry = useMutation({ mutationFn: () => endpoints.retryExecution(e.id), onSuccess: refresh, onError: (err) => toast.show('error', errorMessage(err)) });
   const cancel = useMutation({ mutationFn: () => endpoints.cancelExecution(e.id), onSuccess: refresh, onError: (err) => toast.show('error', errorMessage(err)) });
@@ -95,25 +103,32 @@ function ExecutionView({ e }: { e: ExecutionDetail }) {
           <div className="page-header-text">
             <div className="page-header-label">Execution</div>
             <h1 className="page-header-title record-title">
-              {e.flow_name} <StatusBadge status={e.status} />
+              {flowName} <StatusBadge status={e.status} />
             </h1>
           </div>
           <div className="page-header-actions">
-            <LinkButton to={`/flows/${e.flow_id}`} icon={ExternalLink}>
-              Open flow
-            </LinkButton>
-            {canRerun && e.status === 'failed' && (
+            {!flowGone && (
+              <LinkButton to={`/flows/${e.flow_id}`} icon={ExternalLink}>
+                Open flow
+              </LinkButton>
+            )}
+            {canRerun && !flowGone && e.status === 'failed' && (
               <Button icon={StepForward} onClick={() => retry.mutate()} disabled={retry.isPending} title="Continue from the failed step on the same version">
                 Retry from failed step
               </Button>
             )}
-            {canRerun && isTerminal(e.status) && (
-              <Button icon={RotateCcw} onClick={() => rerun.mutate()} disabled={rerun.isPending} title="Start again with the same trigger data on the latest published version">
+            {canRerun && !flowGone && isTerminal(e.status) && (
+              <Button
+                icon={RotateCcw}
+                onClick={() => rerun.mutate()}
+                disabled={rerun.isPending}
+                title={e.mode === 'test' ? 'Run the same test again: same data, same draft version (publish and run the flow to use newer changes)' : 'Start again with the same trigger data on the latest published version'}
+              >
                 Re-run
               </Button>
             )}
             {canRerun && !isTerminal(e.status) && (
-              <Button variant="danger" icon={Square} onClick={() => cancel.mutate()} disabled={cancel.isPending}>
+              <Button variant="danger" icon={Square} onClick={confirmCancel} disabled={cancel.isPending}>
                 Cancel run
               </Button>
             )}
@@ -122,7 +137,12 @@ function ExecutionView({ e }: { e: ExecutionDetail }) {
         <Highlights e={e} />
       </section>
       {e.possible_duplicate && <MessageBar intent="warning">A worker stopped mid-step; one action may have run twice. Check the target app.</MessageBar>}
-      {e.error_message && (
+      {e.error_message && e.status === 'cancelled' && (
+        <MessageBar intent="info" role="status" title="Cancelled:">
+          {e.error_message}
+        </MessageBar>
+      )}
+      {e.error_message && e.status !== 'cancelled' && (
         <MessageBar intent="error" role="alert" title={e.error_code ?? 'Error'}>
           {e.failed_step_key && (
             <>

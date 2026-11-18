@@ -21,11 +21,16 @@ export function TestFlowDialog({ open, onClose }: { open: boolean; onClose: () =
   const navigate = useNavigate();
   const sample = flow.trigger?.sample;
   const [payload, setPayload] = useState<JsonValue>(sample ?? { body: {} });
+  // While the text does not parse, the shown payload is not the one that would run: no run.
+  const [valid, setValid] = useState(true);
   // Each opening starts from the latest captured sample (e.g. one just captured with "Listen for sample").
   const [opened, setOpened] = useState(open);
   if (open !== opened) {
     setOpened(open);
-    if (open) setPayload(sample ?? { body: {} });
+    if (open) {
+      setPayload(sample ?? { body: {} });
+      setValid(true);
+    }
   }
   const run = useMutation({
     mutationFn: async () => {
@@ -44,7 +49,7 @@ export function TestFlowDialog({ open, onClose }: { open: boolean; onClose: () =
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={run.isPending} onClick={() => run.mutate()}>
+          <Button variant="primary" disabled={run.isPending || !valid} title={valid ? undefined : 'Fix the JSON first'} onClick={() => run.mutate()}>
             {run.isPending ? 'Starting…' : 'Run test'}
           </Button>
         </>
@@ -54,7 +59,7 @@ export function TestFlowDialog({ open, onClose }: { open: boolean; onClose: () =
       <label className="field-label" htmlFor="test-payload">
         Trigger payload (JSON)
       </label>
-      <JsonInput id="test-payload" value={payload} onChange={setPayload} rows={14} />
+      <JsonInput id="test-payload" value={payload} onChange={setPayload} onValidity={setValid} rows={14} />
       {run.error && <ErrorBox message={errorMessage(run.error)} />}
     </Dialog>
   );

@@ -252,7 +252,7 @@ export interface LogEntry {
   message: string;
   details: { [key: string]: JsonValue } | null;
 }
-/** `truncated`: more than 2,000 stored lines (the oldest 2,000 are shown). */
+/** `truncated`: more than 2,000 stored lines (the newest 2,000 are shown; the oldest are left out). */
 export interface ExecutionLog {
   entries: LogEntry[];
   truncated: boolean;

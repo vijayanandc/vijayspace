@@ -6,6 +6,8 @@ describe('retention form', () => {
   it('starts on the server default when the org has no setting', () => {
     expect(retentionForm({ retention_days: null, retention_days_effective: 30 })).toEqual({ useDefault: true, days: '30' });
     expect(retentionForm({ retention_days: 14, retention_days_effective: 14 })).toEqual({ useDefault: false, days: '14' });
+    // Saved before the 30-day cap: shown (and saved again) as the cap, so the page does not open with an error.
+    expect(retentionForm({ retention_days: 90, retention_days_effective: 30 })).toEqual({ useDefault: false, days: '30' });
   });
 
   it('sends null for the server default and the number of days otherwise', () => {

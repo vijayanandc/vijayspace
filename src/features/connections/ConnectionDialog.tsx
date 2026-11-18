@@ -1,4 +1,5 @@
-// Creates a connection: a credentials form for `fields` auth, or the OAuth redirect for `oauth2`.
+// Creates a connection: a credentials form for `fields` auth, or the OAuth redirect for `oauth2`. A connection whose
+// test fails is kept, and the dialog stays open with the app's reason so the details can be fixed and saved again.
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CircleCheck, ExternalLink, Lock } from 'lucide-react';
@@ -16,6 +17,7 @@ import { Field } from '../../components/Field';
 import { MessageBar } from '../../components/MessageBar';
 import { DynamicForm } from '../../forms/DynamicForm';
 import { leaveForSignIn, oauthReturnUrl } from './oauth';
+import { type SaveOutcome, saveAndTest } from './saveAndTest';
 
 interface Props {
   open: boolean;
@@ -35,6 +37,8 @@ export function ConnectionDialog({ open, onClose, connector, onCreated, returnTo
   const [key, setKey] = useState(connector ?? '');
   const [name, setName] = useState('');
   const [fields, setFields] = useState<JsonObject>({});
+  // Saved, but its test failed: saving again updates it rather than creating a second one.
+  const [saved, setSaved] = useState<SaveOutcome | null>(null);
   const qc = useQueryClient();
   const manifest = manifests.find((m) => m.key === key);
   const isOauth = manifest?.auth.kind === 'oauth2';
@@ -43,7 +47,7 @@ export function ConnectionDialog({ open, onClose, connector, onCreated, returnTo
   const formFields = manifest?.auth.fields ?? [];
 
   const create = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<SaveOutcome | undefined> => {
       if (!manifest) throw new Error('Choose an app');
       const label = name.trim() || manifest.name;
       if (isOauth) {
@@ -52,12 +56,17 @@ export function ConnectionDialog({ open, onClose, connector, onCreated, returnTo
         leaveForSignIn(res.authorize_url);
         return undefined;
       }
-      return endpoints.createConnection({ connector: manifest.key, name: label, fields });
+      const id = saved?.connection.id;
+      return saveAndTest(() => (id ? endpoints.updateConnection(id, { name: label, fields }) : endpoints.createConnection({ connector: manifest.key, name: label, fields })), Boolean(id));
     },
-    onSuccess: (conn) => {
-      if (!conn) return;
+    onSuccess: (outcome) => {
+      if (!outcome) return;
       void qc.invalidateQueries({ queryKey: qk.connections });
-      onCreated?.(conn);
+      if (outcome.problem) {
+        setSaved(outcome);
+        return;
+      }
+      onCreated?.(outcome.connection);
       onClose();
     },
   });
@@ -67,8 +76,13 @@ export function ConnectionDialog({ open, onClose, connector, onCreated, returnTo
     setKey(connector ?? '');
     setFields({});
     setName('');
+    setSaved(null);
     reset();
   }, [open, connector, reset]);
+  const keepAnyway = () => {
+    if (saved) onCreated?.(saved.connection);
+    onClose();
+  };
 
   return (
     <Dialog
@@ -79,14 +93,14 @@ export function ConnectionDialog({ open, onClose, connector, onCreated, returnTo
       wide
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
+          {saved ? <Button onClick={keepAnyway}>Keep it and fix later</Button> : <Button onClick={onClose}>Cancel</Button>}
           <Button variant="primary" icon={isOauth ? ExternalLink : undefined} disabled={!manifest || create.isPending} onClick={() => create.mutate()}>
             {isOauth ? `Connect to ${manifest?.name ?? 'app'}` : 'Save and test'}
           </Button>
         </>
       }
     >
-      <fieldset className="app-picker" disabled={Boolean(connector)}>
+      <fieldset className="app-picker" disabled={Boolean(connector) || Boolean(saved)}>
         <legend className="field-label">
           App<span className="required" aria-hidden="true"> *</span>
         </legend>
@@ -120,6 +134,11 @@ export function ConnectionDialog({ open, onClose, connector, onCreated, returnTo
         <p className="field-help with-icon">
           <Lock size={12} aria-hidden="true" /> Credentials are encrypted on the server and never shown again.
         </p>
+      )}
+      {saved?.problem && !create.isPending && (
+        <MessageBar intent="error" role="alert" title="Saved, but the connection test failed:">
+          {saved.problem.replace(/\.$/, '')}. Fix the details and choose Save and test again, or keep it and fix it later from Connections.
+        </MessageBar>
       )}
       {create.error && <ErrorBox message={errorMessage(create.error)} />}
     </Dialog>

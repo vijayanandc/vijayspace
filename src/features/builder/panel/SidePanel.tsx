@@ -1,10 +1,11 @@
 // Right panel for the selected node: header, then Configure | Settings | Test tabs.
 
-import { useState } from 'react';
+import { type KeyboardEvent, useState } from 'react';
 
 import { type Tab, Tabs } from '../../../components/Tabs';
 import { useBuilder } from '../BuilderContext';
 import { stepLabel, triggerLabel } from '../canvas/labels';
+import { stepNodeId } from '../model/layout';
 import { TRIGGER_ID } from '../model/paths';
 import { isScriptStep } from '../../../domain/script';
 import { findStep } from '../../../domain/tree';
@@ -41,10 +42,19 @@ export function SidePanel() {
   const tab = state.id === selected ? state.tab : 'configure';
   const setTab = (t: PanelTab) => setState({ id: selected, tab: t });
   const close = () => select(null);
+  // Escape anywhere in the panel closes it (as on the canvas) and puts focus back on its card. Inner popups that
+  // handle Escape themselves (the variable picker, menus) mark it handled first.
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    e.preventDefault();
+    const card = selected === TRIGGER_ID ? TRIGGER_ID : stepNodeId(selected);
+    close();
+    window.requestAnimationFrame(() => document.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(card)}"]`)?.focus());
+  };
 
   if (selected === TRIGGER_ID) {
     return (
-      <aside className="side-panel" aria-label="Trigger settings">
+      <aside className="side-panel" aria-label="Trigger settings" onKeyDown={onKeyDown}>
         <PanelHeader label={triggerLabel(def.trigger, manifests)} onClose={close} />
         <Tabs label="Trigger panel" tabs={visible} value={tab} onChange={setTab} className="panel-tabs" />
         <fieldset className="panel-scroll panel-fieldset" disabled={readOnly}>
@@ -67,7 +77,7 @@ export function SidePanel() {
   const shown = tabs.some((t) => t.key === tab) ? tab : 'configure';
   // Keyed by step: nothing typed or run in one step's panel (test results, JSON drafts, rows) carries into another.
   return (
-    <aside key={step.key} className="side-panel" aria-label="Step settings">
+    <aside key={step.key} className="side-panel" aria-label="Step settings" onKeyDown={onKeyDown}>
       <PanelHeader label={stepLabel(step, manifests)} step={step} onClose={close} />
       <Tabs label="Step panel" tabs={tabs} value={shown} onChange={setTab} className="panel-tabs" />
       {/* Viewers read the settings; a disabled fieldset disables every control inside it. */}

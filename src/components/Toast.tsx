@@ -1,8 +1,10 @@
-// Fluent-style toasts, top-right: intent icon, message and a close button. Errors stay until dismissed and are
-// announced at once; confirmations go after a few seconds, never while hovered or focused.
+// Fluent-style toasts, bottom-right (clear of page and dialog headers): intent icon, message and a close button.
+// Errors stay until dismissed and are announced at once; confirmations go after a few seconds, never while hovered
+// or focused. They render outside the app root, so they stay readable and dismissable while a dialog makes it inert.
 
 import { CircleCheck, CircleX, Info, X } from 'lucide-react';
 import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 type Kind = 'success' | 'error' | 'info';
 interface ToastItem {
@@ -65,6 +67,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
+      {createPortal(
       <div className="toasts">
         {/* Errors are announced at once (assertive); confirmations wait their turn (polite). */}
         <div aria-live="assertive" className="toast-region">
@@ -77,7 +80,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <ToastView key={t.id} toast={t} onDismiss={dismiss} />
           ))}
         </div>
-      </div>
+      </div>,
+      document.body,
+      )}
     </ToastContext.Provider>
   );
 }

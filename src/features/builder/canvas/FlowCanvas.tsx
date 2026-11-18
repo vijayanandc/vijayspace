@@ -113,6 +113,8 @@ function Canvas() {
     if ((e.key === 'Delete' || e.key === 'Backspace') && selected && selected !== TRIGGER_ID) {
       e.preventDefault();
       deleteStep(selected);
+      // The card is gone: keep focus on the canvas rather than losing it to the page.
+      ref.current?.focus();
     }
     if (e.key === 'Escape') {
       select(null);
@@ -130,6 +132,7 @@ function Canvas() {
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable
+        edgesFocusable={false}
         deleteKeyCode={null}
         fitView
         fitViewOptions={FIT_VIEW}

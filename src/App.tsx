@@ -5,7 +5,7 @@ import { lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AuthRoot } from './features/auth';
-import { Layout } from './features/shell';
+import { Layout, NotFoundPage } from './features/shell';
 
 const BuilderPage = lazy(() => import('./features/builder').then((m) => ({ default: m.BuilderPage })));
 const ConnectionCallbackPage = lazy(() => import('./features/connections').then((m) => ({ default: m.ConnectionCallbackPage })));
@@ -32,7 +32,7 @@ export function App() {
           <Route path="/history/:executionId" element={<ExecutionPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/settings/platform" element={<PlatformPage />} />
-          <Route path="*" element={<Navigate to="/flows" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
     </AuthRoot>

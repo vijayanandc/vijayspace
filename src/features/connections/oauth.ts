@@ -28,8 +28,10 @@ export function signInUrlAllowed(url: string, here: string = window.location.hre
   if (!url.trim()) return false;
   try {
     const target = new URL(url, here);
-    if (target.protocol === 'https:' || target.origin === new URL(here).origin) return true;
-    return target.protocol === 'http:' && LOOPBACK.has(target.hostname);
+    const page = new URL(here);
+    if (target.protocol === 'https:' || target.origin === page.origin) return true;
+    // A plain-http sign-in page (a test double) only for a client that is itself running on this machine.
+    return target.protocol === 'http:' && LOOPBACK.has(target.hostname) && LOOPBACK.has(page.hostname);
   } catch {
     return false;
   }

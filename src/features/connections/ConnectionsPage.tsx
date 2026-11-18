@@ -14,6 +14,7 @@ import { SortHeader } from '../../components/Table';
 import { type SortState, nextSort, sortRows } from '../../lib/sort';
 import { ConnectionDialog } from './ConnectionDialog';
 import { ConnectionRow } from './ConnectionRow';
+import { EditConnectionDialog } from './EditConnectionDialog';
 import { LimitsDialog } from './LimitsDialog';
 import { can, useRole } from '../auth';
 
@@ -26,6 +27,7 @@ export function ConnectionsPage() {
   const [app, setApp] = useState('');
   const [sort, setSort] = useState<SortState<Column>>({ key: 'name', dir: 'asc' });
   const [limitsFor, setLimitsFor] = useState<Connection | null>(null);
+  const [editing, setEditing] = useState<Connection | null>(null);
   const connections = useConnections();
   const usage = useConnectionUsage();
   const { data: manifests = [] } = useConnectors();
@@ -50,7 +52,7 @@ export function ConnectionsPage() {
           title="Connections"
           meta={
             <>
-              {all.length} item{all.length === 1 ? '' : 's'} · <ShieldCheck size={12} aria-hidden="true" /> Credentials are stored encrypted and never shown again
+              {visible.length === all.length ? `${all.length} item${all.length === 1 ? '' : 's'}` : `${visible.length} of ${all.length}`} · <ShieldCheck size={12} aria-hidden="true" /> Credentials are stored encrypted and never shown again
             </>
           }
           actions={
@@ -116,13 +118,14 @@ export function ConnectionsPage() {
             </thead>
             <tbody>
               {rows.map((c) => (
-                <ConnectionRow key={c.id} connection={c} manifest={manifests.find((m) => m.key === c.connector)} usage={usageOf(c.id)} onLimits={() => setLimitsFor(c)} />
+                <ConnectionRow key={c.id} connection={c} manifest={manifests.find((m) => m.key === c.connector)} usage={usageOf(c.id)} onLimits={() => setLimitsFor(c)} onEdit={() => setEditing(c)} />
               ))}
             </tbody>
           </table>
         )}
       </section>
       <ConnectionDialog open={creating} onClose={() => setCreating(false)} />
+      <EditConnectionDialog connection={editing} manifest={manifests.find((m) => m.key === editing?.connector)} onClose={() => setEditing(null)} />
       <LimitsDialog connection={limitsFor} appName={limitsFor ? appName(limitsFor.connector) : ''} onClose={() => setLimitsFor(null)} />
     </div>
   );

@@ -16,13 +16,13 @@ const execution = (hidden: boolean): ExecutionDetail => ({
   payloads_hidden: hidden,
 });
 
-function open(hidden: boolean, path = '/history/exe_1') {
+function open(hidden: boolean, path = '/history/exe_1', patch: Partial<ExecutionDetail> = {}) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: RequestInfo | URL) =>
       String(url).endsWith('/log')
         ? new Response(JSON.stringify({ truncated: false, entries: [{ at: '2026-11-18T10:00:00Z', level: 'info', kind: 'run', step_key: null, attempt: null, message: 'Run queued (live)', details: null }] }))
-        : new Response(JSON.stringify(execution(hidden))),
+        : new Response(JSON.stringify({ ...execution(hidden), ...patch })),
     ),
   );
   render(
@@ -62,5 +62,25 @@ describe('execution page', () => {
     open(false);
     expect(await screen.findByRole('button', { name: /^Payload/ })).toBeInTheDocument();
     expect(screen.queryByText(/Run data is hidden/)).not.toBeInTheDocument();
+  });
+
+  it('shows a cancelled run as information, not an error, and names the tab', async () => {
+    open(false, '/history/exe_1', { status: 'cancelled', error_code: 'execution.cancelled', error_message: 'Cancelled by a user' });
+    expect((await screen.findByText('Cancelled by a user')).closest('.message-bar')).toHaveClass('message-info');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.title).toBe('Orders · Execution · Weft');
+  });
+
+  it('says a re-run of a test run tests the same draft again', async () => {
+    open(false, '/history/exe_1', { mode: 'test', status: 'failed' });
+    const rerun = await screen.findByRole('button', { name: 'Re-run' });
+    expect(rerun).toHaveAttribute('title', expect.stringMatching(/same test again: same data, same draft version/));
+  });
+
+  it('offers nothing to open or run again for a run of a deleted flow', async () => {
+    open(false, '/history/exe_1', { flow_name: '', status: 'failed' });
+    expect(await screen.findByRole('heading', { name: /Deleted flow/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open flow' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Re-run' })).not.toBeInTheDocument();
   });
 });

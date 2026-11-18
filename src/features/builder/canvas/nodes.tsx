@@ -11,7 +11,7 @@ import { isScriptStep } from '../../../domain/script';
 import type { BuilderNode } from '../model/layout';
 import { TRIGGER_ID } from '../model/paths';
 import { sameList } from '../../../domain/tree';
-import { type NodeLabel, stepLabel, triggerLabel } from './labels';
+import { type NodeLabel, insertLabel, stepLabel, triggerLabel } from './labels';
 
 function Handles() {
   return (
@@ -155,7 +155,7 @@ export function InsertNodeView({ data }: NodeProps<BuilderNode>) {
       onKeyDown={onKeyDown}
       role="button"
       tabIndex={0}
-      aria-label="Insert a step here"
+      aria-label={insertLabel(point)}
       aria-pressed={active}
       title="Drop a step here, or click and then pick from the palette"
     >

@@ -16,7 +16,7 @@
   --stroke-accessible: #8a8a8a;
   --text: #242424;
   --text-2: #616161;
-  --text-3: #8a8a8a;
+  --text-3: #707070; /* 4.9:1 on white: AA for small text */
   --text-disabled: #bdbdbd;
 
   /* Brand */

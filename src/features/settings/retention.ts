@@ -13,10 +13,13 @@ export interface RetentionForm {
   days: string;
 }
 
+/** The days shown for a stored setting: one above the cap (saved before it existed) acts as the cap. */
+const capped = (days: number) => String(Math.min(days, MAX_RETENTION_DAYS));
+
 export function retentionForm(org: Pick<Org, 'retention_days' | 'retention_days_effective'>): RetentionForm {
   return org.retention_days === null
-    ? { useDefault: true, days: String(org.retention_days_effective) }
-    : { useDefault: false, days: String(org.retention_days) };
+    ? { useDefault: true, days: capped(org.retention_days_effective) }
+    : { useDefault: false, days: capped(org.retention_days) };
 }
 
 export function retentionError(form: RetentionForm): string | null {
