@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatDuration, updatedAgo } from './format';
+import { formatDuration, inlineCodeParts, updatedAgo } from './format';
 
 describe('format', () => {
   it('describes how long ago a list was refreshed', () => {
@@ -15,5 +15,15 @@ describe('format', () => {
   it('formats durations', () => {
     expect(formatDuration('2026-01-01T00:00:00Z', '2026-01-01T00:00:00.250Z')).toBe('250 ms');
     expect(formatDuration('2026-01-01T00:00:00Z', null)).toBe('—');
+  });
+
+  it('splits help text on backticks into code parts', () => {
+    expect(inlineCodeParts('Read `input.<name>` here')).toEqual([
+      { code: false, text: 'Read ' },
+      { code: true, text: 'input.<name>' },
+      { code: false, text: ' here' },
+    ]);
+    expect(inlineCodeParts('one ` alone')).toEqual([{ code: false, text: 'one ` alone' }]);
+    expect(inlineCodeParts('plain')).toEqual([{ code: false, text: 'plain' }]);
   });
 });

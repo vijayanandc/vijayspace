@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatLimit, limitError, limitsBody, limitsErrors, limitsForm, usageBarPercent, usageText } from './limits';
+import { formatLimit, limitError, limitsBody, limitsErrors, limitsForm, usageBarPercent, usageSummary, usageText } from './limits';
 
 describe('limits form', () => {
   it('starts from the overrides: null = app default, 0 = no limit, n = custom', () => {
@@ -45,6 +45,11 @@ describe('usage display', () => {
     expect(formatLimit(10000)).toBe('10,000');
     expect(usageText({ requests: 1234, daily_limit: 10000 })).toBe('1,234 / 10,000');
     expect(usageText({ requests: 1, daily_limit: null })).toBe('1 request');
+  });
+
+  it('summarises usage for screen readers', () => {
+    expect(usageSummary({ requests: 8500, daily_limit: 10000, percent: 85, refused: 3 })).toBe('8,500 of 10,000 requests used today (85%), 3 refused');
+    expect(usageSummary({ requests: 1, daily_limit: null, percent: null, refused: 0 })).toBe('1 request today');
   });
 
   it('clamps the bar between 0 and 100 and hides it without a budget', () => {

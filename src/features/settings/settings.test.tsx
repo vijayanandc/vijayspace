@@ -50,6 +50,20 @@ describe('settings: run history', () => {
     expect(await screen.findByText(/Now: runs are kept for 90 days\./)).toBeInTheDocument();
   });
 
+  it('asks before keeping runs for fewer days, and saves nothing when cancelled', async () => {
+    const patches = stubApi();
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
+    renderWithProviders(<SettingsPage />);
+    fireEvent.change(await screen.findByLabelText('Days to keep finished runs'), { target: { value: '7' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/^Keep runs for 7 days instead of 30\? .*cannot be undone/));
+    expect(patches).toEqual([]);
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(patches).toEqual([{ retention_days: 7 }]));
+  });
+
   it('goes back to the server default by sending null', async () => {
     const patches = stubApi({ ...baseOrg, retention_days: 7, retention_days_effective: 7 });
     renderWithProviders(<SettingsPage />);

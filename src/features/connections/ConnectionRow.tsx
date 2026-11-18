@@ -14,6 +14,7 @@ import { OverflowMenu } from '../../components/Popover';
 import { useToast } from '../../components/Toast';
 import { formatTime, relativeTime } from '../../lib/format';
 import { oauthReturnUrl } from './oauth';
+import { usageSummary } from './limits';
 import { UsageMeter } from './UsageMeter';
 
 /** The connection's non-secret auth settings (e.g. region), resent when signing in again. */
@@ -86,7 +87,7 @@ export function ConnectionRow({ connection, manifest, usage, onLimits }: RowProp
         <StatusBadge status={connection.status} />
       </td>
       <td className="col-usage">
-        <button type="button" className="usage-cell" onClick={onLimits} aria-label={`Limits and usage of ${connection.name}`} title="Limits & usage">
+        <button type="button" className="usage-cell" onClick={onLimits} aria-label={`Limits and usage of ${connection.name}: ${usage ? usageSummary(usage) : 'no usage yet'}`} title="Limits & usage">
           {usage ? <UsageMeter usage={usage} /> : <span className="cell-muted">—</span>}
         </button>
       </td>

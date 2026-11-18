@@ -10,6 +10,7 @@ import {
   lineCount,
   lineOf,
   newlineEdit,
+  normalizeNewlines,
   outdentEdit,
   parseLocated,
 } from './code';
@@ -78,6 +79,22 @@ describe('issue mapping', () => {
     const issues = [issue('/steps/0/input/code', 'a'), issue('/steps/0/input/input', 'b'), issue('/steps/0/connection_id', 'c')];
     expect(fieldIssues(issues, 'code').map((i) => i.message)).toEqual(['a']);
     expect(fieldIssues(undefined, 'code')).toEqual([]);
+  });
+
+  it('matches only the step’s own field, not a nested value with the same name', () => {
+    const issues = [
+      issue('/steps/0/input/input/code', 'an input value named code'),
+      issue('/steps/0/branches/1/steps/2/input/code', 'in a branch'),
+      issue('/steps/3/otherwise/0/input/code', 'in otherwise'),
+      issue('/steps/0/input/codex', 'another field'),
+    ];
+    expect(fieldIssues(issues, 'code').map((i) => i.message)).toEqual(['in a branch', 'in otherwise']);
+  });
+
+  it('normalises CRLF and CR line breaks to LF', () => {
+    expect(normalizeNewlines('a\r\nb\rc\nd')).toBe('a\nb\nc\nd');
+    const plain = 'x\ny';
+    expect(normalizeNewlines(plain)).toBe(plain);
   });
 
   it('places located issues on their line and clamps lines past the end', () => {

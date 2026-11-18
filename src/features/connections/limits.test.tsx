@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Connection, ConnectionUsage, ConnectorManifest, LimitsView } from '../../api/types';
 import { renderWithProviders } from '../../test/render';
 import { ConnectionsPage } from './ConnectionsPage';
+import { UsageMeter } from './UsageMeter';
 
 const appblocks: ConnectorManifest = {
   key: 'appblocks', name: 'Appblocks', description: '', icon: '', category: '', actions: [], triggers: [],
@@ -47,11 +48,21 @@ describe('connection limits and usage', () => {
   it('shows today’s usage with its level and refused requests in the table', async () => {
     stubApi();
     renderWithProviders(<ConnectionsPage />);
-    const cell = await screen.findByRole('button', { name: 'Limits and usage of Acme FSM' });
+    const cell = await screen.findByRole('button', { name: 'Limits and usage of Acme FSM: 8,500 of 10,000 requests used today (85%), 3 refused' });
     await within(cell).findByText('8,500 / 10,000');
     expect(within(cell).getByText('3 refused')).toBeInTheDocument();
     expect(cell.querySelector('.usage')).toHaveClass('usage-warning');
-    expect(within(cell).getByRole('meter')).toHaveAttribute('aria-valuenow', '8500');
+    // A button's content is presentational: no meter inside it (the name carries the numbers).
+    expect(within(cell).queryByRole('meter')).not.toBeInTheDocument();
+  });
+
+  it('keeps the dialog meter within its range when inbound events go past the budget', () => {
+    const over: ConnectionUsage = { connection_id: 'con_1', day: '2026-11-18', requests: 10_250, refused: 0, daily_limit: 10_000, percent: 102.5, level: 'critical' };
+    renderWithProviders(<UsageMeter usage={over} detailed />);
+    const meter = screen.getByRole('meter', { name: 'Daily requests used' });
+    expect(meter).toHaveAttribute('aria-valuenow', '10000');
+    expect(meter).toHaveAttribute('aria-valuemax', '10000');
+    expect(meter).toHaveAttribute('aria-valuetext', '10,250 of 10,000 requests used today (102%)');
   });
 
   it('edits the limits: app default, no limit and a validated custom value', async () => {
@@ -86,7 +97,7 @@ describe('connection limits and usage', () => {
   it('opens the dialog from the usage cell and sends null for "Use app default"', async () => {
     const api = stubApi();
     renderWithProviders(<ConnectionsPage />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Limits and usage of Acme FSM' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Limits and usage of Acme FSM: / }));
     const dialog = await screen.findByRole('dialog', { name: 'Limits & usage' });
     const perMinute = await within(dialog).findByRole('radiogroup', { name: 'Requests per minute setting' });
     fireEvent.click(await within(perMinute).findByRole('radio', { name: 'Use app default (300)' }));

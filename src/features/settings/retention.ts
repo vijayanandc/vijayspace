@@ -40,6 +40,20 @@ export function retentionChanged(form: RetentionForm, org: Pick<Org, 'retention_
   return body === null || body.retention_days !== org.retention_days;
 }
 
+/**
+ * When saving would keep runs for fewer days than now (so older finished runs get deleted), the new and the
+ * current number of days; otherwise null.
+ */
+export function retentionShrink(
+  form: RetentionForm,
+  org: Pick<Org, 'retention_days_effective' | 'retention_days_default'>,
+): { from: number; to: number } | null {
+  const body = retentionBody(form);
+  if (!body) return null;
+  const to = body.retention_days ?? org.retention_days_default;
+  return to < org.retention_days_effective ? { from: org.retention_days_effective, to } : null;
+}
+
 /** "Runs are kept for 30 days" (for page meta lines). */
 export function retentionNote(days: number): string {
   return `Runs are kept for ${days} day${days === 1 ? '' : 's'}`;

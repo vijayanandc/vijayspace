@@ -1,5 +1,7 @@
 import { type ReactNode, useId } from 'react';
 
+import { inlineCodeParts } from '../lib/format';
+
 interface Props {
   label: string;
   required?: boolean;
@@ -22,7 +24,11 @@ export function Field({ label, required, help, error, children, actions }: Props
         {actions}
       </div>
       {children(id)}
-      {help && <div className="field-help">{help}</div>}
+      {help && (
+        <div className="field-help">
+          {inlineCodeParts(help).map((p, i) => (p.code ? <code key={i}>{p.text}</code> : <span key={i}>{p.text}</span>))}
+        </div>
+      )}
       {error && <div className="field-error-text" role="alert">{error}</div>}
     </div>
   );

@@ -46,7 +46,7 @@ export function TestStepBox({ stepKey }: { stepKey: string }) {
     },
   });
   const output: JsonValue | undefined = run.data?.output;
-  const { logs, rest } = splitLogs(output);
+  const { logs, rest } = script ? splitLogs(output) : { logs: [], rest: output };
   return (
     <div className="panel-body">
       <section className="panel-section">

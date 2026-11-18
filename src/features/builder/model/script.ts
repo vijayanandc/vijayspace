@@ -38,9 +38,11 @@ export const SCRIPT_EXAMPLES: ScriptExample[] = [
     description: 'Total price × quantity over an array',
     inputs: ['items'],
     code: `// Sum line items. Map an array (e.g. the order's items) to the input value "items".
+// Prices and quantities may arrive as numbers or as text ("12.50"): num() reads both.
+fn num(v) { if type_of(v) == "string" { parse_float(v) } else { v.to_float() } }
 let total = 0.0;
 for item in input.items {
-    total += item.price.to_float() * item.qty.to_float();
+    total += num(item.price) * num(item.qty);
 }
 print(\`\${input.items.len()} item(s)\`);
 #{ total: total, is_big: total > 100.0 }
@@ -91,6 +93,17 @@ export function withExample(input: JsonObject, example: ScriptExample): JsonObje
 export function hasOwnCode(code: JsonValue | undefined): boolean {
   if (typeof code !== 'string' || code.trim() === '') return false;
   return code !== STARTER_SCRIPT && !SCRIPT_EXAMPLES.some((e) => e.code === code);
+}
+
+/**
+ * True for a step run of a custom function. Step runs do not record their app, so this reads the rendered input,
+ * which for `core.script` is `{code: "…", input: {…}}`.
+ */
+export function isScriptRun(run: { kind: string; input: JsonValue }): boolean {
+  const input = run.input;
+  if (run.kind !== 'action' || !input || typeof input !== 'object' || Array.isArray(input)) return false;
+  const values = input.input;
+  return typeof input.code === 'string' && (values === undefined || (typeof values === 'object' && values !== null && !Array.isArray(values)));
 }
 
 /** Splits a script's output into its `print` lines and the rest. */

@@ -5,7 +5,7 @@ import { CircleX } from 'lucide-react';
 import { type KeyboardEvent, useLayoutEffect, useMemo, useRef } from 'react';
 
 import type { Issue } from '../../../api/types';
-import { type CodeEdit, applyEdit, codeProblems, formatLocation, indentEdit, lineCount, newlineEdit, outdentEdit } from '../model/code';
+import { type CodeEdit, applyEdit, codeProblems, formatLocation, indentEdit, lineCount, newlineEdit, normalizeNewlines, outdentEdit } from '../model/code';
 
 interface Props {
   id: string;
@@ -23,8 +23,29 @@ const LINE_H = 18;
 const PAD_Y = 8;
 
 const plainKey = (e: KeyboardEvent) => !e.ctrlKey && !e.altKey && !e.metaKey;
+/** Pressing a modifier alone (e.g. Shift for Shift+Tab) keeps "Escape, then Tab leaves" armed. */
+const MODIFIERS = new Set(['Shift', 'Control', 'Alt', 'Meta']);
 
-export function CodeEditor({ id, value, onChange, issues = [], placeholder, rows = 12 }: Props) {
+/** Line numbers; re-rendered only when the line count or the lines with problems change, not on every keystroke. */
+function Gutter({ count, errorKey }: { count: number; errorKey: string }) {
+  const errors = useMemo(() => new Set(errorKey.split(',').filter(Boolean).map(Number)), [errorKey]);
+  return useMemo(
+    () => (
+      <>
+        {Array.from({ length: count }, (_, i) => (
+          <div key={i} className={`code-ln${errors.has(i + 1) ? ' code-ln-error' : ''}`} data-line={i + 1}>
+            {i + 1}
+          </div>
+        ))}
+      </>
+    ),
+    [count, errors],
+  );
+}
+
+export function CodeEditor({ id, value: raw, onChange, issues = [], placeholder, rows = 12 }: Props) {
+  // Stored code may have CRLF line breaks; the textarea only ever reports LF, so offsets use the LF form.
+  const value = useMemo(() => normalizeNewlines(raw), [raw]);
   const ref = useRef<HTMLTextAreaElement>(null);
   const gutter = useRef<HTMLDivElement>(null);
   const marks = useRef<HTMLDivElement>(null);
@@ -32,11 +53,12 @@ export function CodeEditor({ id, value, onChange, issues = [], placeholder, rows
   // Escape, then Tab, leaves the editor (keyboard users are never trapped).
   const tabLeaves = useRef(false);
   const { problems, general } = useMemo(() => codeProblems(issues, value), [issues, value]);
-  const errorLines = new Set(problems.map((p) => p.line));
+  const errorLines = [...new Set(problems.map((p) => p.line))].sort((a, b) => a - b);
   const count = lineCount(value);
   // The gutter is absolutely placed (the textarea alone sets the height), so its width is set here.
   const gutterWidth = Math.max(2, String(count).length) * 8 + 18;
   const messagesId = `${id}-problems`;
+  const hintId = `${id}-hint`;
   const hasProblems = problems.length > 0 || general.length > 0;
 
   useLayoutEffect(() => {
@@ -73,6 +95,7 @@ export function CodeEditor({ id, value, onChange, issues = [], placeholder, rows
       tabLeaves.current = true;
       return;
     }
+    if (MODIFIERS.has(e.key)) return;
     const leaving = tabLeaves.current;
     tabLeaves.current = false;
     if (e.key === 'Tab' && plainKey(e) && !leaving) {
@@ -89,16 +112,12 @@ export function CodeEditor({ id, value, onChange, issues = [], placeholder, rows
       <div className={`code-editor${hasProblems ? ' code-editor-invalid' : ''}`} style={{ paddingLeft: gutterWidth }}>
         <div className="code-gutter" aria-hidden="true" style={{ width: gutterWidth }}>
           <div ref={gutter} className="code-gutter-lines">
-            {Array.from({ length: count }, (_, i) => (
-              <div key={i} className={`code-ln${errorLines.has(i + 1) ? ' code-ln-error' : ''}`} data-line={i + 1}>
-                {i + 1}
-              </div>
-            ))}
+            <Gutter count={count} errorKey={errorLines.join(',')} />
           </div>
         </div>
         <div className="code-main">
           <div ref={marks} className="code-marks" aria-hidden="true">
-            {[...errorLines].map((line) => (
+            {errorLines.map((line) => (
               <div key={line} className="code-mark" style={{ top: PAD_Y + (line - 1) * LINE_H, height: LINE_H }} />
             ))}
           </div>
@@ -115,8 +134,8 @@ export function CodeEditor({ id, value, onChange, issues = [], placeholder, rows
             autoComplete="off"
             autoCorrect="off"
             aria-invalid={hasProblems || undefined}
-            aria-describedby={hasProblems ? messagesId : undefined}
-            onChange={(e) => onChange(e.target.value)}
+            aria-describedby={hasProblems ? `${messagesId} ${hintId}` : hintId}
+            onChange={(e) => onChange(normalizeNewlines(e.target.value))}
             onKeyDown={onKeyDown}
             onScroll={syncScroll}
           />
@@ -140,7 +159,9 @@ export function CodeEditor({ id, value, onChange, issues = [], placeholder, rows
           ))}
         </ul>
       )}
-      <div className="code-hint">Tab indents · Shift+Tab outdents · Esc then Tab leaves the editor</div>
+      <div id={hintId} className="code-hint">
+        Tab indents · Shift+Tab outdents · Esc, then Tab or Shift+Tab, leaves the editor
+      </div>
     </div>
   );
 }

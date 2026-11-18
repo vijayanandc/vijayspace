@@ -40,7 +40,7 @@
 .script-intro { margin: -6px 0 10px; }
 .script-help-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .script-help-body { margin: 4px 0 10px; padding: 12px; border: 1px solid var(--stroke); border-radius: var(--radius-lg); background: var(--surface-subtle); font-size: 12.5px; line-height: 18px; }
-.script-help-body code { padding: 0 3px; border-radius: 3px; background: var(--surface-sunken); font: 11.5px/16px var(--mono); }
+.script-help-body code, .field-help code { padding: 0 3px; border-radius: 3px; background: var(--surface-sunken); font: 11.5px/16px var(--mono); }
 .script-rules { display: grid; grid-template-columns: 76px 1fr; gap: 6px 10px; margin: 0 0 12px; }
 .script-rules dt { color: var(--text-2); font-weight: 600; }
 .script-rules dd { margin: 0; }

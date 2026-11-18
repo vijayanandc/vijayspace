@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -63,8 +63,15 @@ describe('custom function panel', () => {
     expect(document.querySelector('[data-line="2"]')).toHaveClass('code-ln-error');
     expect(document.querySelector('[data-line="1"]')).not.toHaveClass('code-ln-error');
     expect(document.querySelectorAll('.code-mark')).toHaveLength(1);
-    const problems = document.getElementById(editor.getAttribute('aria-describedby') ?? '');
-    expect(problems).toHaveTextContent("Line 2, column 9: Unexpected ';'");
+    const [problemsId, hintId] = (editor.getAttribute('aria-describedby') ?? '').split(' ');
+    expect(document.getElementById(problemsId ?? '')).toHaveTextContent("Line 2, column 9: Unexpected ';'");
+    expect(document.getElementById(hintId ?? '')).toHaveTextContent(/Esc, then Tab or Shift\+Tab, leaves the editor/);
+  });
+
+  it('does not put an issue of an input value named “code” on the editor', () => {
+    renderScript('#{ x: 1 }', [{ severity: 'error', path: '/steps/0/input/input/code', code: 'field.invalid', message: 'line 1: not the editor' }]);
+    expect(screen.getByLabelText(/^Code/)).not.toHaveAttribute('aria-invalid');
+    expect(document.querySelectorAll('.code-ln-error')).toHaveLength(0);
   });
 
   it('inserts an example and the input values it reads', () => {
@@ -73,6 +80,15 @@ describe('custom function panel', () => {
     fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /Sum line items/ }));
     expect(input()).toMatchObject({ code: SCRIPT_EXAMPLES[0]?.code, input: { items: '' } });
     expect(screen.getByLabelText('Input values key 1')).toHaveValue('items');
+  });
+
+  it('continues in the editor, at the top, after inserting an example', async () => {
+    renderScript('');
+    fireEvent.click(screen.getByRole('button', { name: /Insert example/ }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /Format a date/ }));
+    const editor = screen.getByLabelText(/^Code/) as HTMLTextAreaElement;
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    expect(editor.selectionStart).toBe(0);
   });
 
   it('explains input, context, output, throw and print, and lists the helpers', () => {
@@ -123,5 +139,25 @@ describe('CodeEditor keys', () => {
     const leave = fireEvent.keyDown(ta, { key: 'Tab' });
     expect(leave).toBe(true); // not prevented: focus may move on
     expect(ta.value).toBe('if x {\n  y\n  ');
+  });
+
+  it('lets Esc then Shift+Tab leave too (pressing Shift alone keeps the way out open)', () => {
+    renderWithProviders(<Editor initial={'a'} />);
+    const ta = document.getElementById('code') as HTMLTextAreaElement;
+    fireEvent.keyDown(ta, { key: 'Escape' });
+    fireEvent.keyDown(ta, { key: 'Shift', shiftKey: true });
+    expect(fireEvent.keyDown(ta, { key: 'Tab', shiftKey: true })).toBe(true);
+    expect(fireEvent.keyDown(ta, { key: 'Tab' })).toBe(false); // armed once: Tab indents again
+  });
+
+  it('shows CRLF code with LF line breaks, so lines and offsets line up', () => {
+    const changes: string[] = [];
+    renderWithProviders(<CodeEditor id="code" value={'let a = 1;\r\nlet b = 2;\r\n'} onChange={(v) => changes.push(v)} />);
+    const ta = document.getElementById('code') as HTMLTextAreaElement;
+    expect(ta.value).toBe('let a = 1;\nlet b = 2;\n');
+    expect(document.querySelectorAll('.code-ln')).toHaveLength(3);
+    ta.setSelectionRange(10, 10);
+    fireEvent.keyDown(ta, { key: 'Enter' });
+    expect(changes.at(-1)).toBe('let a = 1;\n\nlet b = 2;\n');
   });
 });

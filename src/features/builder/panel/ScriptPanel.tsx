@@ -1,5 +1,7 @@
 // "Configure" tab of a custom function (`core.script`): help and examples, then the code editor and input values.
 
+import { useRef } from 'react';
+
 import type { ActionStep, JsonObject } from '../../../api/types';
 import { MessageBar } from '../../../components/MessageBar';
 import { useBuilder } from '../BuilderContext';
@@ -15,9 +17,18 @@ export function ScriptPanel({ step }: { step: ActionStep }) {
   const variables = buildVariableTree(def, step.key, manifests, flow.trigger?.sample);
   const input: JsonObject = step.input ?? {};
   const setInput = (next: JsonObject, tag?: string) => apply(updateStep(def, step.key, (s) => (s.type === 'action' ? { ...s, input: next } : s)), tag);
+  const form = useRef<HTMLElement>(null);
   const insert = (example: ScriptExample) => {
     if (hasOwnCode(input.code) && !window.confirm(`Replace your code with the “${example.label}” example? You can undo this.`)) return;
     setInput(withExample(input, example));
+    // The menu item that had focus is gone: continue in the editor, at the top of the new code.
+    requestAnimationFrame(() => {
+      const editor = form.current?.querySelector<HTMLTextAreaElement>('textarea.code-input');
+      if (!editor) return;
+      editor.focus();
+      editor.setSelectionRange(0, 0);
+      editor.scrollTop = 0;
+    });
   };
 
   if (!spec) {
@@ -34,7 +45,7 @@ export function ScriptPanel({ step }: { step: ActionStep }) {
         <p className="field-help script-intro">{spec.description}</p>
         <ScriptHelp stepKey={step.key} onInsert={insert} />
       </section>
-      <section className="panel-section">
+      <section className="panel-section" ref={form}>
         <DynamicForm
           fields={spec.fields}
           values={input}

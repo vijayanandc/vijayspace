@@ -80,6 +80,15 @@ export function usageBarPercent(u: Pick<ConnectionUsage, 'requests' | 'daily_lim
   return Math.max(0, Math.min(100, pct));
 }
 
+/** Spoken summary: "1,234 of 10,000 requests used today (12%), 3 refused" (or "1 request today"). */
+export function usageSummary(u: Pick<ConnectionUsage, 'requests' | 'daily_limit' | 'refused' | 'percent'>): string {
+  const used = u.requests.toLocaleString('en-US');
+  const base = u.daily_limit
+    ? `${used} of ${u.daily_limit.toLocaleString('en-US')} requests used today (${Math.floor(u.percent ?? (u.requests / u.daily_limit) * 100)}%)`
+    : `${used} request${u.requests === 1 ? '' : 's'} today`;
+  return u.refused > 0 ? `${base}, ${u.refused.toLocaleString('en-US')} refused` : base;
+}
+
 /** "1,234 / 10,000" (or "1,234 requests" without a budget). */
 export function usageText(u: Pick<ConnectionUsage, 'requests' | 'daily_limit'>): string {
   const used = u.requests.toLocaleString('en-US');

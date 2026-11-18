@@ -56,7 +56,7 @@ function scriptSubtitle(code: unknown): string {
 
 export function stepLabel(s: Step, manifests: ConnectorManifest[]): NodeLabel {
   if (isScriptStep(s)) {
-    return { title: s.name || 'Custom function', subtitle: scriptSubtitle(s.input.code), kind: 'Custom function', icon: 'logic:custom_function', iconName: 'Custom function' };
+    return { title: s.name || 'Custom function', subtitle: scriptSubtitle(s.input?.code), kind: 'Custom function', icon: 'logic:custom_function', iconName: 'Custom function' };
   }
   if (s.type === 'action') {
     const m = manifests.find((x) => x.key === s.connector);

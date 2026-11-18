@@ -9,7 +9,7 @@ import { JsonView } from '../../components/JsonView';
 import { LogBlock } from '../../components/LogBlock';
 import { formatDuration, formatTime } from '../../lib/format';
 import { formatLocation } from '../builder/model/code';
-import { scriptError, splitLogs } from '../builder/model/script';
+import { isScriptRun, scriptError, splitLogs } from '../builder/model/script';
 import { describeRun, groupRuns } from './timeline';
 
 const ICONS: Record<StepRun['status'], LucideIcon> = {
@@ -23,7 +23,8 @@ const ICONS: Record<StepRun['status'], LucideIcon> = {
 
 /** A run's output (with custom function `print` lines as a log) and its error (scripts: with line and column). */
 function RunResult({ run }: { run: StepRun }) {
-  const { logs, rest } = splitLogs(run.output ?? undefined);
+  // Only a custom function's `_logs` are its print lines; another app's output keeps every field.
+  const { logs, rest } = isScriptRun(run) ? splitLogs(run.output ?? undefined) : { logs: [], rest: run.output };
   const script = scriptError(run.error);
   return (
     <>

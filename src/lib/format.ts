@@ -43,3 +43,10 @@ export function updatedAgo(at: number, now: number = Date.now()): string {
   if (s < 86_400) return `${Math.round(s / 3600)} hours ago`;
   return `${Math.round(s / 86_400)} days ago`;
 }
+
+/** Splits help text on `backticks` into plain and code parts (an unpaired backtick stays as text). */
+export function inlineCodeParts(text: string): { code: boolean; text: string }[] {
+  const parts = text.split('`');
+  if (parts.length % 2 === 0) return [{ code: false, text }];
+  return parts.map((t, i) => ({ code: i % 2 === 1, text: t })).filter((p) => p.text !== '');
+}

@@ -12,7 +12,7 @@ import { Button } from '../../components/Button';
 import { ErrorBox } from '../../components/Empty';
 import { MessageBar } from '../../components/MessageBar';
 import { useToast } from '../../components/Toast';
-import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, retentionBody, retentionChanged, retentionError, retentionForm, retentionNote } from './retention';
+import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, retentionBody, retentionChanged, retentionError, retentionForm, retentionNote, retentionShrink } from './retention';
 
 export function RetentionSettings({ org }: { org: Org }) {
   const qc = useQueryClient();
@@ -38,7 +38,16 @@ export function RetentionSettings({ org }: { org: Org }) {
   const onSave = () => {
     setSubmitted(true);
     const body = retentionBody(form);
-    if (body) save.mutate(body);
+    if (!body) return;
+    const shrink = retentionShrink(form, org);
+    if (
+      shrink &&
+      !window.confirm(
+        `Keep runs for ${shrink.to} day${shrink.to === 1 ? '' : 's'} instead of ${shrink.from}? Finished runs older than that are deleted within 15 minutes. This cannot be undone.`,
+      )
+    )
+      return;
+    save.mutate(body);
   };
   const daysId = 'retention-days';
   const errorId = `${daysId}-error`;

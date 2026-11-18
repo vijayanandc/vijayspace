@@ -36,6 +36,11 @@ export function lineOf(value: string, offset: number): number {
   return n;
 }
 
+/** CRLF / CR → LF. A textarea reports LF line breaks, so offsets only match a normalised value. */
+export function normalizeNewlines(value: string): string {
+  return value.includes('\r') ? value.replace(/\r\n?/g, '\n') : value;
+}
+
 export function lineCount(value: string): number {
   return value.split('\n').length;
 }
@@ -104,9 +109,15 @@ export function formatLocation(line: number | undefined, column: number | undefi
   return `Line ${line}${column !== undefined ? `, column ${column}` : ''}: ${text}`;
 }
 
-/** Issues on one input field of a step (`…/input/<key>`). */
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Issues on one top-level input field of a step: `/steps/N/input/<key>` (or `…/otherwise/N/input/<key>` inside a
+ * decision). A nested value with the same name, such as `/steps/0/input/input/code`, is not this field.
+ */
 export function fieldIssues(issues: Issue[] | undefined, key: string): Issue[] {
-  return (issues ?? []).filter((i) => i.path.endsWith(`/input/${key}`));
+  const own = new RegExp(`/(?:steps|otherwise)/\\d+/input/${escapeRegExp(key)}$`);
+  return (issues ?? []).filter((i) => own.test(i.path));
 }
 
 /** Lines holding template markers (`{{`, `{%`), which code may not contain. */
