@@ -103,7 +103,8 @@ export function isScriptRun(run: { kind: string; input: JsonValue }): boolean {
   const input = run.input;
   if (run.kind !== 'action' || !input || typeof input !== 'object' || Array.isArray(input)) return false;
   const values = input.input;
-  return typeof input.code === 'string' && (values === undefined || (typeof values === 'object' && values !== null && !Array.isArray(values)));
+  // `input` is a key/value field: an object, or absent / null when no values were added.
+  return typeof input.code === 'string' && (values === undefined || values === null || (typeof values === 'object' && !Array.isArray(values)));
 }
 
 /** Splits a script's output into its `print` lines and the rest. */

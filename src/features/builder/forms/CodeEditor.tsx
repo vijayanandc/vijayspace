@@ -137,6 +137,9 @@ export function CodeEditor({ id, value: raw, onChange, issues = [], placeholder,
             aria-describedby={hasProblems ? `${messagesId} ${hintId}` : hintId}
             onChange={(e) => onChange(normalizeNewlines(e.target.value))}
             onKeyDown={onKeyDown}
+            // "Escape, then Tab leaves" applies to the next key press in the editor only.
+            onBlur={() => (tabLeaves.current = false)}
+            onMouseDown={() => (tabLeaves.current = false)}
             onScroll={syncScroll}
           />
         </div>

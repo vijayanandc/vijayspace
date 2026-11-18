@@ -59,6 +59,7 @@ describe('custom function runs in history', () => {
   it('recognises a custom function run by its rendered input', () => {
     expect(isScriptRun({ kind: 'action', input: { code: '#{}', input: { a: 1 } } })).toBe(true);
     expect(isScriptRun({ kind: 'action', input: { code: '#{}' } })).toBe(true);
+    expect(isScriptRun({ kind: 'action', input: { code: '#{}', input: null } })).toBe(true);
     expect(isScriptRun({ kind: 'action', input: { url: 'https://x', method: 'GET' } })).toBe(false);
     expect(isScriptRun({ kind: 'action', input: { code: 'ABC', input: 'text' } })).toBe(false);
     expect(isScriptRun({ kind: 'decision', input: { code: '#{}' } })).toBe(false);

@@ -87,7 +87,7 @@ export function ConnectionRow({ connection, manifest, usage, onLimits }: RowProp
         <StatusBadge status={connection.status} />
       </td>
       <td className="col-usage">
-        <button type="button" className="usage-cell" onClick={onLimits} aria-label={`Limits and usage of ${connection.name}: ${usage ? usageSummary(usage) : 'no usage yet'}`} title="Limits & usage">
+        <button type="button" className="usage-cell" onClick={onLimits} aria-label={usage ? `Limits and usage of ${connection.name}: ${usageSummary(usage)}` : `Limits and usage of ${connection.name}`} title="Limits & usage">
           {usage ? <UsageMeter usage={usage} /> : <span className="cell-muted">—</span>}
         </button>
       </td>

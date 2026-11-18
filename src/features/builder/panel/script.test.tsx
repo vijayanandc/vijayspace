@@ -148,6 +148,9 @@ describe('CodeEditor keys', () => {
     fireEvent.keyDown(ta, { key: 'Shift', shiftKey: true });
     expect(fireEvent.keyDown(ta, { key: 'Tab', shiftKey: true })).toBe(true);
     expect(fireEvent.keyDown(ta, { key: 'Tab' })).toBe(false); // armed once: Tab indents again
+    fireEvent.keyDown(ta, { key: 'Escape' });
+    fireEvent.blur(ta);
+    expect(fireEvent.keyDown(ta, { key: 'Tab' })).toBe(false); // leaving the editor disarms it
   });
 
   it('shows CRLF code with LF line breaks, so lines and offsets line up', () => {
