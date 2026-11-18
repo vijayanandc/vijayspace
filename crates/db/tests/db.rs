@@ -229,3 +229,48 @@ async fn a_send_counts_against_every_quota_only_when_all_have_room() {
     );
     drop_db(t).await;
 }
+
+#[tokio::test]
+async fn claims_follow_queue_priority_without_starving_a_queue() {
+    let t = db().await;
+    let mut jobs = Vec::new();
+    for i in 0..5 {
+        jobs.push(NewJob {
+            queue: "executions".into(),
+            kind: "run_execution".into(),
+            ..job(&format!("e{i}"))
+        });
+    }
+    for i in 0..2 {
+        jobs.push(job(&format!("t{i}")));
+    }
+    for j in &jobs {
+        t.store.enqueue(j, t0()).await.unwrap();
+    }
+    let claimed = t
+        .store
+        .claim(
+            &["executions", "triggers"],
+            "w",
+            3,
+            t0(),
+            t0() + Duration::seconds(90),
+        )
+        .await
+        .unwrap();
+    let queues: Vec<&str> = claimed.iter().map(|c| c.queue.as_str()).collect();
+    assert_eq!(queues.len(), 3);
+    assert_eq!(
+        queues.iter().filter(|q| **q == "executions").count(),
+        2,
+        "{queues:?}"
+    );
+    assert_eq!(
+        queues.iter().filter(|q| **q == "triggers").count(),
+        1,
+        "the lower queue still gets a turn"
+    );
+    let ids: std::collections::HashSet<_> = claimed.iter().map(|c| c.id).collect();
+    assert_eq!(ids.len(), 3, "no job is claimed twice");
+    drop_db(t).await;
+}

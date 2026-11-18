@@ -51,6 +51,11 @@ pub async fn connect(url: &str, max_connections: u32) -> Result<MySqlPool, sqlx:
     MySqlPoolOptions::new()
         .max_connections(max_connections)
         .acquire_timeout(Duration::from_secs(10))
+        // No ping before every query (a round trip each): connections are recycled instead, and a broken one
+        // fails its query, which callers already retry or report.
+        .test_before_acquire(false)
+        .max_lifetime(Duration::from_mins(30))
+        .idle_timeout(Duration::from_mins(10))
         .after_connect(|conn, _meta| {
             Box::pin(async move {
                 conn.execute("SET time_zone = '+00:00'").await?;

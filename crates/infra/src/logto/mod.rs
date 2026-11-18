@@ -23,7 +23,7 @@ use weft_app::{
 };
 use weft_domain::error_codes;
 
-use cache::{TokenCache, token_key};
+use cache::{RejectedTokens, TokenCache, token_key};
 
 /// Longest token accepted (anything longer is not a Logto token).
 const MAX_TOKEN_BYTES: usize = 8 * 1024;
@@ -65,7 +65,15 @@ pub struct LogtoVerifier {
     clock: Arc<dyn Clock>,
     jwks: jwt::Jwks,
     cache: TokenCache,
+    rejected: RejectedTokens,
+    /// Calls to Logto in flight at once: a flood of unknown tokens waits here instead of fanning out.
+    calls: tokio::sync::Semaphore,
 }
+
+/// How long a rejected token is answered locally.
+const REJECTED_SECS: i64 = 30;
+/// Concurrent token checks against Logto per process.
+const MAX_CONCURRENT_CHECKS: usize = 16;
 
 impl std::fmt::Debug for LogtoVerifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -127,6 +135,8 @@ impl LogtoVerifier {
             http,
             issuer: format!("{endpoint}/oidc"),
             cache: TokenCache::new(settings.cache_size),
+            rejected: RejectedTokens::new(settings.cache_size.max(1)),
+            calls: tokio::sync::Semaphore::new(MAX_CONCURRENT_CHECKS),
             settings,
             clock,
             jwks: jwt::Jwks::default(),
@@ -242,12 +252,24 @@ impl IdentityVerifier for LogtoVerifier {
         if let Some(identity) = self.cache.get(&key, now) {
             return Ok(Some(identity));
         }
+        if self.rejected.contains(&key, now) {
+            return Ok(None);
+        }
         let verified = if token.matches('.').count() == 2 {
             self.verify_jwt(token).await?
         } else {
+            let Ok(_permit) = self.calls.acquire().await else {
+                return Err(AppError::new(
+                    ErrorKind::BadGateway,
+                    error_codes::AUTH_UNAVAILABLE,
+                    "Sign-in checks are shutting down",
+                ));
+            };
             self.verify_opaque(token).await?
         };
         let Some((identity, expires)) = verified else {
+            self.rejected
+                .add(key, now + Duration::seconds(REJECTED_SECS));
             return Ok(None);
         };
         let ttl = Duration::from_std(self.settings.cache_ttl).unwrap_or_else(|_| Duration::zero());

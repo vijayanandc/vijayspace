@@ -53,14 +53,11 @@ async fn list(
     Acting(actor): Acting,
 ) -> ApiResult<Json<Vec<FlowSummaryDto>>> {
     let rows = uc::list_flows(&s.deps, &actor).await?;
-    let mut out = Vec::with_capacity(rows.len());
-    for row in &rows {
-        out.push(FlowSummaryDto::from_row(
-            row,
-            has_unpublished_changes(&s.deps, &row.flow).await?,
-        ));
-    }
-    Ok(Json(out))
+    Ok(Json(
+        rows.iter()
+            .map(|row| FlowSummaryDto::from_row(row, row.has_unpublished_changes))
+            .collect(),
+    ))
 }
 
 #[derive(Debug, Deserialize)]

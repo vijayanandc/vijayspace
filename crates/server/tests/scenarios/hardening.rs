@@ -163,7 +163,7 @@ async fn invitations_keep_their_rules() {
     let (status, body) = call(&app, OWNER, &org, "POST", &resend, None).await;
     assert_eq!(
         (status, body["code"].as_str()),
-        (409, Some("invitation.rate_limited"))
+        (429, Some("invitation.rate_limited"))
     );
     app.clock.advance(Duration::minutes(6));
     assert_eq!(call(&app, OWNER, &org, "POST", &resend, None).await.0, 200);

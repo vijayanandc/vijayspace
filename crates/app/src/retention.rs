@@ -57,9 +57,37 @@ pub fn history_cutoff(deps: &Deps, org: &Org, now: DateTime<Utc>) -> DateTime<Ut
     now - Duration::days(i64::from(effective_days(deps, org)))
 }
 
-/// One sweep over every org, then platform housekeeping.
+/// The sweep's lease key (32 bytes, as sync leases), held under the default org.
+const SWEEP_LEASE: &[u8; 32] = b"retention-sweep\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+
+/// One sweep over every org, then platform housekeeping. One worker sweeps at a time (a lease): several would
+/// delete the same rows and wait on each other's locks.
 pub async fn sweep(deps: &Deps) -> Result<SweepReport, AppError> {
     let now = deps.clock.now();
+    let holder = format!("sweep-{}", deps.ids.uuid().simple());
+    let lease_org = deps.config.default_org_id;
+    let leased = deps
+        .store
+        .acquire_lease(
+            lease_org,
+            SWEEP_LEASE,
+            &holder,
+            now + Duration::minutes(20),
+            now,
+        )
+        .await?;
+    if !leased {
+        return Ok(SweepReport::default());
+    }
+    let report = sweep_all(deps, now).await;
+    let _ = deps
+        .store
+        .release_lease(lease_org, SWEEP_LEASE, &holder)
+        .await;
+    report
+}
+
+async fn sweep_all(deps: &Deps, now: DateTime<Utc>) -> Result<SweepReport, AppError> {
     let mut report = SweepReport::default();
     for org in deps.store.list_orgs().await? {
         // One org's failure (e.g. a lock wait timeout) must not stop the others.
@@ -72,15 +100,31 @@ pub async fn sweep(deps: &Deps) -> Result<SweepReport, AppError> {
             deps.config.default_retention_days.clamp(MIN_DAYS, MAX_DAYS),
         ));
     let usage_before = (now - Duration::days(USAGE_DAYS)).date_naive();
-    let h = deps
-        .store
-        .housekeeping(jobs_before, now, usage_before, BATCH)
-        .await?;
-    report.dead_jobs = h.dead_jobs;
-    report.oauth_states = h.oauth_states;
-    report.sync_leases = h.sync_leases;
-    report.usage_days = h.usage_days;
-    report.invitations = h.invitations;
+    // Batches until a round comes back short (bounded), so a busy day does not leave a growing backlog.
+    for _ in 0..MAX_BATCHES {
+        let h = deps
+            .store
+            .housekeeping(jobs_before, now, usage_before, BATCH)
+            .await?;
+        report.dead_jobs += h.dead_jobs;
+        report.oauth_states += h.oauth_states;
+        report.sync_leases += h.sync_leases;
+        report.usage_days += h.usage_days;
+        report.invitations += h.invitations;
+        let most = [
+            h.dead_jobs,
+            h.oauth_states,
+            h.sync_leases,
+            h.usage_days,
+            h.invitations,
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(0);
+        if most < u64::from(BATCH) {
+            break;
+        }
+    }
     Ok(report)
 }
 

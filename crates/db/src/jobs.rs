@@ -65,31 +65,53 @@ impl JobQueue for MySqlStore {
             return Ok(Vec::new());
         }
         let mut tx = self.pool.begin().await.map_err(db_err)?;
-        let mut qb = QueryBuilder::new(
-            "SELECT id, queue, kind, payload, attempts, max_attempts FROM jobs WHERE status = 'ready' AND run_at <= ",
-        );
-        qb.push_bind(now).push(" AND queue IN (");
-        let mut sep = qb.separated(", ");
-        for q in queues {
-            sep.push_bind(*q);
-        }
-        qb.push(") ORDER BY run_at LIMIT ")
-            .push_bind(limit)
-            .push(" FOR UPDATE SKIP LOCKED");
-        let rows: Vec<JobRow> = qb
-            .build_query_as()
-            .fetch_all(&mut *tx)
-            .await
-            .map_err(db_err)?;
-        for row in &rows {
-            sqlx::query("UPDATE jobs SET status = 'running', locked_by = ?, locked_until = ?, attempts = attempts + 1, updated_at = ? WHERE id = ?")
-                .bind(worker)
-                .bind(lease_until)
+        // One queue per statement: `ix_jobs_claim (queue, status, run_at)` then yields rows in order, so only the
+        // rows taken are read and locked (an IN list over queues sorts and locks the whole due backlog).
+        // Round one takes a job of every queue that has one, so no queue starves behind another's backlog;
+        // round two fills the rest in priority order.
+        let mut rows: Vec<JobRow> = Vec::new();
+        for per_queue in [1, limit] {
+            for queue in queues {
+                let free = limit.saturating_sub(u32::try_from(rows.len()).unwrap_or(u32::MAX));
+                if free == 0 {
+                    break;
+                }
+                let taken: Vec<_> = rows
+                    .iter()
+                    .filter(|r| r.queue == *queue)
+                    .map(|r| r.id)
+                    .collect();
+                let want = per_queue.min(free) + u32::try_from(taken.len()).unwrap_or(0);
+                let found: Vec<JobRow> = sqlx::query_as(
+                    // Forced: on a small or skewed table MySQL may pick ix_jobs_lease and sort.
+                    "SELECT id, queue, kind, payload, attempts, max_attempts FROM jobs FORCE INDEX (ix_jobs_claim) \
+                     WHERE queue = ? AND status = 'ready' AND run_at <= ? \
+                     ORDER BY run_at LIMIT ? FOR UPDATE SKIP LOCKED",
+                )
+                .bind(*queue)
                 .bind(now)
-                .bind(row.id)
-                .execute(&mut *tx)
+                .bind(want)
+                .fetch_all(&mut *tx)
                 .await
                 .map_err(db_err)?;
+                // This transaction's own locks are not skipped: drop what round one already took.
+                rows.extend(found.into_iter().filter(|r| !taken.contains(&r.id)));
+            }
+        }
+        if !rows.is_empty() {
+            let mut qb = QueryBuilder::new("UPDATE jobs SET status = 'running', locked_by = ");
+            qb.push_bind(worker)
+                .push(", locked_until = ")
+                .push_bind(lease_until)
+                .push(", attempts = attempts + 1, updated_at = ")
+                .push_bind(now)
+                .push(" WHERE id IN (");
+            let mut ids = qb.separated(", ");
+            for row in &rows {
+                ids.push_bind(row.id);
+            }
+            qb.push(")");
+            qb.build().execute(&mut *tx).await.map_err(db_err)?;
         }
         tx.commit().await.map_err(db_err)?;
         Ok(rows

@@ -137,7 +137,7 @@ impl TestApp {
             limiters: Arc::new(weft_app::limits::ConnectionLimiters::default()),
             refresh_locks: Arc::new(RefreshLocks::default()),
         };
-        let router = weft_api::router(weft_api::ApiState { deps: deps.clone() }, &[]);
+        let router = weft_api::router(weft_api::ApiState::new(deps.clone()), &[]);
         Self {
             deps,
             router,

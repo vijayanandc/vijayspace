@@ -68,3 +68,38 @@ impl TokenCache {
         entries.insert(key, (identity, until));
     }
 }
+
+/// Tokens Logto rejected, by hash, for a short time: a client retrying a dead token (or replaying a random one)
+/// does not reach Logto on every request. Cleared whole when full (no scan under a flood).
+#[derive(Debug)]
+pub(super) struct RejectedTokens {
+    capacity: usize,
+    entries: Mutex<HashMap<[u8; 32], DateTime<Utc>>>,
+}
+
+impl RejectedTokens {
+    pub(super) fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            entries: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub(super) fn contains(&self, key: &[u8; 32], now: DateTime<Utc>) -> bool {
+        self.entries
+            .lock()
+            .ok()
+            .and_then(|e| e.get(key).copied())
+            .is_some_and(|until| until > now)
+    }
+
+    pub(super) fn add(&self, key: [u8; 32], until: DateTime<Utc>) {
+        let Ok(mut entries) = self.entries.lock() else {
+            return;
+        };
+        if entries.len() >= self.capacity {
+            entries.clear();
+        }
+        entries.insert(key, until);
+    }
+}

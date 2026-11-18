@@ -14,7 +14,7 @@ use axum::Router;
 
 use crate::state::ApiState;
 
-pub fn router() -> Router<ApiState> {
+pub fn router(state: &ApiState) -> Router<ApiState> {
     Router::new()
         .merge(misc::router())
         .merge(orgs::router())
@@ -24,5 +24,5 @@ pub fn router() -> Router<ApiState> {
         .merge(flows::router())
         .merge(executions::router())
         .merge(recipes::router())
-        .merge(hooks::router())
+        .merge(hooks::router(state))
 }

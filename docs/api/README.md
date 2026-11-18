@@ -16,7 +16,7 @@ JSON is snake_case. Timestamps are RFC 3339 UTC. IDs are prefixed strings (`flw_
   "detail": "Fix 2 issues before publishing.",
   "issues": [{ "severity": "error", "path": "/steps/0/input/url", "code": "field.required", "message": "`url` is required" }] }
 ```
-Clients switch on `code` (see `crates/domain/src/error_codes.rs`).
+Clients switch on `code` (see `crates/domain/src/error_codes.rs`). Errors the framework raises before a handler runs (malformed JSON, a bad query value, an unknown route or method, a body over 6 MB) are problem+json too, with `code` `http.<status>`. **429** means try later (`invitation.rate_limited`; `webhook.rate_limited` with `Retry-After`). Every response carries `X-Request-ID` (sent back if the client sent one); a request that takes over 2 minutes ends with **503**.
 
 ---
 
@@ -251,8 +251,8 @@ Roles: `owner | admin | member | viewer`. The matrix (doc 08 §2): owners do eve
 | PATCH | `/api/v1/members/{user_id}` | `{role}` | the member. `members.manage`; only owners make or change owners (403); the last owner cannot step down (409 `member.last_owner`). |
 | DELETE | `/api/v1/members/{user_id}` | — | 204. Anyone may remove themselves (leave); others need `members.manage`; owners only by owners; never the last owner (409). |
 | GET | `/api/v1/invitations` | — | open invitations `[{id, org_id, org_name, email, role, invited_by, created_at, expires_at}]` (`members.manage`) |
-| POST | `/api/v1/invitations` | `{email, role}` | 201 `{invitation, email_sent}`. Renews an open invitation for the same email (403 if the caller may not give that invitation's current role); 409 `member.exists` if already a member; 409 `invitation.rate_limited` after 100 invitation emails in a day for the org (300 for the person sending, across orgs), or within 5 minutes of the last email to that address. Emails a link to `WEFT_APP_URL`; valid 14 days. |
-| POST | `/api/v1/invitations/{id}/resend` | — | `{invitation, email_sent}` (new expiry). 409 `invitation.rate_limited` within 5 minutes of the last email. |
+| POST | `/api/v1/invitations` | `{email, role}` | 201 `{invitation, email_sent}`. Renews an open invitation for the same email (403 if the caller may not give that invitation's current role); 409 `member.exists` if already a member; 429 `invitation.rate_limited` after 100 invitation emails in a day for the org (300 for the person sending, across orgs), or within 5 minutes of the last email to that address. Emails a link to `WEFT_APP_URL`; valid 14 days. |
+| POST | `/api/v1/invitations/{id}/resend` | — | `{invitation, email_sent}` (new expiry). 429 `invitation.rate_limited` within 5 minutes of the last email. |
 | DELETE | `/api/v1/invitations/{id}` | — | 204 (it can no longer be accepted) |
 
 ## Misc
@@ -266,5 +266,5 @@ Roles: `owner | admin | member | viewer`. The matrix (doc 08 §2): owners do eve
 ## Public ingress
 | Method | Path | Response |
 |---|---|---|
-| ANY | `/hooks/{token}` | `202 {status: "accepted"|"ignored"|"sample_captured", executions: ["exe_…"]}` |
+| ANY | `/hooks/{token}` | `202 {status: "accepted"|"ignored"|"sample_captured", executions: ["exe_…"]}`. At most 600 requests a minute per webhook URL (429 `webhook.rate_limited` with `Retry-After`). A sample is captured only from a request carrying the secret header when one is set. |
 | ANY | `/hooks/app/{token}` | App-event endpoint for instant app triggers (Zoho notifications, Appblocks workflow webhooks, Autodesk webhooks) |

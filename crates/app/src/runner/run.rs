@@ -41,6 +41,23 @@ fn state_of(exe: &Execution) -> Result<RunState, AppError> {
 }
 
 /// Runs one slice of the execution.
+/// The compiled plan of a version. Versions are immutable: a cached plan saves loading and parsing the definition
+/// on every slice of a run.
+async fn plan_for(
+    deps: &Deps,
+    id: weft_domain::ids::FlowVersionId,
+) -> Result<super::plan_cache::CachedPlan, AppError> {
+    if let Some(hit) = deps.plans.cached(id) {
+        return Ok(hit);
+    }
+    let version = deps
+        .store
+        .get_version(id)
+        .await?
+        .ok_or_else(|| AppError::internal(format!("version {id} missing")))?;
+    Ok((deps.plans.get(&version)?, version.version))
+}
+
 pub async fn run_execution(deps: &Deps, id: ExecutionId) -> Result<JobOutcome, AppError> {
     let Some(exe) = deps.store.get_execution_system(id).await? else {
         return Ok(JobOutcome::Done);
@@ -65,19 +82,14 @@ pub async fn run_execution(deps: &Deps, id: ExecutionId) -> Result<JobOutcome, A
         .await?;
         return Ok(JobOutcome::Done);
     }
-    let version = deps
-        .store
-        .get_version(exe.flow_version_id)
-        .await?
-        .ok_or_else(|| AppError::internal(format!("version {} missing", exe.flow_version_id)))?;
-    let plan = deps.plans.get(&version)?;
+    let (plan, version_number) = plan_for(deps, exe.flow_version_id).await?;
     if deps.store.mark_unknown_outcomes(exe.id, now).await? > 0 {
         // A previous worker crashed after calling an action but before recording its result.
         deps.store.mark_possible_duplicate(exe.id).await?;
     }
     deps.store.mark_started(exe.id, now).await?;
     let meta = json!({
-        "flow": {"id": exe.flow_id, "version": version.version},
+        "flow": {"id": exe.flow_id, "version": version_number},
         "execution": {"id": exe.id, "mode": exe.mode, "started_at": exe.started_at.unwrap_or(now)},
     });
     let mut ctx = SliceCtx {

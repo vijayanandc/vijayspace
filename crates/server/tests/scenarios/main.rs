@@ -13,6 +13,7 @@ mod connections;
 mod custom_functions;
 mod hardening;
 mod harness;
+mod http;
 mod lifecycle;
 mod limits;
 mod oauth;

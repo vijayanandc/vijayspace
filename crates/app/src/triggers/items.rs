@@ -37,8 +37,12 @@ pub(crate) async fn start_items(
             };
             let burst = debounce.zip(item.record_id.as_ref()).map(|(secs, record)| {
                 let window = i64::from(secs);
-                let bucket = now.timestamp().div_euclid(window) + 1;
-                let run_at = DateTime::from_timestamp(bucket * window, 0).unwrap_or(now);
+                // Each trigger's windows are shifted by its own offset, so the windows of all triggers do not
+                // close at the same instants (claim and provider spikes on :00 and :30).
+                let offset =
+                    i64::try_from(reg.id.as_uuid().as_u128() % u128::from(secs)).unwrap_or(0);
+                let bucket = (now.timestamp() - offset).div_euclid(window) + 1;
+                let run_at = DateTime::from_timestamp(bucket * window + offset, 0).unwrap_or(now);
                 (
                     format!("rec:{record}:{bucket}"),
                     run_at.max(now + Duration::seconds(1)),

@@ -21,6 +21,21 @@ use crate::{
 /// Maximum serialized step output kept (doc 01 §4).
 pub const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 const ACTION_TIMEOUT: Duration = Duration::from_secs(30);
+/// The longest timeout a step may ask for (`timeout_secs`, e.g. the HTTP request action).
+const MAX_STEP_TIMEOUT_SECS: f64 = 120.0;
+
+/// The runner's own guard around an action: the step's requested timeout (if any) or the default, plus a margin,
+/// so a slow request the step allowed for is not cut off (and retried) while the app is still answering it.
+fn outer_timeout(input: &Value) -> Duration {
+    let asked = input
+        .get("timeout_secs")
+        .and_then(Value::as_f64)
+        .filter(|t| t.is_finite() && *t > 0.0)
+        .map_or(ACTION_TIMEOUT, |t| {
+            Duration::from_secs_f64(t.min(MAX_STEP_TIMEOUT_SECS))
+        });
+    asked.max(ACTION_TIMEOUT) + Duration::from_secs(5)
+}
 
 /// Converts a connector error into the engine's step error.
 #[must_use]
@@ -163,12 +178,8 @@ pub async fn call_action(
         None
     };
     let ctx = action_ctx_for(deps, org, connection, idem, class);
-    let output = match tokio::time::timeout(
-        ACTION_TIMEOUT + Duration::from_secs(5),
-        connector.execute(&ctx, action, input),
-    )
-    .await
-    {
+    let limit = outer_timeout(&input);
+    let output = match tokio::time::timeout(limit, connector.execute(&ctx, action, input)).await {
         Ok(result) => result?,
         Err(_) => return Err(ConnectorError::transient("the action timed out")),
     };
@@ -182,4 +193,29 @@ pub async fn call_action(
         });
     }
     Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_runner_waits_as_long_as_the_step_asked() {
+        assert_eq!(
+            outer_timeout(&serde_json::json!({})),
+            Duration::from_secs(35)
+        );
+        assert_eq!(
+            outer_timeout(&serde_json::json!({"timeout_secs": 90})),
+            Duration::from_secs(95)
+        );
+        assert_eq!(
+            outer_timeout(&serde_json::json!({"timeout_secs": 1e9})),
+            Duration::from_secs(125)
+        );
+        assert_eq!(
+            outer_timeout(&serde_json::json!({"timeout_secs": 5})),
+            Duration::from_secs(35)
+        );
+    }
 }

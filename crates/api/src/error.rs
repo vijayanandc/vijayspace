@@ -28,6 +28,7 @@ impl IntoResponse for ApiError {
             ErrorKind::Unauthorized => StatusCode::UNAUTHORIZED,
             ErrorKind::Forbidden => StatusCode::FORBIDDEN,
             ErrorKind::BadGateway => StatusCode::BAD_GATEWAY,
+            ErrorKind::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
             ErrorKind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let detail = if e.kind == ErrorKind::Internal {

@@ -17,6 +17,9 @@ use crate::{
 };
 
 const REG_COLUMNS: &str = "id, org_id, flow_id, kind, token, secret, is_active, listening_until, next_fire_at, state, sample";
+/// For the hot paths (every webhook request, every due schedule and poll): without the captured sample, which can
+/// be megabytes and is read only by the builder and test runs (`get_registration_by_flow`).
+const REG_COLUMNS_NO_SAMPLE: &str = "id, org_id, flow_id, kind, token, secret, is_active, listening_until, next_fire_at, state, CAST(NULL AS JSON) AS sample";
 const SUB_COLUMNS: &str = "id, org_id, registration_id, connection_id, connector_key, external_id, data, status, expires_at, renew_after, last_error";
 
 async fn one(
@@ -37,7 +40,8 @@ impl TriggerRepo for MySqlStore {
     }
 
     async fn get_registration_by_token(&self, token: &str) -> Res<Option<TriggerRegistration>> {
-        let sql = format!("SELECT {REG_COLUMNS} FROM trigger_registrations WHERE token = ?");
+        let sql =
+            format!("SELECT {REG_COLUMNS_NO_SAMPLE} FROM trigger_registrations WHERE token = ?");
         one(self, &sql, sqlx::query_as(&sql).bind(token)).await
     }
 
@@ -112,7 +116,7 @@ impl TriggerRepo for MySqlStore {
         }
         let mut tx = self.pool.begin().await.map_err(db_err)?;
         let mut qb = QueryBuilder::new(format!(
-            "SELECT {REG_COLUMNS} FROM trigger_registrations WHERE is_active = TRUE AND next_fire_at <= "
+            "SELECT {REG_COLUMNS_NO_SAMPLE} FROM trigger_registrations WHERE is_active = TRUE AND next_fire_at <= "
         ));
         qb.push_bind(now).push(" AND kind IN (");
         let mut sep = qb.separated(", ");

@@ -15,10 +15,14 @@ use weft_app::triggers::{InboundHttp, ingest_app_event, ingest_webhook};
 
 use crate::{error::ApiError, state::ApiState};
 
-pub fn router() -> Router<ApiState> {
+pub fn router(state: &ApiState) -> Router<ApiState> {
     Router::new()
         .route("/hooks/{token}", any(webhook))
         .route("/hooks/app/{token}", any(app_event))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::middleware::limit_webhooks,
+        ))
 }
 
 fn inbound(

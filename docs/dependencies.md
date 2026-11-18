@@ -19,7 +19,7 @@ One line per third-party crate: what it is for. Add a line here in the same chan
 | async-trait | app, connector-sdk, connectors, db | Object-safe async ports and connectors |
 | futures | worker, server (tests) | `join_all` in concurrency tests; declared in the worker for stream helpers |
 | tokio, tokio-util | app, worker, server | Runtime, `Notify`/`Semaphore`; cancellation tokens for graceful shutdown |
-| axum, tower, tower-http | api | HTTP server, middleware (CORS, body limit, tracing) |
+| axum, tower, tower-http | api | HTTP server, middleware (CORS, body limit, tracing, request IDs, timeouts) |
 | http-body-util | server (tests) | Reading response bodies in scenario tests |
 | sqlx (`mysql`, `json`, `chrono`, `uuid`, `migrate`) | db | MySQL access and embedded migrations |
 | reqwest (`rustls`) | http, infra | Outbound HTTP behind the SSRF guard (http); calls to the configured Logto tenant and ZeptoMail (infra) |

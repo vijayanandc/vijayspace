@@ -91,6 +91,8 @@ pub trait ExecutionRepo: Send + Sync {
     ) -> Res<Vec<ExecutionId>>;
     async fn get_execution(&self, org: OrgId, id: ExecutionId) -> Res<Option<Execution>>;
     async fn get_execution_system(&self, id: ExecutionId) -> Res<Option<Execution>>;
+    /// Whether a cancel was asked for and the run has not finished (one small read, no payloads).
+    async fn cancel_requested(&self, id: ExecutionId) -> Res<bool>;
     async fn list_executions(
         &self,
         org: OrgId,

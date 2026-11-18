@@ -127,6 +127,22 @@ async fn opaque_tokens_logto_does_not_vouch_for_are_refused() {
 }
 
 #[tokio::test]
+async fn a_rejected_token_is_answered_locally_for_a_while() {
+    let server = MockServer::start().await;
+    // Expect exactly one introspection for three attempts.
+    mock_opaque(
+        &server,
+        introspection(&server.uri(), json!({"active": false})),
+        1,
+    )
+    .await;
+    let v = verifier(&server, None);
+    for _ in 0..3 {
+        assert_eq!(v.verify("opaque-token").await.unwrap(), None);
+    }
+}
+
+#[tokio::test]
 async fn an_unreachable_provider_is_an_error_not_a_sign_out() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))

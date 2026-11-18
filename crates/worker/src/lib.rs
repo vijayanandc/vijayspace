@@ -73,7 +73,12 @@ pub async fn process(deps: &Deps, job: ClaimedJob) {
                 let until = deps.clock.now() + ChronoDuration::seconds(LEASE_SECS);
                 match deps.store.heartbeat(&job, until).await {
                     Ok(true) => {}
-                    Ok(false) => tracing::warn!(job = %job.id, "lease lost; another worker may run this job"),
+                    Ok(false) => {
+                        // Another worker owns the job now (it was reaped while this one stalled): stop here
+                        // instead of running it a second time alongside; the owner settles it.
+                        tracing::warn!(job = %job.id, "lease lost; stopping this run of the job");
+                        return;
+                    }
                     Err(e) => tracing::warn!(job = %job.id, error = %e, "heartbeat failed"),
                 }
             }
@@ -126,10 +131,7 @@ async fn cancel_pending(deps: &Deps, job: &ClaimedJob) -> bool {
     let Some(id) = execution_id(job) else {
         return false;
     };
-    matches!(
-        deps.store.get_execution_system(id).await,
-        Ok(Some(exe)) if exe.cancel_requested && !exe.status.is_terminal()
-    )
+    deps.store.cancel_requested(id).await.unwrap_or(false)
 }
 
 fn execution_id(job: &ClaimedJob) -> Option<ExecutionId> {
@@ -269,10 +271,16 @@ pub async fn run(deps: Deps, config: WorkerConfig, shutdown: CancellationToken) 
     let mut idle = Duration::from_millis(200);
     while !shutdown.is_cancelled() {
         let free = permits.available_permits();
+        if free == 0 {
+            // Every slot is busy: claim again as soon as one frees up (not after a sleep).
+            tokio::select! {
+                () = shutdown.cancelled() => break,
+                slot = permits.clone().acquire_owned() => drop(slot),
+            }
+            continue;
+        }
         let now = deps.clock.now();
-        let jobs = if free == 0 {
-            Vec::new()
-        } else {
+        let jobs = {
             deps.store
                 .claim(
                     &QUEUES,

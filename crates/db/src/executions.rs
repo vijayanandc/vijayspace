@@ -23,6 +23,11 @@ use crate::{
 const EXE_COLUMNS: &str = "e.id, e.org_id, e.flow_id, e.flow_version_id, e.trigger_event_id, e.mode, e.rerun_of, e.status, e.trigger_data, e.run_state, \
     e.waiting_until, e.task_count, e.error_code, e.error_message, e.failed_step_key, e.possible_duplicate, e.cancel_requested, e.queued_at, e.started_at, e.finished_at";
 
+/// The same columns for lists: the trigger data and run state (megabytes per run) are left out.
+const EXE_SUMMARY_COLUMNS: &str = "e.id, e.org_id, e.flow_id, e.flow_version_id, e.trigger_event_id, e.mode, e.rerun_of, e.status, \
+    CAST('null' AS JSON) AS trigger_data, CAST('null' AS JSON) AS run_state, \
+    e.waiting_until, e.task_count, e.error_code, e.error_message, e.failed_step_key, e.possible_duplicate, e.cancel_requested, e.queued_at, e.started_at, e.finished_at";
+
 #[derive(Debug, FromRow)]
 struct ExecutionListRow {
     #[sqlx(flatten)]
@@ -114,13 +119,25 @@ impl ExecutionRepo for MySqlStore {
         row.map(Execution::try_from).transpose()
     }
 
+    async fn cancel_requested(&self, id: ExecutionId) -> Res<bool> {
+        let found: Option<i32> = sqlx::query_scalar(
+            "SELECT 1 FROM executions WHERE id = ? AND cancel_requested = TRUE \
+             AND status NOT IN ('succeeded', 'failed', 'cancelled')",
+        )
+        .bind(id.as_uuid())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(found.is_some())
+    }
+
     async fn list_executions(
         &self,
         org: OrgId,
         filter: &ExecutionFilter,
     ) -> Res<Vec<(Execution, String)>> {
         let mut qb = QueryBuilder::new(format!(
-            "SELECT {EXE_COLUMNS}, f.name AS flow_name FROM executions e JOIN flows f ON f.id = e.flow_id WHERE e.org_id = "
+            "SELECT {EXE_SUMMARY_COLUMNS}, f.name AS flow_name FROM executions e JOIN flows f ON f.id = e.flow_id WHERE e.org_id = "
         ));
         qb.push_bind(org.as_uuid());
         if let Some(flow) = filter.flow_id {

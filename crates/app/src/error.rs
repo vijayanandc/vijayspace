@@ -11,6 +11,8 @@ pub enum ErrorKind {
     Unauthorized,
     Forbidden,
     BadGateway,
+    /// Too many requests or sends: try again later (429).
+    TooManyRequests,
     Internal,
 }
 
@@ -44,6 +46,10 @@ impl AppError {
 
     pub fn conflict(code: &'static str, message: impl Into<String>) -> Self {
         Self::new(ErrorKind::Conflict, code, message)
+    }
+
+    pub fn too_many(code: &'static str, message: impl Into<String>) -> Self {
+        Self::new(ErrorKind::TooManyRequests, code, message)
     }
 
     /// No valid sign-in.

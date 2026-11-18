@@ -40,6 +40,33 @@ fn main() -> anyhow::Result<()> {
         .block_on(run(cli))
 }
 
+/// Ctrl+C, or SIGTERM (what `docker stop`, Kubernetes and systemd send): the API stops accepting requests and
+/// finishes those in flight, and the worker stops claiming and lets running jobs finish (bounded).
+async fn shutdown_signal() {
+    let interrupt = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "cannot listen for SIGTERM");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        () = interrupt => {},
+        () = terminate => {},
+    }
+    tracing::info!("shutting down");
+}
+
 async fn run(cli: Cli) -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -72,7 +99,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
     let api = matches!(command, Command::Serve | Command::Api);
     if api {
         let app = weft_api::router(
-            weft_api::ApiState { deps: deps.clone() },
+            weft_api::ApiState::new(deps.clone()),
             &settings.client_origins,
         );
         let listener = tokio::net::TcpListener::bind(&settings.bind).await?;
@@ -80,12 +107,12 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         let token = shutdown.clone();
         axum::serve(listener, app)
             .with_graceful_shutdown(async move {
-                let _ = tokio::signal::ctrl_c().await;
+                shutdown_signal().await;
                 token.cancel();
             })
             .await?;
     } else {
-        let _ = tokio::signal::ctrl_c().await;
+        shutdown_signal().await;
         shutdown.cancel();
     }
     if let Some(w) = worker {

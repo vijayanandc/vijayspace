@@ -31,6 +31,7 @@ struct FlowListSql {
     last_id: Option<Uuid>,
     last_status: Option<String>,
     last_queued_at: Option<DateTime<Utc>>,
+    unpublished: bool,
 }
 
 #[async_trait]
@@ -95,11 +96,14 @@ impl FlowRepo for MySqlStore {
 
     async fn list_flows(&self, org: OrgId) -> Res<Vec<FlowListRow>> {
         let sql = format!(
+            // One lateral lookup of the last run per flow, and the draft compared with the published version in
+            // the database (JSON equality ignores key order): no query per flow.
             "SELECT {FLOW_COLUMNS}, \
-             (SELECT e.id FROM executions e WHERE e.org_id = f.org_id AND e.flow_id = f.id ORDER BY e.queued_at DESC LIMIT 1) AS last_id, \
-             (SELECT e.status FROM executions e WHERE e.org_id = f.org_id AND e.flow_id = f.id ORDER BY e.queued_at DESC LIMIT 1) AS last_status, \
-             (SELECT e.queued_at FROM executions e WHERE e.org_id = f.org_id AND e.flow_id = f.id ORDER BY e.queued_at DESC LIMIT 1) AS last_queued_at \
+             last.id AS last_id, last.status AS last_status, last.queued_at AS last_queued_at, \
+             (v.definition IS NULL OR NOT (v.definition = f.draft_definition)) AS unpublished \
              FROM flows f LEFT JOIN flow_versions v ON v.id = f.published_version_id \
+             LEFT JOIN LATERAL (SELECT e.id, e.status, e.queued_at FROM executions e \
+                 WHERE e.org_id = f.org_id AND e.flow_id = f.id ORDER BY e.queued_at DESC LIMIT 1) AS last ON TRUE \
              WHERE f.org_id = ? AND f.deleted_at IS NULL ORDER BY f.updated_at DESC LIMIT 500"
         );
         let rows: Vec<FlowListSql> = sqlx::query_as(&sql)
@@ -118,6 +122,7 @@ impl FlowRepo for MySqlStore {
                 Ok(FlowListRow {
                     flow: Flow::try_from(r.flow)?,
                     last_execution: last,
+                    has_unpublished_changes: r.unpublished,
                 })
             })
             .collect()

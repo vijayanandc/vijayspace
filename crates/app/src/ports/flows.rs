@@ -15,6 +15,8 @@ use super::Res;
 pub struct FlowListRow {
     pub flow: Flow,
     pub last_execution: Option<(ExecutionId, ExecutionStatus, DateTime<Utc>)>,
+    /// The draft differs from the published version (or nothing is published).
+    pub has_unpublished_changes: bool,
 }
 
 #[async_trait]

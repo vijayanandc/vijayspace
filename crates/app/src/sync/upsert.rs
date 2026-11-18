@@ -283,6 +283,7 @@ fn link_save_error(e: &crate::AppError) -> ConnectorError {
         | crate::ErrorKind::NotFound
         | crate::ErrorKind::Unauthorized
         | crate::ErrorKind::BadGateway
+        | crate::ErrorKind::TooManyRequests
         | crate::ErrorKind::Internal => ConnectorError::transient(e.message.clone()),
     }
 }

@@ -24,7 +24,7 @@ const DAILY_EMAILS_PER_USER: u32 = 300;
 const RESEND_COOLDOWN_MINUTES: i64 = 5;
 
 fn rate_limited(message: &str) -> AppError {
-    AppError::conflict(error_codes::INVITATION_RATE_LIMITED, message)
+    AppError::too_many(error_codes::INVITATION_RATE_LIMITED, message)
 }
 
 /// An invitation and whether its email went out.
