@@ -33,21 +33,21 @@ describe('settings: run history', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
-  it('validates 1–3650 days and saves the number', async () => {
+  it('validates 1–30 days and saves the number', async () => {
     const patches = stubApi();
     renderWithProviders(<SettingsPage />);
     const days = await screen.findByLabelText('Days to keep finished runs');
     fireEvent.change(days, { target: { value: '0' } });
     expect(screen.getByRole('radio', { name: 'Keep finished runs for a number of days' })).toBeChecked();
-    expect(screen.getByRole('alert')).toHaveTextContent('Use 1 to 3,650 days.');
+    expect(screen.getByRole('alert')).toHaveTextContent('Use 1 to 30 days.');
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    fireEvent.change(days, { target: { value: '4000' } });
-    expect(screen.getByRole('alert')).toHaveTextContent('Use 1 to 3,650 days.');
     fireEvent.change(days, { target: { value: '90' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('Use 1 to 30 days.');
+    fireEvent.change(days, { target: { value: '30' } });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(patches).toEqual([{ retention_days: 90 }]));
-    expect(await screen.findByText(/Now: runs are kept for 90 days\./)).toBeInTheDocument();
+    await waitFor(() => expect(patches).toEqual([{ retention_days: 30 }]));
+    expect(await screen.findByText(/Now: runs are kept for 30 days\./)).toBeInTheDocument();
   });
 
   it('asks before keeping runs for fewer days, and saves nothing when cancelled', async () => {

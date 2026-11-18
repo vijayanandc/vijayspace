@@ -33,7 +33,8 @@ describe('delay units', () => {
   it('always produces a whole, positive number of seconds within the server maximum', () => {
     expect(delaySeconds(0, 60)).toBe(60);
     expect(delaySeconds(1.4, 3600)).toBe(3600);
-    expect(delaySeconds(31, 86_400)).toBe(MAX_DELAY_SECS);
+    expect(delaySeconds(15, 86_400)).toBe(MAX_DELAY_SECS);
+    expect(MAX_DELAY_SECS).toBe(14 * 86_400);
     expect(changeDelayUnit(1860, 60, 3600)).toBe(31 * 3600);
     expect(changeDelayUnit(90, 1, 60)).toBe(5400);
     expect(Number.isInteger(changeDelayUnit(1, 60, 3600))).toBe(true);

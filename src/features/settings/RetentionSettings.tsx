@@ -1,4 +1,4 @@
-// Settings → Run history: how long finished runs are kept (server default or 1–3650 days).
+// Settings → Run history: how long finished runs are kept (server default or 1–30 days, the platform's cap).
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { History } from 'lucide-react';

@@ -12,8 +12,8 @@ export const U16_MAX = 65_535;
 export const U32_MAX = 4_294_967_295;
 /** The server's longest "every N minutes" interval (one year). */
 export const MAX_INTERVAL_MINUTES = 525_600;
-/** The server rejects delays longer than this (`MAX_DELAY_SECS`). */
-export const MAX_DELAY_SECS = 30 * 86_400;
+/** The server rejects delays longer than this (`MAX_DELAY_SECS`: 14 days, so a run ends well within the 30-day history cap). */
+export const MAX_DELAY_SECS = 14 * 86_400;
 
 /** Rounds to an integer and clamps it into `range`. */
 export function clampInt(n: number, { min, max }: IntRange): number {

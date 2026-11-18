@@ -242,6 +242,24 @@ export interface ExecutionDetail extends ExecutionSummary {
   payloads_hidden: boolean;
 }
 
+export type LogLevel = 'info' | 'warn' | 'error';
+export type LogKind = 'run' | 'step' | 'http' | 'limit' | 'retry' | 'event';
+/** One line of a run's log. `details`: see the contract (http: method, url, status, duration_ms, sizes, excerpt). */
+export interface LogEntry {
+  at: string;
+  level: LogLevel;
+  kind: LogKind;
+  step_key: string | null;
+  attempt: number | null;
+  message: string;
+  details: { [key: string]: JsonValue } | null;
+}
+/** `truncated`: more than 2,000 stored lines (the oldest 2,000 are shown). */
+export interface ExecutionLog {
+  entries: LogEntry[];
+  truncated: boolean;
+}
+
 export interface ExecutionPage {
   items: ExecutionSummary[];
   next_cursor: string | null;

@@ -105,3 +105,14 @@
   .app-header { grid-template-columns: auto minmax(200px, 1fr) auto; }
   .header-org { display: none; }
 }
+
+/* Phones and narrow windows: the header shrinks to icons around the search, the rail shows icons only. */
+@media (max-width: 720px) {
+  .app-header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding-right: 6px; }
+  .brand-name { display: none; }
+  .nav-rail, .nav-rail:not(.nav-collapsed) { width: var(--nav-w-collapsed); }
+  .nav-rail .nav-usage, .nav-rail .nav-toggle { display: none; }
+  /* Hidden but still the links' names for screen readers. */
+  .nav-rail .nav-label { display: inline; position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .nav-link { padding: 0 14px; }
+}

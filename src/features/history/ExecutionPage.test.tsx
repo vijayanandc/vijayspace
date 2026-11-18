@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { render } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -16,13 +16,20 @@ const execution = (hidden: boolean): ExecutionDetail => ({
   payloads_hidden: hidden,
 });
 
-function open(hidden: boolean) {
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(execution(hidden)))));
+function open(hidden: boolean, path = '/history/exe_1') {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: RequestInfo | URL) =>
+      String(url).endsWith('/log')
+        ? new Response(JSON.stringify({ truncated: false, entries: [{ at: '2026-11-18T10:00:00Z', level: 'info', kind: 'run', step_key: null, attempt: null, message: 'Run queued (live)', details: null }] }))
+        : new Response(JSON.stringify(execution(hidden))),
+    ),
+  );
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <ToastProvider>
         <TestSession role={hidden ? 'viewer' : 'owner'}>
-          <MemoryRouter initialEntries={['/history/exe_1']}>
+          <MemoryRouter initialEntries={[path]}>
             <Routes>
               <Route path="/history/:executionId" element={<ExecutionPage />} />
             </Routes>
@@ -41,6 +48,14 @@ describe('execution page', () => {
     expect(await screen.findByText(/Run data is hidden for viewers/)).toBeInTheDocument();
     expect(screen.getByText('Hidden for viewers.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Payload/ })).not.toBeInTheDocument();
+  });
+
+  it('opens the run log from its tab or a ?view=log link', async () => {
+    open(false, '/history/exe_1?view=log');
+    expect(await screen.findByText('Run queued (live)')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Log' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: /Steps/ }));
+    expect(await screen.findByRole('button', { name: /^Payload/ })).toBeInTheDocument();
   });
 
   it('shows the trigger data to others', async () => {

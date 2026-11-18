@@ -15,6 +15,8 @@ export const qk = {
   flow: (id: string) => ['flow', id] as const,
   executions: (filters: object) => ['executions', filters] as const,
   execution: (id: string) => ['execution', id] as const,
+  /** Under `execution`, so refreshing a run refreshes its log too. */
+  executionLog: (id: string) => ['execution', id, 'log'] as const,
   recipes: ['recipes'] as const,
   org: ['org'] as const,
   /** The signed-in user, their orgs and invitations (kept when switching orgs). */

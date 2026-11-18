@@ -70,7 +70,7 @@ export function DelayPanel({ step }: { step: DelayStep }) {
           {(id) => <MappingInput id={id} value={step.until ?? ''} onChange={(until) => set({ ...base, until }, `delay:${step.key}`)} variables={variables} placeholder="{{ trigger.body.due_at }}" />}
         </Field>
       )}
-      <p className="field-help">Delays are durable: the run sleeps without holding a worker, up to 30 days.</p>
+      <p className="field-help">Delays are durable: the run sleeps without holding a worker, up to 14 days.</p>
     </div>
   );
 }

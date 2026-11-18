@@ -8,6 +8,7 @@ import type {
   ConnectionUsage,
   ConnectorManifest,
   ExecutionDetail,
+  ExecutionLog,
   ExecutionPage,
   ExecutionSummary,
   FieldSpec,
@@ -91,6 +92,7 @@ export const endpoints = {
     return api.get<ExecutionPage>(`/api/v1/executions?${q.toString()}`);
   },
   execution: (id: string) => api.get<ExecutionDetail>(`/api/v1/executions/${enc(id)}`),
+  executionLog: (id: string) => api.get<ExecutionLog>(`/api/v1/executions/${enc(id)}/log`),
   retryExecution: (id: string) => api.post<ExecutionSummary>(`/api/v1/executions/${enc(id)}/retry`),
   rerunExecution: (id: string) => api.post<{ execution_id: string }>(`/api/v1/executions/${enc(id)}/rerun`),
   cancelExecution: (id: string) => api.post<ExecutionSummary>(`/api/v1/executions/${enc(id)}/cancel`),

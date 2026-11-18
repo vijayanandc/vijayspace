@@ -3,7 +3,8 @@
 import type { Org } from '../../api/types';
 
 export const MIN_RETENTION_DAYS = 1;
-export const MAX_RETENTION_DAYS = 3650;
+/** The platform keeps run history 30 days at most (the server's cap). */
+export const MAX_RETENTION_DAYS = 30;
 
 export interface RetentionForm {
   /** True = use the server default (sends null). */

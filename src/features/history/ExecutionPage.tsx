@@ -1,8 +1,9 @@
-// Execution detail (Lightning record page): header with actions, highlights panel, step timeline, trigger data.
+// Execution detail (Lightning record page): header with actions, highlights panel, then two views: the step
+// timeline with trigger data, and the detailed run log (`?view=log`, so a link can open it directly).
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Activity, ChevronRight, ExternalLink, RotateCcw, Square, StepForward } from 'lucide-react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { errorMessage } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
@@ -13,10 +14,12 @@ import { Button, LinkButton } from '../../components/Button';
 import { ErrorBox, Loading } from '../../components/Empty';
 import { JsonView } from '../../components/JsonView';
 import { MessageBar } from '../../components/MessageBar';
+import { Tabs } from '../../components/Tabs';
 import { useToast } from '../../components/Toast';
 import { formatDuration, formatTime, isTerminal } from '../../lib/format';
 import { MODE_LABELS } from './labels';
 import { executionPollMs } from './polling';
+import { RunLog } from './RunLog';
 import { StepTimeline } from './StepTimeline';
 import { can, useRole } from '../auth';
 
@@ -67,6 +70,8 @@ function ExecutionView({ e }: { e: ExecutionDetail }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
+  const [params, setParams] = useSearchParams();
+  const view = params.get('view') === 'log' ? 'log' : 'steps';
   const refresh = () => void qc.invalidateQueries({ queryKey: qk.execution(e.id) });
   const retry = useMutation({ mutationFn: () => endpoints.retryExecution(e.id), onSuccess: refresh, onError: (err) => toast.show('error', errorMessage(err)) });
   const cancel = useMutation({ mutationFn: () => endpoints.cancelExecution(e.id), onSuccess: refresh, onError: (err) => toast.show('error', errorMessage(err)) });
@@ -132,17 +137,33 @@ function ExecutionView({ e }: { e: ExecutionDetail }) {
           Run data is hidden for viewers: you see each step&apos;s status and timing, not its input, output or error text.
         </MessageBar>
       )}
-      <div className="exec-grid">
-        <section className="card">
-          <h2 className="card-title">Steps · {new Set(e.steps.map((s) => s.step_key)).size}</h2>
-          <StepTimeline steps={e.steps} />
+      <Tabs
+        className="exec-tabs"
+        label="Run details"
+        tabs={[
+          { key: 'steps', label: 'Steps', count: new Set(e.steps.map((s) => s.step_key)).size },
+          { key: 'log', label: 'Log' },
+        ]}
+        value={view}
+        onChange={(v) => setParams(v === 'log' ? { view: 'log' } : {}, { replace: true })}
+      />
+      {view === 'log' ? (
+        <section className="card" role="tabpanel" aria-label="Log">
+          <RunLog executionId={e.id} status={e.status} waitingUntil={e.waiting_until} />
         </section>
-        <section className="card">
-          <h2 className="card-title">Trigger data</h2>
-          {e.payloads_hidden ? <p className="muted">Hidden for viewers.</p> : <JsonView label="Payload" value={e.trigger_data} />}
-          <p className="field-help">Queued {formatTime(e.queued_at)}</p>
-        </section>
-      </div>
+      ) : (
+        <div className="exec-grid" role="tabpanel" aria-label="Steps">
+          <section className="card">
+            <h2 className="card-title">Steps · {new Set(e.steps.map((s) => s.step_key)).size}</h2>
+            <StepTimeline steps={e.steps} />
+          </section>
+          <section className="card">
+            <h2 className="card-title">Trigger data</h2>
+            {e.payloads_hidden ? <p className="muted">Hidden for viewers.</p> : <JsonView label="Payload" value={e.trigger_data} />}
+            <p className="field-help">Queued {formatTime(e.queued_at)}</p>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
