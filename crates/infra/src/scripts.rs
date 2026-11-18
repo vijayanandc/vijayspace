@@ -70,9 +70,7 @@ impl ScriptRunner for PooledScriptRunner {
                 logs: out.logs,
             }),
             Ok(Err(e)) => Err(script_error(&e)),
-            Err(e) => Err(ConnectorError::permanent(format!(
-                "the script crashed: {e}"
-            ))),
+            Err(e) => Err(crashed(format!("the script crashed: {e}"))),
         }
     }
 }
@@ -104,6 +102,27 @@ impl ProcessScriptRunner {
             wall,
         }
     }
+}
+
+fn crashed(message: String) -> ConnectorError {
+    ConnectorError::Coded {
+        code: "script.error",
+        message,
+        details: Value::Null,
+    }
+}
+
+/// A child that exits without a response. Killed by a signal: the OS memory or CPU cap (or a
+/// stack overflow) stopped it, which is a limit. Any other exit is an engine failure.
+fn child_failed(status: std::process::ExitStatus) -> ConnectorError {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt as _;
+        if status.signal().is_some() {
+            return resources_exceeded();
+        }
+    }
+    crashed(format!("the script runner stopped unexpectedly ({status})"))
 }
 
 fn resources_exceeded() -> ConnectorError {
@@ -170,10 +189,10 @@ impl ScriptRunner for ProcessScriptRunner {
             }
         };
         if !status.success() {
-            return Err(resources_exceeded());
+            return Err(child_failed(status));
         }
-        let response: ChildResponse =
-            serde_json::from_slice(&stdout).map_err(|_| resources_exceeded())?;
+        let response: ChildResponse = serde_json::from_slice(&stdout)
+            .map_err(|_| crashed("the script runner returned no result".to_owned()))?;
         let result: Result<weft_script::ScriptOutput, ScriptError> = response.into();
         match result {
             Ok(out) => Ok(ScriptRun {
@@ -221,6 +240,26 @@ mod tests {
         assert_eq!(
             limit.code(),
             weft_domain::error_codes::SCRIPT_LIMIT_EXCEEDED
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_killed_child_hit_a_limit_and_any_other_exit_is_a_script_error() {
+        use std::os::unix::process::ExitStatusExt as _;
+        let code = |e: ConnectorError| e.code().to_owned();
+        // Raw wait statuses: 9 = killed by SIGKILL, 6 = SIGABRT (allocation failure), 256 = exit 1.
+        assert_eq!(
+            code(child_failed(std::process::ExitStatus::from_raw(9))),
+            "script.limit_exceeded"
+        );
+        assert_eq!(
+            code(child_failed(std::process::ExitStatus::from_raw(6))),
+            "script.limit_exceeded"
+        );
+        assert_eq!(
+            code(child_failed(std::process::ExitStatus::from_raw(256))),
+            "script.error"
         );
     }
 }

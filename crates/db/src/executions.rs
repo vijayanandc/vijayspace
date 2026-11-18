@@ -187,14 +187,17 @@ impl ExecutionRepo for MySqlStore {
         Ok(outputs)
     }
 
-    async fn discard_step_run(&self, org: OrgId, id: StepRunId) -> Res<()> {
-        sqlx::query("DELETE FROM step_runs WHERE org_id = ? AND id = ?")
-            .bind(org.as_uuid())
-            .bind(id.as_uuid())
-            .execute(&self.pool)
+    async fn park_held_back_step(&self, step_run: StepRunId, c: &Checkpoint) -> Res<()> {
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        sqlx::query("DELETE FROM step_runs WHERE org_id = ? AND execution_id = ? AND id = ?")
+            .bind(c.org_id.as_uuid())
+            .bind(c.execution_id.as_uuid())
+            .bind(step_run.as_uuid())
+            .execute(&mut *tx)
             .await
             .map_err(db_err)?;
-        Ok(())
+        write_checkpoint(&mut tx, c).await.map_err(db_err)?;
+        tx.commit().await.map_err(db_err)
     }
 
     async fn insert_step_run(&self, org: OrgId, run: &StepRun) -> Res<()> {

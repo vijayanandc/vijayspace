@@ -222,16 +222,22 @@ fn the_wall_time_guard_stops_a_script_as_a_safety_net() {
 }
 
 #[test]
-fn curried_values_are_unreachable_but_closures_and_functions_see_the_input() {
+fn input_is_a_variable_functions_take_parameters_and_closures_capture_copies() {
     for code in ["fn f(x) { x } Fn(\"f\").curry(1)", "(|x| x).curry(1)"] {
         assert!(check(code, &Limits::default()).is_err(), "{code}");
     }
     let input = json!({"items": [1, 2, 3], "factor": 10});
     let cases = [
-        ("input.items.map(|x| x * input.factor)", json!([10, 20, 30])),
-        ("fn g() { input.factor } g()", json!(10)),
+        ("input.x = 5; input.x", json!(5)),
+        ("input.items.push(4); input.items.len()", json!(4)),
+        ("context.extra = 1; context.extra", json!(1)),
+        ("fn g(input) { input.factor } g(input)", json!(10)),
         (
             "let f = input.factor; input.items.map(|x| x * f)",
+            json!([10, 20, 30]),
+        ),
+        (
+            "let items = input.items; items.map(|x| x * input.factor)",
             json!([10, 20, 30]),
         ),
         ("[1, 2, 3].map(|x| x * 2)", json!([2, 4, 6])),
@@ -239,9 +245,39 @@ fn curried_values_are_unreachable_but_closures_and_functions_see_the_input() {
     for (code, expected) in cases {
         assert_eq!(ok(code, input.clone())["result"], expected, "{code}");
     }
+    let changed = ok("input.total = input.items.len(); input", input.clone());
+    assert_eq!(changed["total"], 3, "the changed copy is the output");
     // A large input mentioned several times still works.
     let big = json!({"keys": (0..2000).map(|i| format!("k{i}")).collect::<Vec<_>>()});
     let code =
         "let a = input; let b = input; let c = input; a.keys.len() + b.keys.len() + c.keys.len()";
     assert_eq!(ok(code, big), json!({"result": 6000}));
+}
+
+#[test]
+fn rhai_dead_ends_explain_what_to_do() {
+    let input = json!({"items": [1, 2, 3], "factor": 10});
+    let fail = |code: &str| run(code, &input, &json!({}), &Limits::default()).expect_err(code);
+    let e = fail("fn g() { input.factor } g()");
+    assert_eq!(e.code(), "script.error");
+    assert!(
+        e.to_string()
+            .contains("Functions only see their parameters"),
+        "{e}"
+    );
+    assert!(e.to_string().contains("(in function `g`)"), "{e}");
+    assert_eq!(
+        e.position(),
+        (Some(1), Some(10)),
+        "inside the function body: {e}"
+    );
+    let e = fail("input.items.map(|x| x * input.factor)");
+    assert!(e.to_string().contains("let factor = input.factor;"), "{e}");
+    // Rhai panics on this one; it must come back as a script error, not a crash.
+    let e = fail("const C = #{a: 1}; C.a = 2; C");
+    assert_eq!(e.code(), "script.error");
+    assert!(e.to_string().contains("use `let` instead"), "{e}");
+    // A limit hit inside a function is still a limit.
+    let e = fail("fn spin() { loop {} } spin()");
+    assert_eq!(e.code(), "script.limit_exceeded", "{e}");
 }

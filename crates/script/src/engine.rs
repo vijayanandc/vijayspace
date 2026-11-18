@@ -1,6 +1,7 @@
 //! Building a sandboxed engine per run, running a script, and normalising its output.
 
 use std::{
+    panic::AssertUnwindSafe,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -128,14 +129,30 @@ fn check_size(code: &str, limits: &Limits) -> Result<(), ScriptError> {
     Ok(())
 }
 
-/// The variables every script sees (strict variables: anything else is a compile error).
+/// The variables every script sees (strict variables: anything else is a compile error). They are
+/// ordinary variables, so a script may change its copy (`input.total = …; input`). Functions see
+/// only their parameters (Rhai's rule): scripts pass them in, e.g. `fn total(input) {…} total(input)`.
 fn scope<'a>(input: Dynamic, context: Dynamic) -> Scope<'a> {
-    // Constants, so functions and closures see them. The optimizer may copy a constant at each
-    // mention; the child process's memory cap bounds that for scripts that abuse it.
     let mut scope = Scope::new();
-    scope.push_constant("input", input);
-    scope.push_constant("context", context);
+    scope.push("input", input);
+    scope.push("context", context);
     scope
+}
+
+/// Runs `f`, turning a panic inside the engine into a script error. Rhai has a few `unreachable!`
+/// paths a script can reach (e.g. assigning to a property of a `const` map); one script must never
+/// take down a worker, and its author needs a message rather than a crash.
+fn guarded<T>(f: impl FnOnce() -> Result<T, ScriptError>) -> Result<T, ScriptError> {
+    std::panic::catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|payload| {
+        let detail = payload
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_owned())
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        Err(ScriptError::plain(format!(
+            "the script engine cannot run this script ({detail}). Changing a `const` value is a common cause: use `let` instead"
+        )))
+    })
 }
 
 /// Compiles a script without running it (publish-time validation).
@@ -143,7 +160,8 @@ pub fn check(code: &str, limits: &Limits) -> Result<(), ScriptError> {
     check_size(code, limits)?;
     let log = Arc::new(Mutex::new(Log::default()));
     let empty = || Dynamic::from_map(rhai::Map::new());
-    engine(limits, &log).compile_with_scope(&scope(empty(), empty()), code)?;
+    let engine = engine(limits, &log);
+    guarded(|| Ok(engine.compile_with_scope(&scope(empty(), empty()), code)?))?;
     Ok(())
 }
 
@@ -159,8 +177,10 @@ pub fn run(
     let log = Arc::new(Mutex::new(Log::default()));
     let engine = engine(limits, &log);
     let mut scope = scope(to_dynamic(input)?, to_dynamic(context)?);
-    let ast = engine.compile_with_scope(&scope, code)?;
-    let result: Dynamic = engine.eval_ast_with_scope(&mut scope, &ast)?;
+    let result: Dynamic = guarded(|| {
+        let ast = engine.compile_with_scope(&scope, code)?;
+        Ok(engine.eval_ast_with_scope(&mut scope, &ast)?)
+    })?;
     let value = output(&result)?;
     let size = value.to_string().len();
     if size > limits.max_output_bytes {

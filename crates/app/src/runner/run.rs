@@ -283,16 +283,18 @@ async fn throttled(
     at: DateTime<Utc>,
     now: DateTime<Utc>,
 ) -> Result<JobOutcome, AppError> {
-    deps.store.discard_step_run(exe.org_id, step_run_id).await?;
     deps.store
-        .checkpoint(&Checkpoint {
-            execution_id: exe.id,
-            org_id: exe.org_id,
-            status: ExecutionStatus::Waiting,
-            run_state: to_value(state),
-            waiting_until: Some(at),
-            now,
-        })
+        .park_held_back_step(
+            step_run_id,
+            &Checkpoint {
+                execution_id: exe.id,
+                org_id: exe.org_id,
+                status: ExecutionStatus::Waiting,
+                run_state: to_value(state),
+                waiting_until: Some(at),
+                now,
+            },
+        )
         .await?;
     Ok(JobOutcome::RescheduleAt(at))
 }

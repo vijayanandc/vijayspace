@@ -43,9 +43,14 @@ impl MySqlStore {
         }
         let mut step_runs = 0;
         loop {
+            // Re-checked per chunk: a run retried since it was selected keeps its history.
             let mut qb = QueryBuilder::new("DELETE FROM step_runs WHERE org_id = ");
-            qb.push_bind(org.as_uuid()).push(" AND execution_id IN");
+            qb.push_bind(org.as_uuid())
+                .push(" AND execution_id IN (SELECT id FROM executions WHERE org_id = ")
+                .push_bind(org.as_uuid())
+                .push(" AND status IN ('succeeded', 'failed', 'cancelled') AND id IN");
             id_list(&mut qb, &ids);
+            qb.push(")");
             qb.push(" LIMIT ").push_bind(STEP_CHUNK);
             let n = qb
                 .build()

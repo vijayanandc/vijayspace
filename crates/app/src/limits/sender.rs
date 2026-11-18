@@ -68,15 +68,13 @@ impl HttpSender for LimitedSender {
             .limiters
             .entry(&self.deps, self.org, self.connection)
             .await?;
-        // Inbound event fetches never wait or get refused: refusing would lose the event.
-        let permits = entry
-            .permits
-            .as_ref()
-            .filter(|_| self.class != RequestClass::Inbound);
-        let _slot = match permits {
+        let _slot = match &entry.permits {
             Some(permits) => {
                 match tokio::time::timeout(SLOT_WAIT, Arc::clone(permits).acquire_owned()).await {
                     Ok(Ok(permit)) => Some(permit),
+                    // Inbound event fetches wait their turn but are never refused (that would
+                    // lose the event): after the wait they go ahead without a slot.
+                    Ok(Err(_)) | Err(_) if self.class == RequestClass::Inbound => None,
                     Ok(Err(_)) | Err(_) => {
                         return Err(limited(
                             10,

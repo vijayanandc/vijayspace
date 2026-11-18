@@ -131,19 +131,28 @@ async fn a_run_whose_history_is_being_removed_can_be_rerun_but_not_retried() {
         ]}))
         .await;
     let flow_id = flow["id"].as_str().unwrap();
-    let started = app
-        .ok(
-            "POST",
-            &format!("/api/v1/flows/{flow_id}/run"),
-            Some(json!({"payload": {}})),
-        )
-        .await;
-    let exe = started["execution_id"].as_str().unwrap().to_owned();
+    let mut runs = Vec::new();
+    for _ in 0..2 {
+        let started = app
+            .ok(
+                "POST",
+                &format!("/api/v1/flows/{flow_id}/run"),
+                Some(json!({"payload": {}})),
+            )
+            .await;
+        runs.push(started["execution_id"].as_str().unwrap().to_owned());
+    }
     app.drain().await;
+    let (early, exe) = (&runs[0], &runs[1]);
 
-    // Within the last hour before the 30-day cutoff, the sweep may already be deleting its steps.
+    // Two hours before the 30-day cutoff a retry is still allowed.
+    app.clock.advance(Duration::days(29) + Duration::hours(22));
+    app.ok("POST", &format!("/api/v1/executions/{early}/retry"), None)
+        .await;
+
+    // Within the last hour before the cutoff, the sweep may already be deleting its steps.
     app.clock
-        .advance(Duration::days(29) + Duration::hours(23) + Duration::minutes(30));
+        .advance(Duration::hours(1) + Duration::minutes(30));
     let (status, body) = app
         .req("POST", &format!("/api/v1/executions/{exe}/retry"), None)
         .await;

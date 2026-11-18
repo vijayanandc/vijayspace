@@ -100,8 +100,9 @@ pub trait ExecutionRepo: Send + Sync {
     /// Latest output per step key (succeeded, or `{"error":…}` for continued failures).
     async fn load_step_outputs(&self, execution: ExecutionId) -> Res<Map<String, Value>>;
     async fn insert_step_run(&self, org: OrgId, run: &StepRun) -> Res<()>;
-    /// Removes a step run that turned out not to be an attempt (held back by a limit).
-    async fn discard_step_run(&self, org: OrgId, id: StepRunId) -> Res<()>;
+    /// Parks an execution whose step was held back by a limit, in one transaction: the step run
+    /// (which turned out not to be an attempt) is removed and the execution checkpointed.
+    async fn park_held_back_step(&self, step_run: StepRunId, checkpoint: &Checkpoint) -> Res<()>;
     async fn complete_step(&self, completion: &StepCompletion) -> Res<()>;
     async fn checkpoint(&self, checkpoint: &Checkpoint) -> Res<()>;
     async fn mark_started(&self, id: ExecutionId, now: DateTime<Utc>) -> Res<()>;

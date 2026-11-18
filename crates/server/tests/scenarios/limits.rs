@@ -189,8 +189,8 @@ async fn a_held_back_request_is_not_an_attempt_and_is_never_skipped() {
         Some(0),
         "a held-back request leaves no history row: {held}"
     );
-    // The park time is the limiter's hint (60 s) plus a spread of up to the same again.
-    app.clock.advance(Duration::seconds(121));
+    // The park time is the limiter's hint (at most 60 s) plus a spread of at most 10% of it.
+    app.clock.advance(Duration::seconds(67));
     app.drain().await;
     let done = app
         .ok(

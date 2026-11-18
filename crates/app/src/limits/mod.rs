@@ -121,12 +121,15 @@ impl ConnectionLimiters {
     }
 }
 
-/// How long a step held back by a limit waits: at least 5 s and the limiter's hint, plus a spread
-/// of up to the same again derived from the execution ID, so parked runs do not all wake together.
+/// How long a step held back by a limit waits: the limiter's hint (at least 5 s), plus a small
+/// spread derived from the execution ID (up to 10% of the hint, at most 5 minutes), so parked runs
+/// do not all wake together but still wake soon after the limit allows (e.g. just after midnight
+/// for a used-up daily budget).
 #[must_use]
 pub fn park_delay(execution: ExecutionId, retry_after_secs: u64) -> Duration {
     let base = retry_after_secs.clamp(5, 86_400);
-    let spread = u64::from(execution.as_uuid().as_bytes()[15]) * base / 255;
+    let max_spread = (base / 10).clamp(1, 300);
+    let spread = u64::from(execution.as_uuid().as_bytes()[15]) * max_spread / 255;
     Duration::seconds(i64::try_from(base + spread).unwrap_or(86_400))
 }
 
@@ -135,14 +138,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parked_runs_wait_at_least_the_hint_and_spread_over_at_most_twice_it() {
+    fn parked_runs_wait_the_hint_plus_a_small_capped_spread() {
         let id = |last: u8| {
             let mut bytes = [0_u8; 16];
             bytes[15] = last;
             ExecutionId::from_uuid(uuid::Uuid::from_bytes(bytes))
         };
         assert_eq!(park_delay(id(0), 60), Duration::seconds(60));
-        assert_eq!(park_delay(id(255), 60), Duration::seconds(120));
+        assert_eq!(park_delay(id(255), 60), Duration::seconds(66));
+        // A used-up daily budget at 00:30: wake at most 5 minutes after midnight.
+        assert_eq!(park_delay(id(255), 84_600), Duration::seconds(84_900));
         assert_eq!(
             park_delay(id(0), 0),
             Duration::seconds(5),

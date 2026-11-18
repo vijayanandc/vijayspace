@@ -1,5 +1,5 @@
 //! Custom functions in child processes: normal scripts work, and scripts that defeat the
-//! engine's size accounting (map keys) only kill the child.
+//! engine's size accounting (map keys) only kill the child; an engine panic is a script error.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::{path::PathBuf, time::Duration};
@@ -35,6 +35,21 @@ async fn scripts_run_in_a_child_process() {
         .unwrap_err();
     assert_eq!(err.code(), "script.error");
     assert!(err.to_string().starts_with("line 2"), "{err}");
+    // Scripts change their own copy of the input; an engine panic is a script error, not a crash.
+    let out = runner()
+        .run(
+            "input.total = input.a + input.b; input",
+            json!({"a": 1, "b": 2}),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.output, json!({"a": 1, "b": 2, "total": 3}));
+    let err = runner()
+        .run("const C = #{a: 1}; C.a = 2; C", json!({}), json!({}))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "script.error", "{err}");
 }
 
 #[tokio::test]

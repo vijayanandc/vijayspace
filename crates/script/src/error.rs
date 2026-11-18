@@ -110,8 +110,49 @@ impl From<ParseError> for ScriptError {
     }
 }
 
+/// An error raised inside a script function is reported as the inner error, at its own position,
+/// with the function's name (closures have no useful name).
+fn innermost(e: Box<EvalAltResult>) -> (Box<EvalAltResult>, Option<String>) {
+    let mut e = e;
+    let mut function = None;
+    while matches!(*e, EvalAltResult::ErrorInFunctionCall(..)) {
+        if let EvalAltResult::ErrorInFunctionCall(name, _, inner, _) = *e {
+            function = (!name.starts_with("anon$")).then_some(name);
+            e = inner;
+        }
+    }
+    (e, function)
+}
+
+/// The message for an evaluation error, with a hint where Rhai's own wording leaves users stuck.
+fn eval_message(e: &EvalAltResult, in_function: bool) -> String {
+    if let EvalAltResult::ErrorRuntime(value, _) = e {
+        // `throw "message"`: the thrown value is the message.
+        return value.to_string();
+    }
+    if matches!(e, EvalAltResult::ErrorTerminated(..)) {
+        return "the script ran for too long".to_owned();
+    }
+    let message = without_position(&e.to_string());
+    if let EvalAltResult::ErrorVariableNotFound(name, _) = e
+        && in_function
+        && (name == "input" || name == "context")
+    {
+        return format!(
+            "{message}. Functions only see their parameters: pass it in, e.g. `fn total({name}) {{ … }}` and call `total({name})`"
+        );
+    }
+    if matches!(e, EvalAltResult::ErrorDataRace(..)) {
+        return format!(
+            "{message}: a closure reads a value that the function it was passed to is working on. Copy what it needs first, e.g. `let factor = input.factor;`, and use that in the closure"
+        );
+    }
+    message
+}
+
 impl From<Box<EvalAltResult>> for ScriptError {
     fn from(e: Box<EvalAltResult>) -> Self {
+        let (e, function) = innermost(e);
         let (line, column) = pos(e.position());
         let limit = matches!(
             *e,
@@ -120,14 +161,11 @@ impl From<Box<EvalAltResult>> for ScriptError {
                 | EvalAltResult::ErrorStackOverflow(..)
                 | EvalAltResult::ErrorTerminated(..)
         );
-        // `throw "message"`: the thrown value is the message.
-        let message = bounded(if let EvalAltResult::ErrorRuntime(value, _) = &*e {
-            value.to_string()
-        } else if matches!(*e, EvalAltResult::ErrorTerminated(..)) {
-            "the script ran for too long".to_owned()
-        } else {
-            without_position(&e.to_string())
-        });
+        let mut message = eval_message(&e, function.is_some());
+        if let Some(name) = function {
+            message = format!("{message} (in function `{name}`)");
+        }
+        let message = bounded(message);
         if limit {
             Self::LimitExceeded {
                 message,
