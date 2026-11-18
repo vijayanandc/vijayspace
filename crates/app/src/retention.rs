@@ -8,10 +8,11 @@ use weft_domain::{error_codes, ids::OrgId, model::Org};
 
 use crate::{AppError, Deps, ports::Purged};
 
-/// Rows per batch; each batch is one short transaction.
-const BATCH: u32 = 1_000;
-/// Batches per org per sweep, so one sweep never hogs the database; the next sweep continues.
-const MAX_BATCHES: u32 = 20;
+/// Rows per batch (executions, events or snapshots; step runs go in smaller chunks).
+const BATCH: u32 = 200;
+/// Batches per org per sweep, so one sweep never hogs the database; the next sweep (every 15
+/// minutes) continues. 200 × 200 per 15 minutes keeps up with ~40 finished runs per second.
+const MAX_BATCHES: u32 = 200;
 /// Allowed retention, in days.
 pub const MIN_DAYS: u32 = 1;
 pub const MAX_DAYS: u32 = 3_650;
@@ -53,20 +54,9 @@ pub async fn sweep(deps: &Deps) -> Result<SweepReport, AppError> {
     let now = deps.clock.now();
     let mut report = SweepReport::default();
     for org in deps.store.list_orgs().await? {
-        let before = now - Duration::days(i64::from(effective_days(deps, &org)));
-        for _ in 0..MAX_BATCHES {
-            let purged = deps.store.purge_history(org.id, before, BATCH).await?;
-            report.add(purged);
-            let full = [
-                purged.executions,
-                purged.trigger_events,
-                purged.test_snapshots,
-            ]
-            .into_iter()
-            .any(|n| n >= u64::from(BATCH));
-            if !full {
-                break;
-            }
+        // One org's failure (e.g. a lock wait timeout) must not stop the others.
+        if let Err(e) = sweep_org(deps, &org, now, &mut report).await {
+            tracing::warn!(org = %org.id, error = %e, "retention sweep of an org failed");
         }
     }
     let jobs_before = now
@@ -83,6 +73,30 @@ pub async fn sweep(deps: &Deps) -> Result<SweepReport, AppError> {
     report.sync_leases = h.sync_leases;
     report.usage_days = h.usage_days;
     Ok(report)
+}
+
+async fn sweep_org(
+    deps: &Deps,
+    org: &Org,
+    now: chrono::DateTime<chrono::Utc>,
+    report: &mut SweepReport,
+) -> Result<(), AppError> {
+    let before = now - Duration::days(i64::from(effective_days(deps, org)));
+    for _ in 0..MAX_BATCHES {
+        let purged = deps.store.purge_history(org.id, before, BATCH).await?;
+        report.add(purged);
+        let full = [
+            purged.executions,
+            purged.trigger_events,
+            purged.test_snapshots,
+        ]
+        .into_iter()
+        .any(|n| n >= u64::from(BATCH));
+        if !full {
+            break;
+        }
+    }
+    Ok(())
 }
 
 /// Sets the org's retention (`None` = the server default).

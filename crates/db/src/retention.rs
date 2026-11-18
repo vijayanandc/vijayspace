@@ -9,54 +9,65 @@ use weft_domain::ids::OrgId;
 
 use crate::{MySqlStore, codec::db_err};
 
+/// Step runs are deleted in chunks of this many rows (they can hold large JSON).
+const STEP_CHUNK: u32 = 500;
+
+fn id_list<'a>(qb: &mut QueryBuilder<'a, sqlx::MySql>, ids: &'a [Uuid]) {
+    qb.push(" (");
+    let mut sep = qb.separated(", ");
+    for id in ids {
+        sep.push_bind(*id);
+    }
+    qb.push(")");
+}
+
 impl MySqlStore {
-    /// Finished executions (and their step runs) that finished before `before`.
+    /// Finished executions (and their step runs) that finished before `before`. Each statement
+    /// is short on its own: step runs go in bounded chunks first, then the executions. A crash in
+    /// between leaves executions without steps, which the next sweep removes.
     async fn purge_executions(
         &self,
         org: OrgId,
         before: DateTime<Utc>,
         limit: u32,
     ) -> Res<(u64, u64)> {
-        let mut tx = self.pool.begin().await.map_err(db_err)?;
-        let ids: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM executions WHERE org_id = ? AND finished_at IS NOT NULL AND finished_at < ? AND status IN ('succeeded', 'failed', 'cancelled') ORDER BY finished_at LIMIT ? FOR UPDATE")
+        let ids: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM executions WHERE org_id = ? AND finished_at IS NOT NULL AND finished_at < ? AND status IN ('succeeded', 'failed', 'cancelled') ORDER BY finished_at LIMIT ?")
             .bind(org.as_uuid())
             .bind(before)
             .bind(limit)
-            .fetch_all(&mut *tx)
+            .fetch_all(&self.pool)
             .await
             .map_err(db_err)?;
         if ids.is_empty() {
             return Ok((0, 0));
         }
-        let mut steps = QueryBuilder::new("DELETE FROM step_runs WHERE org_id = ");
-        steps
-            .push_bind(org.as_uuid())
-            .push(" AND execution_id IN (");
-        let mut sep = steps.separated(", ");
-        for id in &ids {
-            sep.push_bind(*id);
+        let mut step_runs = 0;
+        loop {
+            let mut qb = QueryBuilder::new("DELETE FROM step_runs WHERE org_id = ");
+            qb.push_bind(org.as_uuid()).push(" AND execution_id IN");
+            id_list(&mut qb, &ids);
+            qb.push(" LIMIT ").push_bind(STEP_CHUNK);
+            let n = qb
+                .build()
+                .execute(&self.pool)
+                .await
+                .map_err(db_err)?
+                .rows_affected();
+            step_runs += n;
+            if n < u64::from(STEP_CHUNK) {
+                break;
+            }
         }
-        steps.push(")");
-        let step_runs = steps
+        let mut qb = QueryBuilder::new("DELETE FROM executions WHERE org_id = ");
+        qb.push_bind(org.as_uuid())
+            .push(" AND status IN ('succeeded', 'failed', 'cancelled') AND id IN");
+        id_list(&mut qb, &ids);
+        let executions = qb
             .build()
-            .execute(&mut *tx)
+            .execute(&self.pool)
             .await
             .map_err(db_err)?
             .rows_affected();
-        let mut exes = QueryBuilder::new("DELETE FROM executions WHERE org_id = ");
-        exes.push_bind(org.as_uuid()).push(" AND id IN (");
-        let mut sep = exes.separated(", ");
-        for id in &ids {
-            sep.push_bind(*id);
-        }
-        exes.push(")");
-        let executions = exes
-            .build()
-            .execute(&mut *tx)
-            .await
-            .map_err(db_err)?
-            .rows_affected();
-        tx.commit().await.map_err(db_err)?;
         Ok((executions, step_runs))
     }
 }

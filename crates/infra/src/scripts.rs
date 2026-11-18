@@ -1,13 +1,20 @@
-//! `ScriptRunner` that runs custom functions on blocking threads, at most N at a time (doc 08 §7).
-//! This is the one sanctioned use of `spawn_blocking` outside the worker and server.
+//! `ScriptRunner`s (doc 08 §7):
+//! - [`ProcessScriptRunner`] (production): each script runs in a child process under OS memory
+//!   and CPU limits, so a script that defeats the engine's size accounting only kills itself.
+//! - [`PooledScriptRunner`] (tests, development): blocking threads in this process. This is the
+//!   one sanctioned use of `spawn_blocking` outside the worker and server.
 
-use std::sync::Arc;
+use std::{path::PathBuf, process::Stdio, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
+use tokio::{io::AsyncWriteExt as _, process::Command};
 use weft_connector_sdk::{ConnectorError, ScriptRun, ScriptRunner};
-use weft_script::{Limits, ScriptError};
+use weft_script::{
+    Limits, ScriptError,
+    child::{ChildRequest, ChildResponse},
+};
 
 /// Runs scripts with the platform limits; `concurrency` bounds how many run at once.
 #[derive(Debug)]
@@ -63,6 +70,97 @@ impl ScriptRunner for PooledScriptRunner {
             Err(e) => Err(ConnectorError::permanent(format!(
                 "the script crashed: {e}"
             ))),
+        }
+    }
+}
+
+/// The subcommand of the `weft` binary that runs one script (see `weft_script::child`).
+pub const CHILD_SUBCOMMAND: &str = "script-child";
+
+/// Runs each script in a child process of `exe` (the `weft` binary), at most N at a time.
+#[derive(Debug)]
+pub struct ProcessScriptRunner {
+    exe: PathBuf,
+    permits: Arc<Semaphore>,
+    /// Address-space cap of the child, in MB (`RLIMIT_AS`).
+    memory_mb: u64,
+    /// The child is killed after this long (the engine's own guards normally stop it first).
+    wall: Duration,
+}
+
+impl ProcessScriptRunner {
+    #[must_use]
+    pub fn new(exe: PathBuf, concurrency: usize, memory_mb: u64, wall: Duration) -> Self {
+        Self {
+            exe,
+            permits: Arc::new(Semaphore::new(concurrency.max(1))),
+            memory_mb,
+            wall,
+        }
+    }
+}
+
+fn resources_exceeded() -> ConnectorError {
+    ConnectorError::Coded {
+        code: "script.limit_exceeded",
+        message: "the script used too much memory or time".into(),
+        details: Value::Null,
+    }
+}
+
+#[async_trait]
+impl ScriptRunner for ProcessScriptRunner {
+    async fn run(
+        &self,
+        code: &str,
+        input: Value,
+        context: Value,
+    ) -> Result<ScriptRun, ConnectorError> {
+        let _permit = self
+            .permits
+            .acquire()
+            .await
+            .map_err(|_| ConnectorError::transient("the script runner is shutting down"))?;
+        let request = serde_json::to_vec(&ChildRequest {
+            code: code.to_owned(),
+            input,
+            context,
+        })
+        .map_err(|e| ConnectorError::permanent(format!("encoding the script request: {e}")))?;
+        let mut child = Command::new(&self.exe)
+            .arg(CHILD_SUBCOMMAND)
+            .env("WEFT_SCRIPT_MEMORY_MB", self.memory_mb.to_string())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| ConnectorError::transient(format!("starting the script runner: {e}")))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            // A child that dies early closes the pipe; its exit status tells why.
+            let _ = stdin.write_all(&request).await;
+        }
+        let output = match tokio::time::timeout(self.wall, child.wait_with_output()).await {
+            Ok(Ok(output)) => output,
+            Ok(Err(e)) => {
+                return Err(ConnectorError::transient(format!(
+                    "running the script: {e}"
+                )));
+            }
+            Err(_) => return Err(resources_exceeded()), // dropped: the child is killed
+        };
+        if !output.status.success() {
+            return Err(resources_exceeded());
+        }
+        let response: ChildResponse =
+            serde_json::from_slice(&output.stdout).map_err(|_| resources_exceeded())?;
+        let result: Result<weft_script::ScriptOutput, ScriptError> = response.into();
+        match result {
+            Ok(out) => Ok(ScriptRun {
+                output: out.value,
+                logs: out.logs,
+            }),
+            Err(e) => Err(script_error(&e)),
         }
     }
 }

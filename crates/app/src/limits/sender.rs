@@ -31,8 +31,8 @@ impl std::fmt::Debug for LimitedSender {
 }
 
 fn limited(retry_after_secs: u64, message: String) -> ConnectorError {
-    ConnectorError::RateLimited {
-        retry_after_secs: Some(retry_after_secs),
+    ConnectorError::Throttled {
+        retry_after_secs,
         message,
     }
 }
@@ -50,11 +50,13 @@ pub(crate) fn secs_to_midnight(now: DateTime<Utc>) -> u64 {
 }
 
 /// The share of the daily budget a class may use: background work stops at 95%.
+/// Inbound events are never refused (refusing would lose the event); they are only counted.
 pub(crate) fn cap_for(daily: Option<u32>, class: RequestClass) -> Option<u32> {
-    daily.map(|cap| match class {
-        RequestClass::Live => cap,
-        RequestClass::Background => cap.saturating_mul(95) / 100,
-    })
+    match class {
+        RequestClass::Inbound => None,
+        RequestClass::Live => daily,
+        RequestClass::Background => daily.map(|cap| cap.saturating_mul(95) / 100),
+    }
 }
 
 #[async_trait]
@@ -81,7 +83,8 @@ impl HttpSender for LimitedSender {
             None => None,
         };
         let now = self.deps.clock.now();
-        if let Ok(mut bucket) = entry.bucket.lock()
+        if self.class != RequestClass::Inbound
+            && let Ok(mut bucket) = entry.bucket.lock()
             && let Some(bucket) = bucket.as_mut()
             && let Err(wait) = bucket.take(now)
         {
@@ -100,7 +103,7 @@ impl HttpSender for LimitedSender {
             .map_err(|e| ConnectorError::transient(format!("counting the request: {e}")))?;
         if !allowed {
             let why = match self.class {
-                RequestClass::Live => "the daily request budget is used up",
+                RequestClass::Live | RequestClass::Inbound => "the daily request budget is used up",
                 RequestClass::Background => {
                     "95% of the daily request budget is used; background work waits"
                 }
@@ -125,6 +128,11 @@ mod tests {
         assert_eq!(cap_for(Some(10_000), RequestClass::Live), Some(10_000));
         assert_eq!(cap_for(Some(10_000), RequestClass::Background), Some(9_500));
         assert_eq!(cap_for(None, RequestClass::Background), None);
+        assert_eq!(
+            cap_for(Some(10), RequestClass::Inbound),
+            None,
+            "inbound events are only counted"
+        );
         let t = Utc.with_ymd_and_hms(2026, 1, 1, 23, 59, 0).unwrap();
         assert_eq!(secs_to_midnight(t), 60);
     }

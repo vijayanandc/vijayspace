@@ -33,8 +33,15 @@ async fn org(State(s): State<ApiState>, Org(org): Org) -> ApiResult<Json<Value>>
 
 #[derive(Debug, serde::Deserialize)]
 struct OrgBody {
-    /// `null` = the server default.
-    retention_days: Option<u32>,
+    /// Absent = unchanged; `null` = the server default.
+    #[allow(clippy::option_option)]
+    #[serde(default, deserialize_with = "present")]
+    retention_days: Option<Option<u32>>,
+}
+
+#[allow(clippy::option_option)]
+fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<u32>>, D::Error> {
+    Ok(Some(<Option<u32> as serde::Deserialize>::deserialize(d)?))
 }
 
 async fn update_org(
@@ -42,8 +49,11 @@ async fn update_org(
     Org(org): Org,
     Json(b): Json<OrgBody>,
 ) -> ApiResult<Json<Value>> {
-    let o = weft_app::retention::set_retention_days(&s.deps, org, b.retention_days).await?;
-    Ok(Json(org_json(&s.deps, &o)))
+    if let Some(days) = b.retention_days {
+        weft_app::retention::set_retention_days(&s.deps, org, days).await?;
+    }
+    let o = s.deps.store.get_org(org).await?;
+    Ok(Json(o.map_or(Value::Null, |o| org_json(&s.deps, &o))))
 }
 
 async fn usage(State(s): State<ApiState>, Org(org): Org) -> ApiResult<Json<Value>> {

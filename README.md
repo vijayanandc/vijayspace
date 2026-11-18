@@ -39,6 +39,8 @@ The run appears under **History** with each step's input and output.
 | `WEFT_SMTP_URL`, `WEFT_MAIL_FROM` | log only | Email step delivery (Mailpit: `smtp://localhost:1025`) |
 | `WEFT_WORKER_CONCURRENCY` | `16` | Jobs processed in parallel |
 | `WEFT_RETENTION_DAYS` | `30` | Days finished runs are kept (orgs can set their own, 1–3650) |
+| `WEFT_SCRIPT_ISOLATION` | `process` | Run custom functions in child processes under OS memory/CPU limits; `thread` runs them inside the server (development only) |
+| `WEFT_SCRIPT_MEMORY_MB` | `512` | Memory cap of a custom-function process |
 | `WEFT_OAUTH_ZOHO_CRM_CLIENT_ID` / `_SECRET` | — | Zoho CRM OAuth app (redirect URI: `<public url>/oauth/callback`) |
 | `WEFT_OAUTH_AUTODESK_FORMA_CLIENT_ID` / `_SECRET` | — | Autodesk APS app (same redirect URI) |
 

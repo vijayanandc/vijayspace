@@ -213,3 +213,29 @@ fn the_wall_time_guard_stops_a_script_as_a_safety_net() {
     assert_eq!(e.code(), "script.limit_exceeded");
     assert!(e.to_string().contains("too long"), "{e}");
 }
+
+#[test]
+fn values_the_size_limits_cannot_see_are_unreachable() {
+    // Function pointers (curried values) and closures that capture variables.
+    for code in [
+        "fn f(x) { x } Fn(\"f\").curry(1)",
+        "let t = 1; let g = || t; g.call()",
+        "(|x| x).curry(1)",
+    ] {
+        assert!(
+            check(code, &Limits::default()).is_err()
+                || run(code, &json!({}), &json!({}), &Limits::default()).is_err(),
+            "{code}"
+        );
+    }
+    // Anonymous functions without captures still work (e.g. with `map`).
+    assert_eq!(
+        ok("[1, 2, 3].map(|x| x * 2)", json!({})),
+        json!({"result": [2, 4, 6]})
+    );
+    // Mentioning a large input many times does not copy it.
+    let input = json!({"keys": (0..2000).map(|i| format!("k{i}")).collect::<Vec<_>>()});
+    let code =
+        "let a = input; let b = input; let c = input; a.keys.len() + b.keys.len() + c.keys.len()";
+    assert_eq!(ok(code, input), json!({"result": 6000}));
+}

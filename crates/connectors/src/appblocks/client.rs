@@ -171,7 +171,8 @@ pub(super) fn map_error(resp: &HttpResponse, now: DateTime<Utc>) -> ConnectorErr
         other @ (ConnectorError::Transient { .. }
         | ConnectorError::RateLimited { .. }
         | ConnectorError::Unsupported { .. }
-        | ConnectorError::Coded { .. }) => other,
+        | ConnectorError::Coded { .. }
+        | ConnectorError::Throttled { .. }) => other,
     }
 }
 

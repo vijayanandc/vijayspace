@@ -17,6 +17,11 @@ pub struct Settings {
     pub http_proxy: Option<String>,
     /// Days finished runs are kept unless an org sets its own (`WEFT_RETENTION_DAYS`, default 30).
     pub retention_days: u32,
+    /// Run custom functions in child processes (`WEFT_SCRIPT_ISOLATION=process`, the default)
+    /// or on threads of this process (`thread`, for development only).
+    pub script_processes: bool,
+    /// Address-space cap of a script process (`WEFT_SCRIPT_MEMORY_MB`, default 512).
+    pub script_memory_mb: u64,
     pub smtp_url: Option<String>,
     pub mail_from: String,
     pub worker_concurrency: usize,
@@ -71,9 +76,18 @@ impl Settings {
                 .collect(),
             public_url,
             master_keys,
-            retention_days: var("WEFT_RETENTION_DAYS")
+            script_processes: var("WEFT_SCRIPT_ISOLATION").as_deref() != Some("thread"),
+            script_memory_mb: var("WEFT_SCRIPT_MEMORY_MB")
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(30),
+                .unwrap_or(crate::script_child::DEFAULT_MEMORY_MB),
+            retention_days: match var("WEFT_RETENTION_DAYS") {
+                None => 30,
+                Some(v) => v
+                    .parse()
+                    .ok()
+                    .filter(|d| (1..=3650).contains(d))
+                    .ok_or("WEFT_RETENTION_DAYS must be a number of days from 1 to 3650")?,
+            },
             http_proxy: var("WEFT_HTTP_PROXY"),
             allow_private_networks: var("WEFT_ALLOW_PRIVATE_NETWORKS")
                 .is_some_and(|v| v == "true" || v == "1"),

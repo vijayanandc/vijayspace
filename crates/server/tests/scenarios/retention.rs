@@ -87,6 +87,11 @@ async fn the_org_setting_overrides_the_default_and_is_validated() {
         .req("PATCH", "/api/v1/org", Some(json!({"retention_days": 0})))
         .await;
     assert_eq!(status.as_u16(), 422);
+    let untouched = app.ok("PATCH", "/api/v1/org", Some(json!({}))).await;
+    assert_eq!(
+        untouched["retention_days"], 7,
+        "an absent field changes nothing"
+    );
 
     let quick = app
         .live_flow(

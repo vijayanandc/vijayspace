@@ -15,8 +15,9 @@ use super::items::{bounded_key, start_items};
 use crate::{
     AppError, Deps,
     executions::start::new_execution,
+    limits::RequestClass,
     ports::{NewExecution, NewTriggerEvent},
-    runner::action::{action_ctx, load_connection},
+    runner::action::{action_ctx_for, load_connection},
 };
 
 /// Maximum webhook body size (doc 01 §4).
@@ -269,7 +270,15 @@ pub async fn ingest_app_event(
     let connection = load_connection(deps, reg.org_id, app.connection_id.as_deref())
         .await
         .map_err(|e| AppError::validation(error_codes::CONNECTION_NOT_FOUND, e.to_string()))?;
-    let ctx = action_ctx(deps, reg.org_id, connection, String::new());
+    // Fetching the record an app just announced is counted but never refused: refusing would
+    // lose the event.
+    let ctx = action_ctx_for(
+        deps,
+        reg.org_id,
+        connection,
+        String::new(),
+        RequestClass::Inbound,
+    );
     let content_type = req
         .headers
         .get("content-type")
@@ -284,24 +293,7 @@ pub async fn ingest_app_event(
     let batch = connector
         .handle_event(&ctx, &app.trigger, &app.input, &inbound, &reg.secret)
         .await
-        .map_err(|e| match e {
-            ConnectorError::InvalidInput { message, .. } => AppError::new(
-                crate::ErrorKind::Unauthorized,
-                error_codes::WEBHOOK_UNAUTHORIZED,
-                message,
-            ),
-            other @ (ConnectorError::Transient { .. }
-            | ConnectorError::RateLimited { .. }
-            | ConnectorError::AuthExpired { .. }
-            | ConnectorError::NotFound { .. }
-            | ConnectorError::Permanent { .. }
-            | ConnectorError::Unsupported { .. }
-            | ConnectorError::Coded { .. }) => AppError::new(
-                crate::ErrorKind::BadGateway,
-                other.code(),
-                other.to_string(),
-            ),
-        })?;
+        .map_err(event_error)?;
     let listening = reg.listening_until.is_some_and(|u| u > now);
     if listening && let Some(first) = batch.items.first() {
         deps.store.set_sample(reg.id, &first.data, now).await?;
@@ -336,6 +328,30 @@ pub async fn ingest_app_event(
         executions,
         response: batch.response,
     })
+}
+
+/// An app event the connector rejected: bad signatures and payloads are 401s, anything else
+/// a 502 the provider may redeliver.
+fn event_error(e: ConnectorError) -> AppError {
+    match e {
+        ConnectorError::InvalidInput { message, .. } => AppError::new(
+            crate::ErrorKind::Unauthorized,
+            error_codes::WEBHOOK_UNAUTHORIZED,
+            message,
+        ),
+        other @ (ConnectorError::Transient { .. }
+        | ConnectorError::RateLimited { .. }
+        | ConnectorError::AuthExpired { .. }
+        | ConnectorError::NotFound { .. }
+        | ConnectorError::Permanent { .. }
+        | ConnectorError::Unsupported { .. }
+        | ConnectorError::Coded { .. }
+        | ConnectorError::Throttled { .. }) => AppError::new(
+            crate::ErrorKind::BadGateway,
+            other.code(),
+            other.to_string(),
+        ),
+    }
 }
 
 /// Constant-time string comparison for secrets.

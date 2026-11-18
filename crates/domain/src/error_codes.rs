@@ -15,6 +15,8 @@ pub const STEP_NOT_FOUND: &str = "flow.step_not_found";
 pub const CONNECTION_NOT_FOUND: &str = "connection.not_found";
 pub const CONNECTION_NEEDS_REAUTH: &str = "connection.needs_reauth";
 pub const CONNECTION_IN_USE: &str = "connection.in_use";
+/// A request held back by the connection's own limits (never sent; not an attempt).
+pub const CONNECTION_THROTTLED: &str = "connection.throttled";
 pub const CONNECTOR_NOT_FOUND: &str = "connector.not_found";
 pub const ACTION_NOT_FOUND: &str = "connector.action_not_found";
 pub const OAUTH_STATE_INVALID: &str = "oauth.state_invalid";

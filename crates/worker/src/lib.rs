@@ -45,7 +45,7 @@ pub async fn tick(deps: &Deps) {
     }
 }
 
-/// Deletes run history past each org's retention (hourly, in small batches).
+/// Deletes run history past each org's retention (every 15 minutes, in small batches).
 pub async fn sweep(deps: &Deps) {
     match weft_app::retention::sweep(deps).await {
         Ok(report) => tracing::info!(?report, "retention sweep"),
@@ -256,7 +256,7 @@ pub async fn run(deps: Deps, config: WorkerConfig, shutdown: CancellationToken) 
         let deps = deps.clone();
         let shutdown = shutdown.clone();
         tokio::spawn(async move {
-            let mut every = tokio::time::interval(Duration::from_hours(1));
+            let mut every = tokio::time::interval(Duration::from_mins(15));
             loop {
                 tokio::select! {
                     () = shutdown.cancelled() => break,

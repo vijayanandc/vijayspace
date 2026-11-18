@@ -30,7 +30,7 @@ impl ScriptConnector {
                 .required()
                 .not_mappable()
                 .placeholder("#{ total: input.price * input.qty }")
-                .help("Rhai. The values below are `input.<name>`; `context.now` is the step time. The last expression is the result; `throw \"message\"` fails the step; `print(...)` lines are kept in `_logs`."),
+                .help("Rhai. The values below are `input.<name>`; `context.now` is when the step started. The last expression is the result; `throw \"message\"` fails the step; `print(...)` lines are kept in `_logs`."),
         )
         .field(FieldSpec::new("input", "Input values", FieldKind::KeyValue).help("Named values the script reads as `input.<name>`. Map variables from earlier steps here."))
         .field(
@@ -112,7 +112,8 @@ impl Connector for ScriptConnector {
             ConnectorError::permanent("Custom functions are not available on this server")
         })?;
         let now = ctx.now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let context = json!({"now": now, "org_id": ctx.org_id, "execution": {"started_at": now}});
+        // `now` is when this step (attempt) started; scripts have no clock of their own.
+        let context = json!({"now": now, "org_id": ctx.org_id});
         let run = runner.run(&code, values, context).await?;
         let mut output = run.output;
         if !run.logs.is_empty()

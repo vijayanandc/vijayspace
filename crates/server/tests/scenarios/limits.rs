@@ -157,3 +157,53 @@ async fn limits_reject_absurd_values_and_unknown_connections() {
     assert_eq!(status.as_u16(), 404);
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn a_held_back_request_is_not_an_attempt_and_is_never_skipped() {
+    let app = TestApp::spawn().await;
+    let server = MockServer::start().await;
+    let cxn = appblocks(&app, &server).await;
+    app.ok(
+        "PUT",
+        &format!("/api/v1/connections/{cxn}/limits"),
+        Some(json!({"requests_per_minute": 1})),
+    )
+    .await;
+    // One attempt only, and "continue" on error: a throttled request must neither fail nor skip.
+    let flow = app
+        .live_flow("Strict", json!({"trigger": {"type": "manual"}, "steps": [
+            {"key": "job", "type": "action", "connector": "appblocks", "action": "get_record", "connection_id": cxn,
+                "input": {"module": "jobs", "record_id": "{{ trigger.id }}"},
+                "retry": {"max_attempts": 1}, "on_error": "continue"}
+        ]}))
+        .await;
+    let flow = flow["id"].as_str().unwrap();
+    assert_eq!(run(&app, flow).await["status"], "succeeded");
+    let held = run(&app, flow).await;
+    assert_eq!(
+        held["status"], "waiting",
+        "held back, not failed or skipped: {held}"
+    );
+    app.clock.advance(Duration::seconds(61));
+    app.drain().await;
+    let done = app
+        .ok(
+            "GET",
+            &format!("/api/v1/executions/{}", held["id"].as_str().unwrap()),
+            None,
+        )
+        .await;
+    assert_eq!(done["status"], "succeeded", "{done}");
+    let job = done["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|s| s["step_key"] == "job")
+        .unwrap();
+    assert_eq!(
+        job["output"]["record"]["api_id"], "01JOB",
+        "the request was sent once the limit allowed: {done}"
+    );
+    app.cleanup().await;
+}

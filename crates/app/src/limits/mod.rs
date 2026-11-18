@@ -22,12 +22,14 @@ pub use sender::LimitedSender;
 
 use crate::Deps;
 
-/// Who is asking: live work (instant events, flow runs, the builder) or background work (polls,
-/// backfills), which is held back once 95% of the daily budget is used.
+/// Who is asking: live work (flow runs, the builder), background work (polls, backfills), which
+/// is held back once 95% of the daily budget is used, or inbound event handling (fetching the
+/// record an app just told us about), which is counted but never refused, so no event is lost.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RequestClass {
     Live,
     Background,
+    Inbound,
 }
 
 /// How long a connection's effective limits are cached before being read again.

@@ -38,6 +38,13 @@ pub enum ConnectorError {
     /// The connector does not implement this operation.
     #[error("not supported: {what}")]
     Unsupported { what: String },
+    /// Held back by this platform's limits for the connection: the request was never sent.
+    /// The runner waits and tries again without counting an attempt.
+    #[error("held back by the connection's limits: {message}")]
+    Throttled {
+        retry_after_secs: u64,
+        message: String,
+    },
     /// A permanent failure with its own stable platform code (e.g. `script.error`).
     #[error("{message}")]
     Coded {
@@ -90,13 +97,17 @@ impl ConnectorError {
             Self::NotFound { .. } => error_codes::APP_NOT_FOUND,
             Self::Permanent { .. } | Self::Unsupported { .. } => error_codes::APP_ERROR,
             Self::Coded { code, .. } => code,
+            Self::Throttled { .. } => error_codes::CONNECTION_THROTTLED,
         }
     }
 
     /// Whether the engine should retry automatically.
     #[must_use]
     pub const fn retryable(&self) -> bool {
-        matches!(self, Self::Transient { .. } | Self::RateLimited { .. })
+        matches!(
+            self,
+            Self::Transient { .. } | Self::RateLimited { .. } | Self::Throttled { .. }
+        )
     }
 
     /// Provider-requested wait before retrying.
@@ -106,6 +117,9 @@ impl ConnectorError {
             Self::RateLimited {
                 retry_after_secs, ..
             } => *retry_after_secs,
+            Self::Throttled {
+                retry_after_secs, ..
+            } => Some(*retry_after_secs),
             Self::Transient { .. }
             | Self::AuthExpired { .. }
             | Self::InvalidInput { .. }
@@ -131,7 +145,8 @@ impl ConnectorError {
             | Self::InvalidInput { field: None, .. }
             | Self::NotFound { .. }
             | Self::Permanent { status: None, .. }
-            | Self::Unsupported { .. } => Value::Null,
+            | Self::Unsupported { .. }
+            | Self::Throttled { .. } => Value::Null,
         }
     }
 

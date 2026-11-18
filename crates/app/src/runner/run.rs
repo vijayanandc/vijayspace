@@ -178,6 +178,15 @@ async fn run_action(
     ctx.seq += 1;
     let result = run_step(deps, exe, plan, &step, input).await;
     let done_at = deps.clock.now();
+    if let StepResult::Failed(err) = &result
+        && err.code == error_codes::CONNECTION_THROTTLED
+    {
+        // Our own limits held the request back: it was never sent, so it is not an attempt.
+        let at = done_at
+            + Duration::seconds(i64::try_from(err.retry_after_secs.unwrap_or(30)).unwrap_or(30));
+        let job = throttled(deps, exe, &state, step_run_id, err, at, done_at).await?;
+        return Ok((state, Some(job)));
+    }
     let (next, after) = record_result(plan, state, &step, &result, done_at)
         .map_err(|e| AppError::internal(format!("engine: {e}")))?;
     let outcome = complete(
@@ -208,6 +217,7 @@ fn leak(code: &str) -> &'static str {
         c if c == error_codes::APP_NOT_FOUND => error_codes::APP_NOT_FOUND,
         c if c == error_codes::CONNECTION_NEEDS_REAUTH => error_codes::CONNECTION_NEEDS_REAUTH,
         c if c == error_codes::SCRIPT_ERROR => error_codes::SCRIPT_ERROR,
+        c if c == error_codes::CONNECTION_THROTTLED => error_codes::CONNECTION_THROTTLED,
         c if c == error_codes::SCRIPT_LIMIT_EXCEEDED => error_codes::SCRIPT_LIMIT_EXCEEDED,
         _ => error_codes::APP_ERROR,
     }
@@ -259,6 +269,37 @@ async fn run_step(
             StepResult::Failed(step_error(&err))
         }
     }
+}
+
+/// Records a step held back by the connection's limits and parks the execution until `at`,
+/// leaving the engine state (and the attempt count) unchanged.
+async fn throttled(
+    deps: &Deps,
+    exe: &Execution,
+    state: &RunState,
+    step_run_id: weft_domain::ids::StepRunId,
+    err: &weft_engine::StepError,
+    at: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> Result<JobOutcome, AppError> {
+    let completion = StepCompletion {
+        step_run_id,
+        status: StepStatus::RetryScheduled,
+        output: None,
+        error: Some(serde_json::to_value(err).unwrap_or(Value::Null)),
+        finished_at: now,
+        execution: Checkpoint {
+            execution_id: exe.id,
+            org_id: exe.org_id,
+            status: ExecutionStatus::Waiting,
+            run_state: to_value(state),
+            waiting_until: Some(at),
+            now,
+        },
+        count_task: false,
+    };
+    deps.store.complete_step(&completion).await?;
+    Ok(JobOutcome::RescheduleAt(at))
 }
 
 /// Persists the action result. Returns `Some(job outcome)` when this slice must end.

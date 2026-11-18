@@ -19,6 +19,8 @@ weft-worker.workspace = true
 weft-db.workspace = true
 weft-infra.workspace = true
 weft-script.workspace = true
+rlimit.workspace = true
+serde_json.workspace = true
 weft-http.workspace = true
 weft-connectors.workspace = true
 weft-connector-sdk.workspace = true
@@ -32,7 +34,6 @@ tracing-subscriber.workspace = true
 clap.workspace = true
 anyhow.workspace = true
 uuid.workspace = true
-serde_json.workspace = true
 
 [dev-dependencies]
 weft-testkit.workspace = true

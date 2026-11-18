@@ -59,8 +59,9 @@ impl LimitRepo for MySqlStore {
             .await
             .map_err(db_err)?;
         // The row lock serialises concurrent requests; each re-checks the cap on the latest count.
-        let counted = sqlx::query("UPDATE connection_usage SET requests = requests + 1, updated_at = ? WHERE connection_id = ? AND day = ? AND (? IS NULL OR requests < ?)")
+        let counted = sqlx::query("UPDATE connection_usage SET requests = requests + 1, updated_at = ? WHERE org_id = ? AND connection_id = ? AND day = ? AND (? IS NULL OR requests < ?)")
             .bind(now)
+            .bind(org.as_uuid())
             .bind(id.as_uuid())
             .bind(day)
             .bind(cap)
@@ -71,8 +72,9 @@ impl LimitRepo for MySqlStore {
         if counted.rows_affected() > 0 {
             return Ok(true);
         }
-        sqlx::query("UPDATE connection_usage SET refused = refused + 1, updated_at = ? WHERE connection_id = ? AND day = ?")
+        sqlx::query("UPDATE connection_usage SET refused = refused + 1, updated_at = ? WHERE org_id = ? AND connection_id = ? AND day = ?")
             .bind(now)
+            .bind(org.as_uuid())
             .bind(id.as_uuid())
             .bind(day)
             .execute(&self.pool)

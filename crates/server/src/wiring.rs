@@ -4,12 +4,14 @@ use std::sync::Arc;
 
 use tokio::sync::Notify;
 use weft_app::{AppConfig, Deps, connections::handle::RefreshLocks, runner::plan_cache::PlanCache};
+use weft_connector_sdk::ScriptRunner;
 use weft_connector_sdk::{ConnectorRegistry, Mailer};
 use weft_db::MySqlStore;
 use weft_domain::ids::OrgId;
 use weft_http::{ReqwestSender, SsrfPolicy};
 use weft_infra::{
-    AesGcmSecretBox, LogMailer, PooledScriptRunner, SmtpMailer, SystemClock, UuidV7Ids,
+    AesGcmSecretBox, LogMailer, PooledScriptRunner, ProcessScriptRunner, SmtpMailer, SystemClock,
+    UuidV7Ids,
 };
 
 use crate::config::Settings;
@@ -60,10 +62,7 @@ pub fn build(settings: &Settings, store: MySqlStore) -> anyhow::Result<Deps> {
                 .map_err(anyhow::Error::msg)?,
         ),
         mailer: Some(mailer),
-        scripts: Some(Arc::new(PooledScriptRunner::new(
-            std::thread::available_parallelism().map_or(2, std::num::NonZeroUsize::get),
-            weft_script::Limits::default(),
-        ))),
+        scripts: Some(script_runner(settings)?),
         connectors: Arc::new(registry()),
         config: Arc::new(AppConfig {
             public_url: settings.public_url.clone(),
@@ -76,4 +75,25 @@ pub fn build(settings: &Settings, store: MySqlStore) -> anyhow::Result<Deps> {
         limiters: Arc::new(weft_app::limits::ConnectionLimiters::default()),
         refresh_locks: Arc::new(RefreshLocks::default()),
     })
+}
+
+/// Custom functions run in child processes under OS limits unless isolation is turned off.
+fn script_runner(settings: &Settings) -> anyhow::Result<Arc<dyn ScriptRunner>> {
+    let cpus = std::thread::available_parallelism().map_or(2, std::num::NonZeroUsize::get);
+    if settings.script_processes {
+        let exe = std::env::current_exe()?;
+        return Ok(Arc::new(ProcessScriptRunner::new(
+            exe,
+            cpus,
+            settings.script_memory_mb,
+            std::time::Duration::from_secs(15),
+        )));
+    }
+    tracing::warn!(
+        "WEFT_SCRIPT_ISOLATION=thread: custom functions run inside this process (development only)"
+    );
+    Ok(Arc::new(PooledScriptRunner::new(
+        cpus,
+        weft_script::Limits::default(),
+    )))
 }

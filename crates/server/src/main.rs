@@ -1,4 +1,5 @@
-//! The `weft` binary: `serve` (API + worker), `api`, `worker`, `migrate`.
+//! The `weft` binary: `serve` (API + worker), `api`, `worker`, `migrate` (and the internal
+//! `script-child` that runs one custom function under OS limits).
 
 use clap::{Parser, Subcommand};
 use tokio_util::sync::CancellationToken;
@@ -22,17 +23,30 @@ enum Command {
     Worker,
     /// Apply database migrations and exit.
     Migrate,
+    /// Internal: run one custom function from stdin under OS limits (started by the worker).
+    #[command(name = "script-child", hide = true)]
+    ScriptChild,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+    if matches!(cli.command, Some(Command::ScriptChild)) {
+        // Before any runtime or thread exists, so the memory cap covers everything.
+        return weft_server::script_child::run();
+    }
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(run(cli))
+}
+
+async fn run(cli: Cli) -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info,sqlx=warn".into()),
         )
         .init();
-    let cli = Cli::parse();
     let settings = Settings::from_env().map_err(anyhow::Error::msg)?;
     let pool = weft_db::connect(&settings.database_url, 20).await?;
     weft_db::migrate(&pool).await?;

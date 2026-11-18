@@ -11,7 +11,8 @@ One line per third-party crate: what it is for. Add a line here in the same chan
 | chrono, chrono-tz | expr, domain, app | Time values and IANA time zones for schedules and date filters |
 | croner | domain | Cron expression parsing and next-fire computation |
 | minijinja (`json`, `urlencode`, `fuel`, `loop_controls`) | expr | Sandboxed templates with a fuel limit |
-| rhai (`sync`, `serde`, `no_time`, `no_module`; never `unchecked`) | script | Custom functions in a sandbox with operation, depth and size limits (doc 08 §7) |
+| rhai (`sync`, `serde`, `no_time`, `no_module`, `no_closure`; never `unchecked`) | script | Custom functions in a sandbox with operation, depth and size limits (doc 08 §7) |
+| rlimit | server | Address-space and CPU limits of the custom-function child process |
 | sha2, hmac, hex, base64 | expr, app, api, connector-sdk, infra | Hash/HMAC filters, sync value hashes, PKCE challenges, encodings |
 | rand | connector-sdk | Random tokens (OAuth state, PKCE verifier, webhook tokens) |
 | regex | expr, connectors | `regex_replace` filter, `matches_regex` operator, text extraction |

@@ -4,6 +4,7 @@
 //! result. There is no clock, file, network or environment access: only the helpers registered in
 //! [`helpers`]. Every run gets a fresh engine with operation, depth and size limits.
 
+pub mod child;
 mod engine;
 mod error;
 mod helpers;
