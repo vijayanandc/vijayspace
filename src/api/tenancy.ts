@@ -42,6 +42,10 @@ export interface Me {
   user: User | null;
   orgs: Membership[];
   invitations: Invitation[];
+  /** An owner or admin of the operator's default org. */
+  staff: boolean;
+  /** Staff only, unless the server lets anyone signed in create organisations. */
+  can_create_orgs: boolean;
 }
 
 export interface Member {

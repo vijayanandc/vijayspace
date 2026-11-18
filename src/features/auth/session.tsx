@@ -150,7 +150,7 @@ export function TestSession({ role, children, userId = 'usr_me' }: { role: Role;
   const org: Membership = {
     id: 'org_test', name: 'Test org', timezone: 'UTC', retention_days: null, retention_days_effective: 30, retention_days_default: 30, role,
   };
-  const me: Me = { user: { id: userId, email: 'me@example.com', email_verified: true, name: 'Me', created_at: '' }, orgs: [org], invitations: [] };
+  const me: Me = { user: { id: userId, email: 'me@example.com', email_verified: true, name: 'Me', created_at: '' }, orgs: [org], invitations: [], staff: false, can_create_orgs: true };
   const value: Session = { me, org, signedIn: true, switchOrg: () => undefined, signOut: () => undefined };
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

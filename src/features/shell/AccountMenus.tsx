@@ -93,18 +93,22 @@ export function OrgSwitcher() {
                 />
               </>
             )}
-            <div className="menu-sep" role="separator" />
-            <button
-              type="button"
-              className="menu-item"
-              onClick={() => {
-                close();
-                setCreating(true);
-              }}
-            >
-              <Plus size={16} aria-hidden="true" />
-              Create organisation
-            </button>
+            {session.me.can_create_orgs && (
+              <>
+                <div className="menu-sep" role="separator" />
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    close();
+                    setCreating(true);
+                  }}
+                >
+                  <Plus size={16} aria-hidden="true" />
+                  Create organisation
+                </button>
+              </>
+            )}
           </div>
         )}
       </Popover>

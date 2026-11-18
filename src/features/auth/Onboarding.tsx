@@ -1,4 +1,5 @@
-// First sign-in without an organisation: accept an invitation, or create an organisation (you become its owner).
+// First sign-in without an organisation: accept an invitation, or (staff, or when the server allows anyone) create
+// an organisation and become its owner. Others are told to ask for an invitation.
 
 import { useQueryClient } from '@tanstack/react-query';
 import { LogOut } from 'lucide-react';
@@ -29,17 +30,33 @@ export function Onboarding({ me, signOut }: { me: Me; signOut: () => void }) {
       </header>
       <main className="onboarding-main">
         <h1>Welcome, {name}</h1>
-        <p className="muted">Flows, connections and run history belong to an organisation. Join one you were invited to, or create your own.</p>
+        <p className="muted">
+          {me.can_create_orgs
+            ? 'Flows, connections and run history belong to an organisation. Join one you were invited to, or create your own.'
+            : 'Flows, connections and run history belong to an organisation. Organisations are set up by your administrator: join one you were invited to.'}
+        </p>
         {me.invitations.length > 0 && (
           <section className="card onboarding-card" aria-labelledby="invites-title">
             <h2 id="invites-title">Invitations</h2>
             <InvitationList invitations={me.invitations} onAccepted={joined} />
           </section>
         )}
-        <section className="card onboarding-card" aria-labelledby="create-title">
-          <h2 id="create-title">Create an organisation</h2>
-          <CreateOrgForm onCreated={joined} />
-        </section>
+        {me.can_create_orgs ? (
+          <section className="card onboarding-card" aria-labelledby="create-title">
+            <h2 id="create-title">Create an organisation</h2>
+            <CreateOrgForm onCreated={joined} />
+          </section>
+        ) : (
+          me.invitations.length === 0 && (
+            <section className="card onboarding-card" aria-labelledby="ask-title">
+              <h2 id="ask-title">No invitation yet</h2>
+              <p className="muted">
+                Ask your administrator to invite {me.user?.email ?? 'you'} to your organisation, then reload this page. You signed in successfully; there is just nothing for you here
+                yet.
+              </p>
+            </section>
+          )
+        )}
         {me.user?.email && !me.user.email_verified && (
           <p className="muted small">
             Invitations are matched to your verified email address. Verify {me.user.email} with your sign-in provider to see them here.

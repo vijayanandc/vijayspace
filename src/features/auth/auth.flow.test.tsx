@@ -38,7 +38,9 @@ interface Calls {
   list: { method: string; url: string; headers: Record<string, string>; body?: string }[];
 }
 
-function stubApi(signIn: boolean, me: Me): Calls {
+/** `/me` answers `me`; org creation is allowed unless the test says otherwise. */
+function stubApi(signIn: boolean, partial: Omit<Me, 'staff' | 'can_create_orgs'> & Partial<Pick<Me, 'staff' | 'can_create_orgs'>>): Calls {
+  const me: Me = { staff: false, can_create_orgs: true, ...partial };
   const calls: Calls = { list: [] };
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.list.push({ method: init?.method ?? 'GET', url, headers: (init?.headers ?? {}) as Record<string, string>, body: init?.body as string | undefined });
@@ -96,6 +98,15 @@ describe('sign-in', () => {
     await waitFor(() => expect(calls.list.some((c) => c.method === 'POST' && c.url.endsWith('/api/v1/orgs'))).toBe(true));
     const post = calls.list.find((c) => c.method === 'POST');
     expect(JSON.parse(post?.body ?? '{}')).toMatchObject({ name: 'Acme' });
+  });
+
+  it('tells someone who may not create organisations to ask for an invitation', async () => {
+    logto.isAuthenticated = true;
+    stubApi(true, { user, orgs: [], invitations: [], can_create_orgs: false });
+    renderWithProviders(<AuthRoot><p>the app</p></AuthRoot>);
+    expect(await screen.findByRole('heading', { name: 'No invitation yet' })).toBeInTheDocument();
+    expect(screen.getByText(/Ask your administrator to invite ann@example.com/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create organisation' })).not.toBeInTheDocument();
   });
 
   it('acts in the remembered org and switches orgs from the header', async () => {
