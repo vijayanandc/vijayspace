@@ -40,6 +40,15 @@ impl FlowDefinition {
         walk_steps(&self.steps, "/steps", f);
     }
 
+    /// The definition without test data (every step's `sample_output`), for people who may not
+    /// see run data.
+    #[must_use]
+    pub fn without_samples(&self) -> Self {
+        let mut def = self.clone();
+        clear_samples(&mut def.steps);
+        def
+    }
+
     /// Finds a step anywhere in the tree by key.
     #[must_use]
     pub fn find_step(&self, key: &str) -> Option<&Step> {
@@ -71,6 +80,19 @@ impl FlowDefinition {
             }
         });
         apps
+    }
+}
+
+/// Clears every step's `sample_output` (data captured by "Test step").
+fn clear_samples(steps: &mut [Step]) {
+    for step in steps {
+        step.sample_output = None;
+        if let StepKind::Decision(d) = &mut step.kind {
+            for branch in &mut d.branches {
+                clear_samples(&mut branch.steps);
+            }
+            clear_samples(&mut d.otherwise);
+        }
     }
 }
 
@@ -338,6 +360,23 @@ mod tests {
                 "wait=/steps/1",
                 "mark=/steps/2",
             ]
+        );
+    }
+
+    #[test]
+    fn without_samples_clears_test_data_in_every_branch() {
+        let mut v = order_alert();
+        v["steps"][0]["sample_output"] = json!({"secret": 1});
+        v["steps"][0]["branches"][0]["steps"][0]["sample_output"] = json!({"secret": 2});
+        v["steps"][0]["otherwise"][0]["sample_output"] = json!({"secret": 3});
+        let def: FlowDefinition = serde_json::from_value(v).unwrap();
+        let clean = def.without_samples();
+        let mut samples = 0;
+        clean.walk(&mut |step, _| samples += usize::from(step.sample_output.is_some()));
+        assert_eq!(samples, 0);
+        assert_eq!(
+            clean.find_step("notify").map(|s| &s.kind),
+            def.find_step("notify").map(|s| &s.kind)
         );
     }
 }

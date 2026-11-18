@@ -113,6 +113,20 @@ async fn viewers_see_runs_without_their_data() {
         None,
     )
     .await;
+    let (_, viewed) = call(
+        &app,
+        VIEWER,
+        &org,
+        "GET",
+        &format!("/api/v1/flows/{id}"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        viewed["trigger"]["webhook_url"], "",
+        "viewers cannot start flows from outside"
+    );
+    assert_eq!(viewed["trigger"]["verify_token"], "");
     let url = enabled["trigger"]["webhook_url"].as_str().unwrap();
     let hook = &url[url.find("/hooks/").unwrap()..];
     let (status, accepted) = app

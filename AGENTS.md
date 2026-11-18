@@ -10,7 +10,7 @@ Weft is a Zoho Flow–style integration platform. Users build **flows**: one tri
 
 ## Current status (update this as backlog tasks land)
 - **Done:** the server runtime (flows, engine, executions, job queue, webhook/schedule/polling/app triggers, connections with OAuth), the sync layer, the Zoho CRM / Appblocks / Autodesk Forma connectors, recipes R1–R9 and the React client. Details and deviations: `docs/STATUS.md`.
-- **Skipped for now:** Logto authentication. Requests run as the default org, or as the org in `X-Org-ID`.
+- **Sign-in:** Logto (doc 13 §6), with users, orgs, roles (owner, admin, member, viewer), invitations by email and ZeptoMail. Every API use case takes an `Actor` (`crates/app/src/tenancy/`). `WEFT_AUTH=off` keeps the old behaviour for local development: requests act as an owner of the default org or the org in `X-Org-ID`. Scenario tests sign in through `weft_testkit::FakeIdentityProvider` (`TestApp::spawn_signed_in`).
 - **Available now:** `just db-up`, `just db-down`, `just serve`, `just migrate`, `just fmt`, `just lint`, `just test-unit`, `just test`, `just check`.
 - **Not yet available:** `just db-reset`, `just gen`, the `xtask` checks, `docs/generated/map.md`, `docs/recipes/` and `docs/specs/`. Until they exist, use `docs/STATUS.md` and `docs/plan/`, and copy the shape of an existing use case (e.g. `crates/app/src/flows/`).
 
@@ -26,7 +26,7 @@ Weft is a Zoho Flow–style integration platform. Users build **flows**: one tri
 | Add a connector | `crates/connectors/src/<app>/` (native; register in `builtin_connectors()`). Declarative YAML specs are planned. |
 | Sync (record links, upsert-linked-record, backfill) | `crates/app/src/sync/` and the `core.sync` connector (doc 13 §4) |
 | Recipes (prebuilt integrations) | `crates/app/src/recipes/` (templates with `$slot:<name>` connection placeholders) |
-| Org resolution (`X-Org-ID`, default org) | `crates/app/src/org.rs`, `crates/api/src/extract.rs`. Logto is planned in `crates/app/src/tenancy/` (doc 13 §6). |
+| Sign-in, orgs, members, roles | `crates/app/src/tenancy/` (actor, session, orgs, members, invitations), `crates/domain/src/permissions.rs` (the matrix, 🔒), `crates/infra/src/logto/` (token checks, 🔒), `crates/api/src/extract.rs` (`SignedIn`, `Acting`) |
 | Background loops | `crates/worker/` |
 | Wiring and config | `crates/server/` |
 | Test helpers | `crates/testkit/`; end-to-end scenarios in `crates/server/tests/scenarios/` |

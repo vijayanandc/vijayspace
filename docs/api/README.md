@@ -3,9 +3,12 @@
 The contract between the Rust server (`backend` branch) and the React client (`client` branch).
 JSON is snake_case. Timestamps are RFC 3339 UTC. IDs are prefixed strings (`flw_…`, `cxn_…`, `exe_…`).
 
-**Tenancy:**
-- Requests may send `X-Org-ID: org_…`. When it is missing, the server uses the default org (authentication is skipped for now; Logto comes later, see plan doc 13 §6).
-- CORS allows the dev client origin (`http://localhost:5173`).
+**Sign-in and tenancy** (plan doc 13 §6, doc 08 §1–3):
+- Every `/api/v1` request except `GET /api/v1/auth/config` sends `Authorization: Bearer <Logto access token>`. Without a valid token: **401** `auth.unauthenticated` (the client gets a fresh token once, then shows sign-in). Logto unreachable: **502** `auth.unavailable`.
+- Tenant requests also send `X-Org-ID: org_…` (missing: **422** `validation.failed`). An org the user does not belong to, and anything in another org, is **404** (never 403). A role that does not allow the action is **403** `auth.forbidden`. Never send an org ID in a body.
+- With sign-in turned off on the server (`WEFT_AUTH=off`, development), no token is needed and requests act as an owner of the org in `X-Org-ID` or the default org.
+- Webhooks (`/hooks/…`) and the OAuth callback stay public: their token or state is the credential.
+- CORS allows the configured client origins (dev: `http://127.0.0.1:3000`, the Logto redirect URI's origin).
 
 **Errors** are `application/problem+json`:
 ```json
@@ -232,11 +235,30 @@ For a `decision` step run, `output` is `{"branch": "big"}`; when no branch match
 
 ---
 
+## Sign-in, organisations, members
+Roles: `owner | admin | member | viewer`. The matrix (doc 08 §2): owners do everything; admins everything but org settings and owners; members build, run and test flows, create and use connections, and delete only flows and connections they created (`created_by`); viewers see flows and runs, with run data hidden (`payloads_hidden: true`, no trigger data, step inputs or outputs, trigger URLs or test data).
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/api/v1/auth/config` | — (public) | `{sign_in: {endpoint, app_id, resource, scopes} \| null}`. `null` = sign-in turned off. The client signs in with Logto (`app_id` is the web app; `resource` null = opaque tokens). |
+| GET | `/api/v1/me` | — (no X-Org-ID) | `{user: {id, email, email_verified, name, created_at} \| null, orgs: OrgMembership[], invitations: Invitation[]}`. A user is created on first sign-in; `WEFT_OWNER_EMAILS` own the default org. |
+| GET | `/api/v1/orgs` | — | `OrgMembership[]` (org settings as in `GET /org`, plus `role`) |
+| POST | `/api/v1/orgs` | `{name (1–120), timezone? (IANA, default UTC)}` | 201 `OrgMembership` (the caller is its owner) |
+| POST | `/api/v1/me/invitations/{id}/accept` | — | `OrgMembership`. Only with a **verified** email equal to the invited address (else 404; unverified email 403). An existing membership keeps its role. |
+| POST | `/api/v1/me/invitations/{id}/decline` | — | 204 |
+| GET | `/api/v1/members` | — | `[{org_id, user, role, joined_at}]` (any member) |
+| PATCH | `/api/v1/members/{user_id}` | `{role}` | the member. `members.manage`; only owners make or change owners (403); the last owner cannot step down (409 `member.last_owner`). |
+| DELETE | `/api/v1/members/{user_id}` | — | 204. Anyone may remove themselves (leave); others need `members.manage`; owners only by owners; never the last owner (409). |
+| GET | `/api/v1/invitations` | — | open invitations `[{id, org_id, org_name, email, role, invited_by, created_at, expires_at}]` (`members.manage`) |
+| POST | `/api/v1/invitations` | `{email, role}` | 201 `{invitation, email_sent}`. Renews an open invitation for the same email; 409 `member.exists` if already a member. Emails a link to `WEFT_APP_URL`; valid 14 days. |
+| POST | `/api/v1/invitations/{id}/resend` | — | `{invitation, email_sent}` (new expiry) |
+| DELETE | `/api/v1/invitations/{id}` | — | 204 |
+
 ## Misc
 | Method | Path | Response |
 |---|---|---|
-| GET | `/api/v1/org` | `{id, name, timezone, retention_days (the org's setting, or null), retention_days_effective, retention_days_default}` |
-| PATCH | `/api/v1/org` with `{retention_days: 1..3650 \| null}` | the org (as above). Finished runs older than this are deleted (every 15 minutes) with their step history; queued, running and waiting runs are kept. `null` = the server default (`WEFT_RETENTION_DAYS`, 30). |
+| GET | `/api/v1/org` | `{id, name, timezone, role (the caller's), retention_days (the org's setting, or null), retention_days_effective, retention_days_default}` |
+| PATCH | `/api/v1/org` with `{name?, timezone?, retention_days?: 1..3650 \| null}` | the org (as above); owners only (403 otherwise). Finished runs older than this are deleted (every 15 minutes) with their step history; queued, running and waiting runs are kept. `null` = the server default (`WEFT_RETENTION_DAYS`, 30). |
 | GET | `/api/v1/usage` | `{period: "2026-11", tasks_used, executions}` |
 | GET | `/healthz`, `/readyz` | `ok` |
 

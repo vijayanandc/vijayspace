@@ -35,6 +35,8 @@ pub struct FlowSummaryDto {
     pub last_execution: Option<LastExecutionDto>,
     /// Connector keys the draft uses (app trigger first, then actions), for app-icon chains.
     pub apps: Vec<String>,
+    /// Who created the flow (members may delete only their own).
+    pub created_by: Option<weft_domain::ids::UserId>,
 }
 
 pub fn trigger_type(def: &FlowDefinition) -> &'static str {
@@ -67,6 +69,7 @@ impl FlowSummaryDto {
                     queued_at,
                 }),
             apps: f.draft.apps(),
+            created_by: f.created_by,
         }
     }
 }
@@ -99,13 +102,28 @@ pub struct FlowDto {
     pub draft: FlowDefinition,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub created_by: Option<weft_domain::ids::UserId>,
     pub trigger: TriggerInfoDto,
 }
 
 impl FlowDto {
-    pub fn new(deps: &Deps, view: &FlowView, has_unpublished_changes: bool) -> Self {
+    /// `trigger_secrets`: whether to include the webhook URLs, the verify token and test data (the
+    /// trigger sample and steps' sample outputs). Viewers see neither.
+    pub fn new(
+        deps: &Deps,
+        view: &FlowView,
+        has_unpublished_changes: bool,
+        trigger_secrets: bool,
+    ) -> Self {
         let f = &view.flow;
         let reg = &view.registration;
+        let secret = |value: String| {
+            if trigger_secrets {
+                value
+            } else {
+                String::new()
+            }
+        };
         Self {
             id: f.id,
             name: f.name.clone(),
@@ -116,19 +134,24 @@ impl FlowDto {
             published_version_id: f.published_version_id,
             has_unpublished_changes,
             draft_revision: f.draft_revision,
-            draft: f.draft.clone(),
+            draft: if trigger_secrets {
+                f.draft.clone()
+            } else {
+                f.draft.without_samples()
+            },
             created_at: f.created_at,
             updated_at: f.updated_at,
+            created_by: f.created_by,
             trigger: TriggerInfoDto {
                 kind: manage_urls::display_kind(deps, view),
-                token: reg.token.clone(),
-                webhook_url: manage_urls::webhook_url(deps, reg),
-                app_event_url: manage_urls::app_event_url(deps, reg),
-                verify_token: reg.secret.clone(),
+                token: secret(reg.token.clone()),
+                webhook_url: secret(manage_urls::webhook_url(deps, reg)),
+                app_event_url: secret(manage_urls::app_event_url(deps, reg)),
+                verify_token: secret(reg.secret.clone()),
                 is_active: reg.is_active,
                 listening_until: reg.listening_until,
                 next_fire_at: reg.next_fire_at,
-                sample: reg.sample.clone(),
+                sample: reg.sample.clone().filter(|_| trigger_secrets),
             },
         }
     }

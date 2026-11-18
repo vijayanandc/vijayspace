@@ -8,7 +8,8 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use weft_app::{Deps, flows as uc, flows::manage_urls::has_unpublished_changes};
+use weft_app::{Deps, flows as uc, flows::manage_urls::has_unpublished_changes, tenancy::Actor};
+use weft_domain::permissions::Permission;
 use weft_domain::{flow::FlowDefinition, ids::FlowId};
 
 use crate::{
@@ -39,9 +40,12 @@ fn id(raw: &str) -> Result<FlowId, crate::ApiError> {
     raw.parse().map_err(|_| bad_id("Flow"))
 }
 
-async fn dto(deps: &Deps, view: &uc::FlowView) -> ApiResult<FlowDto> {
+/// The flow as the actor may see it: the trigger's URLs and secrets let anyone start the flow, so they
+/// are left out for viewers.
+async fn dto(deps: &Deps, actor: &Actor, view: &uc::FlowView) -> ApiResult<FlowDto> {
     let changed = has_unpublished_changes(deps, &view.flow).await?;
-    Ok(FlowDto::new(deps, view, changed))
+    let secrets = actor.require(Permission::FlowEdit).is_ok();
+    Ok(FlowDto::new(deps, view, changed, secrets))
 }
 
 async fn list(
@@ -79,7 +83,10 @@ async fn create(
         b.definition,
     )
     .await?;
-    Ok((StatusCode::CREATED, Json(dto(&s.deps, &view).await?)))
+    Ok((
+        StatusCode::CREATED,
+        Json(dto(&s.deps, &actor, &view).await?),
+    ))
 }
 
 async fn one(
@@ -88,7 +95,7 @@ async fn one(
     Path(raw): Path<String>,
 ) -> ApiResult<Json<FlowDto>> {
     let view = uc::get_flow(&s.deps, &actor, id(&raw)?).await?;
-    Ok(Json(dto(&s.deps, &view).await?))
+    Ok(Json(dto(&s.deps, &actor, &view).await?))
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,7 +128,7 @@ async fn update(
         b.description.as_ref().map(Option::as_deref),
     )
     .await?;
-    Ok(Json(dto(&s.deps, &view).await?))
+    Ok(Json(dto(&s.deps, &actor, &view).await?))
 }
 
 async fn remove(
@@ -177,7 +184,7 @@ async fn enable(
     Path(raw): Path<String>,
 ) -> ApiResult<Json<FlowDto>> {
     let view = uc::set_enabled(&s.deps, &actor, id(&raw)?, true).await?;
-    Ok(Json(dto(&s.deps, &view).await?))
+    Ok(Json(dto(&s.deps, &actor, &view).await?))
 }
 
 async fn disable(
@@ -186,7 +193,7 @@ async fn disable(
     Path(raw): Path<String>,
 ) -> ApiResult<Json<FlowDto>> {
     let view = uc::set_enabled(&s.deps, &actor, id(&raw)?, false).await?;
-    Ok(Json(dto(&s.deps, &view).await?))
+    Ok(Json(dto(&s.deps, &actor, &view).await?))
 }
 
 async fn versions(
@@ -213,7 +220,7 @@ async fn listen(
     Path(raw): Path<String>,
 ) -> ApiResult<Json<Value>> {
     let view = uc::start_listening(&s.deps, &actor, id(&raw)?).await?;
-    Ok(Json(json!(dto(&s.deps, &view).await?.trigger)))
+    Ok(Json(json!(dto(&s.deps, &actor, &view).await?.trigger)))
 }
 
 #[derive(Debug, Deserialize)]

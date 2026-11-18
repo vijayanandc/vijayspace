@@ -32,11 +32,21 @@ The run appears under **History** with each step's input and output.
 | `WEFT_DATABASE_URL` | `mysql://weft:weft@127.0.0.1:3306/weft` | MySQL database (also the job queue) |
 | `WEFT_BIND` | `0.0.0.0:8080` | Listen address |
 | `WEFT_PUBLIC_URL` | `http://localhost:8080` | Base of webhook and OAuth callback URLs |
-| `WEFT_CLIENT_ORIGINS` | `http://localhost:5173` | CORS origins (comma-separated) |
+| `WEFT_CLIENT_ORIGINS` | `http://127.0.0.1:3000,http://localhost:5173` | CORS origins (comma-separated) |
+| `WEFT_AUTH` | `logto` when `WEFT_LOGTO_ENDPOINT` is set, else `off` | `off` turns sign-in off: every request acts as an owner of the default org (**development only**) |
+| `WEFT_LOGTO_ENDPOINT` | — | The Logto tenant, e.g. `https://<tenant>.logto.app` (the one the Appblocks apps use) |
+| `WEFT_LOGTO_APP_ID`, `WEFT_LOGTO_APP_SECRET` | — | This server's confidential (traditional web) Logto app, used to introspect opaque tokens. **The secret only in the environment.** |
+| `WEFT_LOGTO_CLIENT_APP_ID` | — | The web client's single-page Logto app (only its tokens are accepted). Its redirect URI is `<client origin>/callback`, e.g. `http://127.0.0.1:3000/callback` |
+| `WEFT_LOGTO_RESOURCE` | none | An API resource: the client then gets JWTs, verified locally (JWKS, `iss`, `aud`); without it, opaque tokens are introspected |
+| `WEFT_LOGTO_SCOPES` | `openid,profile,email` | Scopes an opaque token must carry (the client also asks for `offline_access`) |
+| `WEFT_LOGTO_CACHE_SECS` | `300` | How long a checked token is trusted before Logto is asked again (never past its expiry) |
+| `WEFT_OWNER_EMAILS` | none | Verified emails that become owners of the default org when they sign in (comma-separated) |
+| `WEFT_APP_URL` | `http://127.0.0.1:3000` | Where people open Weft (links in invitation emails) |
 | `WEFT_MASTER_KEYS`, `WEFT_ACTIVE_KEY_ID` | development key | `id:base64key,…` for encrypting connection secrets. **Set in production.** |
 | `WEFT_ALLOW_PRIVATE_NETWORKS` | `false` | Let HTTP steps reach private/loopback addresses (local testing only) |
 | `WEFT_HTTP_PROXY` | none | Egress proxy for calls to apps (`HTTP(S)_PROXY` is ignored on purpose). With a proxy set, Weft no longer checks the addresses that hostnames resolve to (only literal IPs and redirects), so the proxy must block private destinations itself. |
-| `WEFT_SMTP_URL`, `WEFT_MAIL_FROM` | log only | Email step delivery (Mailpit: `smtp://localhost:1025`) |
+| `WEFT_ZEPTOMAIL_API_KEY`, `WEFT_ZEPTOMAIL_API_URL` | — | Email through ZeptoMail (as the Appblocks servers send it; key only in the environment). Takes precedence over SMTP. |
+| `WEFT_SMTP_URL`, `WEFT_MAIL_FROM` | log only | Email (invitations and the email step) over SMTP (Mailpit: `smtp://localhost:1025`). `WEFT_MAIL_FROM` is `Name <address>`, also used for ZeptoMail |
 | `WEFT_WORKER_CONCURRENCY` | `16` | Jobs processed in parallel |
 | `WEFT_RETENTION_DAYS` | `30` | Days finished runs are kept (orgs can set their own, 1–3650) |
 | `WEFT_SCRIPT_ISOLATION` | `process` | Run custom functions in child processes under OS memory/CPU limits; `thread` runs them inside the server (development only) |
