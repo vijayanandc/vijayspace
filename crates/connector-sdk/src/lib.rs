@@ -9,6 +9,7 @@ mod context;
 mod error;
 mod field;
 mod http;
+mod limits;
 mod manifest;
 pub mod oauth;
 mod records;
@@ -23,6 +24,7 @@ pub use connector::{
 pub use context::{ActionCtx, ConnectionHandle, EmailMessage, Mailer, ScriptRun, ScriptRunner};
 pub use error::ConnectorError;
 pub use http::{HttpRequest, HttpResponse, HttpSender, Method};
+pub use limits::ConnectionLimits;
 pub use manifest::{
     ActionSpec, AuthKind, AuthSpec, ClientAuth, ConnectorManifest, FieldKind, FieldSpec,
     OAuth2Spec, OptionItem, TriggerKind, TriggerSpec,
@@ -36,7 +38,8 @@ pub mod prelude {
     pub use serde_json::{Map, Value, json};
 
     pub use crate::{
-        ActionCtx, ActionSpec, AuthSpec, Connector, ConnectorError, ConnectorManifest, FieldKind,
-        FieldSpec, HttpRequest, HttpResponse, Method, OptionItem, TriggerKind, TriggerSpec,
+        ActionCtx, ActionSpec, AuthSpec, ConnectionLimits, Connector, ConnectorError,
+        ConnectorManifest, FieldKind, FieldSpec, HttpRequest, HttpResponse, Method, OptionItem,
+        TriggerKind, TriggerSpec,
     };
 }

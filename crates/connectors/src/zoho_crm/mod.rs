@@ -113,6 +113,15 @@ async fn create_task(ctx: &ActionCtx, input: &Value) -> Result<Value, ConnectorE
 
 #[async_trait]
 impl Connector for ZohoCrmConnector {
+    /// VERIFY per edition: Zoho grants API credits per day and concurrency by edition; these are conservative.
+    fn default_limits(&self) -> ConnectionLimits {
+        ConnectionLimits {
+            requests_per_minute: Some(100),
+            max_concurrent: Some(10),
+            daily_requests: Some(25_000),
+        }
+    }
+
     fn manifest(&self) -> &ConnectorManifest {
         &self.manifest
     }

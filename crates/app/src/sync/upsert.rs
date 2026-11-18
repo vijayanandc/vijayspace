@@ -120,6 +120,7 @@ pub(crate) async fn upsert_linked_record(
     deps: &Deps,
     org: OrgId,
     input: &Value,
+    class: crate::limits::RequestClass,
 ) -> Result<Value, ConnectorError> {
     let set = text(input, "link_set")?;
     let source = RecordSide {
@@ -169,6 +170,7 @@ pub(crate) async fn upsert_linked_record(
         target_conn,
         &target_object,
         &mut values,
+        class,
     )
     .await;
     let _ = deps.store.release_lease(org, &lease_key, &holder).await;
@@ -185,10 +187,11 @@ async fn upsert_locked(
     target_conn: weft_domain::ids::ConnectionId,
     target_object: &str,
     values: &mut Map<String, Value>,
+    class: crate::limits::RequestClass,
 ) -> Result<Value, ConnectorError> {
     apply_lookups(deps, org, input, values).await?;
     let hash = values_hash(values);
-    let (connector, ctx) = open(deps, org, target_conn).await?;
+    let (connector, ctx) = open(deps, org, target_conn, class).await?;
     let target = records(connector.as_ref())?;
     let link = deps
         .store

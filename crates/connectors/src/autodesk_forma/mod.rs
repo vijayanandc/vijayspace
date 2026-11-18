@@ -38,6 +38,15 @@ impl Default for FormaConnector {
 
 #[async_trait]
 impl Connector for FormaConnector {
+    /// VERIFY: APS rate limits are per endpoint (typically a few hundred per minute).
+    fn default_limits(&self) -> ConnectionLimits {
+        ConnectionLimits {
+            requests_per_minute: Some(120),
+            max_concurrent: Some(10),
+            daily_requests: None,
+        }
+    }
+
     fn manifest(&self) -> &ConnectorManifest {
         &self.manifest
     }

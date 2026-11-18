@@ -184,6 +184,11 @@ pub trait Connector: Send + Sync {
         )))
     }
 
+    /// Default request limits for a connection to this app (overridable per connection).
+    fn default_limits(&self) -> crate::ConnectionLimits {
+        crate::ConnectionLimits::default()
+    }
+
     /// Checks an action's input when a flow is validated (draft save and publish), as
     /// `(field, message)` pairs. Must be pure and fast: no IO.
     fn check_input(&self, _action: &str, _input: &Value) -> Vec<(String, String)> {

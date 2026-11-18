@@ -19,6 +19,7 @@ use super::{
 };
 use crate::{
     AppError, Deps,
+    limits::RequestClass,
     ports::{Checkpoint, StepCompletion},
 };
 
@@ -233,6 +234,11 @@ async fn run_step(
         action.connection_id.as_deref(),
         input,
         idem,
+        if exe.mode == weft_domain::model::ExecutionMode::Backfill {
+            RequestClass::Background
+        } else {
+            RequestClass::Live
+        },
     )
     .await
     {

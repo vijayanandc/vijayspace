@@ -15,8 +15,9 @@ use super::{
 };
 use crate::{
     AppError, Deps,
+    limits::RequestClass,
     ports::NewJob,
-    runner::action::{action_ctx, load_connection},
+    runner::action::{action_ctx_for, load_connection},
 };
 
 /// Enqueues a `poll_trigger` job for each due poll/instant registration.
@@ -102,7 +103,13 @@ pub async fn run_poll(deps: &Deps, id: RegistrationId) -> Result<usize, AppError
                 e.to_string(),
             )
         })?;
-    let ctx = action_ctx(deps, reg.org_id, connection, String::new());
+    let ctx = action_ctx_for(
+        deps,
+        reg.org_id,
+        connection,
+        String::new(),
+        RequestClass::Background,
+    );
     let cursor = reg.state.get("cursor").cloned().filter(|c| !c.is_null());
     let result = match connector
         .poll(&ctx, &app.trigger, &app.input, cursor.as_ref())

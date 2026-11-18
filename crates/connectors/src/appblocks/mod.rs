@@ -59,6 +59,15 @@ fn limit(input: &Value) -> u32 {
 
 #[async_trait]
 impl Connector for AppblocksConnector {
+    /// Appblocks API tokens: 300 requests/min and 10,000 per org per day (doc 13 §1).
+    fn default_limits(&self) -> ConnectionLimits {
+        ConnectionLimits {
+            requests_per_minute: Some(300),
+            max_concurrent: Some(10),
+            daily_requests: Some(10_000),
+        }
+    }
+
     fn manifest(&self) -> &ConnectorManifest {
         &self.manifest
     }

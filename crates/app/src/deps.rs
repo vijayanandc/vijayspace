@@ -38,6 +38,8 @@ pub struct Deps {
     pub plans: Arc<PlanCache>,
     /// Wakes the worker after an enqueue (in-process `all` mode); harmless otherwise.
     pub wake: Arc<Notify>,
+    /// Per-connection request limiters (in-process buckets and concurrency permits).
+    pub limiters: Arc<crate::limits::ConnectionLimiters>,
     /// Serialises OAuth token refreshes per connection within this process.
     pub refresh_locks: Arc<crate::connections::handle::RefreshLocks>,
 }

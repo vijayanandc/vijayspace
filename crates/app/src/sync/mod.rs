@@ -27,9 +27,10 @@ pub async fn execute(
     org: OrgId,
     action: &str,
     input: &Value,
+    class: crate::limits::RequestClass,
 ) -> Result<Value, ConnectorError> {
     match action {
-        "upsert_linked_record" => upsert::upsert_linked_record(deps, org, input).await,
+        "upsert_linked_record" => upsert::upsert_linked_record(deps, org, input, class).await,
         "resolve_link" => link::resolve_link(deps, org, input, false).await,
         "find_linked_record" => link::resolve_link(deps, org, input, true).await,
         "save_link" => link::save_link(deps, org, input).await,

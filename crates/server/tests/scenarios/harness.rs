@@ -81,6 +81,7 @@ impl TestApp {
             }),
             plans: Arc::new(PlanCache::default()),
             wake: Arc::new(Notify::new()),
+            limiters: Arc::new(weft_app::limits::ConnectionLimiters::default()),
             refresh_locks: Arc::new(RefreshLocks::default()),
         };
         let router = weft_api::router(weft_api::ApiState { deps: deps.clone() }, &[]);

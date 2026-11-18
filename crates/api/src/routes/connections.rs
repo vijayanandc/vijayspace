@@ -11,7 +11,8 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
-use weft_app::connections as uc;
+use weft_app::{connections as uc, limits as limits_uc};
+use weft_connector_sdk::ConnectionLimits;
 use weft_domain::{ids::ConnectionId, model::Connection};
 
 use crate::{
@@ -29,6 +30,11 @@ pub fn router() -> Router<ApiState> {
             get(one).patch(update).delete(remove),
         )
         .route("/api/v1/connections/{id}/test", post(test))
+        .route("/api/v1/connections/usage", get(usage))
+        .route(
+            "/api/v1/connections/{id}/limits",
+            get(limits).put(set_limits),
+        )
         .route("/oauth/callback", get(callback))
 }
 
@@ -42,6 +48,35 @@ struct CreateBody {
     name: String,
     #[serde(default)]
     fields: Map<String, Value>,
+}
+
+async fn usage(
+    State(s): State<ApiState>,
+    Org(org): Org,
+) -> ApiResult<Json<Vec<limits_uc::UsageView>>> {
+    Ok(Json(limits_uc::usage_today(&s.deps, org).await?))
+}
+
+async fn limits(
+    State(s): State<ApiState>,
+    Org(org): Org,
+    Path(raw): Path<String>,
+) -> ApiResult<Json<limits_uc::LimitsView>> {
+    Ok(Json(
+        limits_uc::connection_limits(&s.deps, org, id(&raw)?).await?,
+    ))
+}
+
+/// `null` or absent = the connector default; `0` = no limit.
+async fn set_limits(
+    State(s): State<ApiState>,
+    Org(org): Org,
+    Path(raw): Path<String>,
+    Json(overrides): Json<ConnectionLimits>,
+) -> ApiResult<Json<limits_uc::LimitsView>> {
+    Ok(Json(
+        limits_uc::set_connection_limits(&s.deps, org, id(&raw)?, overrides).await?,
+    ))
 }
 
 async fn list(State(s): State<ApiState>, Org(org): Org) -> ApiResult<Json<Vec<Connection>>> {

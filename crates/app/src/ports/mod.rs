@@ -29,6 +29,7 @@ mod connections;
 mod executions;
 mod flows;
 mod jobs;
+mod limits;
 mod links;
 mod triggers;
 
@@ -36,6 +37,7 @@ pub use connections::*;
 pub use executions::*;
 pub use flows::*;
 pub use jobs::*;
+pub use limits::*;
 pub use links::*;
 pub use triggers::*;
 
@@ -48,6 +50,7 @@ pub trait Store:
     + ExecutionRepo
     + ConnectionRepo
     + LinkRepo
+    + LimitRepo
     + Send
     + Sync
 {
@@ -61,6 +64,7 @@ impl<T> Store for T where
         + ExecutionRepo
         + ConnectionRepo
         + LinkRepo
+        + LimitRepo
         + Send
         + Sync
 {

@@ -43,7 +43,13 @@ pub async fn options(
             } else {
                 "target_connection_id"
             };
-            let (connector, ctx) = open(deps, org, connection_id(input, key)?).await?;
+            let (connector, ctx) = open(
+                deps,
+                org,
+                connection_id(input, key)?,
+                crate::limits::RequestClass::Live,
+            )
+            .await?;
             let records = connector
                 .records()
                 .ok_or_else(|| ConnectorError::invalid("this app does not support record sync"))?;
@@ -68,7 +74,13 @@ pub async fn fields(
     if source != "target_fields" {
         return Err(ConnectorError::unsupported(format!("fields `{source}`")));
     }
-    let (connector, ctx) = open(deps, org, connection_id(input, "target_connection_id")?).await?;
+    let (connector, ctx) = open(
+        deps,
+        org,
+        connection_id(input, "target_connection_id")?,
+        crate::limits::RequestClass::Live,
+    )
+    .await?;
     let records = connector
         .records()
         .ok_or_else(|| ConnectorError::invalid("this app does not support record sync"))?;

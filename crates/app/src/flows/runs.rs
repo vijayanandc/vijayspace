@@ -152,6 +152,7 @@ pub async fn test_step(
         action.connection_id.as_deref(),
         input.clone(),
         idem,
+        crate::limits::RequestClass::Live,
     )
     .await
     {

@@ -9,7 +9,7 @@ use weft_domain::ids::{ConnectionId, OrgId};
 use crate::{
     Deps,
     ports::{RecordLink, RecordSide},
-    runner::action::{action_ctx, load_connection},
+    runner::action::load_connection,
 };
 
 pub(crate) fn text(input: &Value, key: &str) -> Result<String, ConnectorError> {
@@ -37,6 +37,7 @@ pub(crate) async fn open(
     deps: &Deps,
     org: OrgId,
     id: ConnectionId,
+    class: crate::limits::RequestClass,
 ) -> Result<(Arc<dyn Connector>, ActionCtx), ConnectorError> {
     let handle = load_connection(deps, org, Some(&id.to_string()))
         .await?
@@ -54,7 +55,7 @@ pub(crate) async fn open(
         .ok_or_else(|| ConnectorError::invalid("unknown app"))?;
     Ok((
         connector,
-        action_ctx(deps, org, Some(handle), String::new()),
+        crate::runner::action::action_ctx_for(deps, org, Some(handle), String::new(), class),
     ))
 }
 

@@ -4,14 +4,19 @@ use std::{sync::Arc, time::Duration};
 
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use weft_connector_sdk::{ActionCtx, ConnectionHandle, ConnectorError};
+use weft_connector_sdk::{ActionCtx, ConnectionHandle, ConnectorError, HttpSender};
 use weft_domain::{
     error_codes,
     ids::{ConnectionId, OrgId},
 };
 use weft_engine::StepError;
 
-use crate::{Deps, connections::handle::DbConnectionHandle, sync};
+use crate::{
+    Deps,
+    connections::handle::DbConnectionHandle,
+    limits::{LimitedSender, RequestClass},
+    sync,
+};
 
 /// Maximum serialized step output kept (doc 01 §4).
 pub const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
@@ -55,7 +60,7 @@ pub async fn load_connection(
     ))))
 }
 
-/// Builds an action context.
+/// Builds an action context for live work (see [`action_ctx_for`]).
 #[must_use]
 pub fn action_ctx(
     deps: &Deps,
@@ -63,9 +68,34 @@ pub fn action_ctx(
     connection: Option<Arc<dyn ConnectionHandle>>,
     idempotency_key: String,
 ) -> ActionCtx {
+    action_ctx_for(deps, org, connection, idempotency_key, RequestClass::Live)
+}
+
+/// Builds an action context. With a connection, every HTTP request goes through the
+/// connection's limits (concurrency, per minute, daily budget) for this class of work.
+#[must_use]
+pub fn action_ctx_for(
+    deps: &Deps,
+    org: OrgId,
+    connection: Option<Arc<dyn ConnectionHandle>>,
+    idempotency_key: String,
+    class: RequestClass,
+) -> ActionCtx {
+    let limited = connection
+        .as_ref()
+        .and_then(|c| c.id().parse::<ConnectionId>().ok());
+    let http: Arc<dyn HttpSender> = match limited {
+        Some(id) => Arc::new(LimitedSender {
+            deps: deps.clone(),
+            org,
+            connection: id,
+            class,
+        }),
+        None => deps.http.clone(),
+    };
     ActionCtx {
         org_id: org.to_string(),
-        http: deps.http.clone(),
+        http,
         connection,
         idempotency_key,
         mailer: deps.mailer.clone(),
@@ -82,6 +112,7 @@ pub fn idempotency_key(execution: &str, step: &str) -> String {
 }
 
 /// Runs `connector.action` with rendered input. Never panics; all failures are `ConnectorError`s.
+#[allow(clippy::too_many_arguments)] // one call site per caller; each argument is distinct
 pub async fn call_action(
     deps: &Deps,
     org: OrgId,
@@ -90,9 +121,10 @@ pub async fn call_action(
     connection_id: Option<&str>,
     input: Value,
     idem: String,
+    class: RequestClass,
 ) -> Result<Value, ConnectorError> {
     if connector_key == sync::CONNECTOR_KEY {
-        return sync::execute(deps, org, action, &input).await;
+        return sync::execute(deps, org, action, &input, class).await;
     }
     let connector = deps
         .connectors
@@ -111,7 +143,7 @@ pub async fn call_action(
     } else {
         None
     };
-    let ctx = action_ctx(deps, org, connection, idem);
+    let ctx = action_ctx_for(deps, org, connection, idem, class);
     let output = match tokio::time::timeout(
         ACTION_TIMEOUT + Duration::from_secs(5),
         connector.execute(&ctx, action, input),

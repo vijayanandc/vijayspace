@@ -12,6 +12,7 @@ mod connections;
 mod custom_functions;
 mod harness;
 mod lifecycle;
+mod limits;
 mod order_alert;
 mod recipes;
 mod schedule;

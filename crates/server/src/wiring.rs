@@ -72,6 +72,7 @@ pub fn build(settings: &Settings, store: MySqlStore) -> anyhow::Result<Deps> {
         }),
         plans: Arc::new(PlanCache::default()),
         wake: Arc::new(Notify::new()),
+        limiters: Arc::new(weft_app::limits::ConnectionLimiters::default()),
         refresh_locks: Arc::new(RefreshLocks::default()),
     })
 }

@@ -12,7 +12,8 @@ use weft_domain::{
 
 use crate::{
     AppError, Deps,
-    runner::action::{action_ctx, load_connection},
+    limits::RequestClass,
+    runner::action::{action_ctx_for, load_connection},
     triggers::ingress_items,
 };
 
@@ -78,7 +79,13 @@ pub async fn backfill(
     let connection = load_connection(deps, org, app.connection_id.as_deref())
         .await
         .map_err(|e| AppError::validation(error_codes::CONNECTION_NOT_FOUND, e.to_string()))?;
-    let ctx = action_ctx(deps, org, connection, String::new());
+    let ctx = action_ctx_for(
+        deps,
+        org,
+        connection,
+        String::new(),
+        RequestClass::Background,
+    );
     let reg = deps
         .store
         .get_registration_by_flow(flow_id)

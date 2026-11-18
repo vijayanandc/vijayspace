@@ -120,11 +120,23 @@ Clients switch on `code` (see `crates/domain/src/error_codes.rs`).
 | GET | `/api/v1/connections` | — | `Connection[]` |
 | POST | `/api/v1/connections` | `{connector, name, fields: {…}}` (auth kind `fields`) | `Connection` (tested on create; `status` reflects the result) |
 | GET | `/api/v1/connections/{id}` | — | `Connection` |
+| GET | `/api/v1/connections/{id}/limits` | — | `Limits` |
+| PUT | `/api/v1/connections/{id}/limits` | `{requests_per_minute?, max_concurrent?, daily_requests?}` (absent/`null` = the app's default, `0` = no limit, at most 10,000,000) | `Limits` |
+| GET | `/api/v1/connections/usage` | — | `Usage[]` (today, every connection) |
 | PATCH | `/api/v1/connections/{id}` | `{name?, fields?}` | `Connection` |
 | DELETE | `/api/v1/connections/{id}` | — | 204 |
 | POST | `/api/v1/connections/{id}/test` | — | `{ok: true, info: {}}` or `{ok: false, error: {code, message}}` |
 | POST | `/api/v1/connections/oauth/start` | `{connector, name, connection_id?, fields?: {…non-secret config, e.g. region}, return_to}` | `{authorize_url}` |
 | GET | `/oauth/callback` | (provider redirect) | `302` → `return_to?status=connected&connection_id=cxn_…` or `?status=error&message=…` |
+
+**Limits** (every request made through a connection counts; limits are the app's defaults with the connection's overrides; a request over a limit is retried later, never dropped; background work (polls, backfills) stops at 95% of the daily budget):
+```json
+{ "defaults":  {"requests_per_minute": 300, "max_concurrent": 10, "daily_requests": 10000},
+  "overrides": {"requests_per_minute": 60,  "max_concurrent": null, "daily_requests": null},
+  "effective": {"requests_per_minute": 60,  "max_concurrent": 10, "daily_requests": 10000},
+  "usage": Usage }
+```
+**Usage:** `{connection_id, day: "2026-11-18" (UTC), requests, refused, daily_limit|null, percent|null, level: "ok"|"warning"(≥80%)|"critical"(≥95%)}`
 
 **Connection:**
 ```json
