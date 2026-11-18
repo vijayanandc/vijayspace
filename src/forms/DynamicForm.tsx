@@ -79,7 +79,7 @@ export function FieldInput({ field, value, onChange, env, siblings, siblingField
           case 'json':
             return <JsonInput id={id} value={value} onChange={onChange} />;
           case 'key_value':
-            return <KeyValueInput label={field.label} value={value} onChange={onChange} variables={env.variables} />;
+            return <KeyValueInput label={field.label} value={value} onChange={onChange} variables={env.variables} secret={field.secret === true} />;
           case 'object':
             return <ObjectFields field={field} value={value} onChange={onChange} env={env} siblings={siblings} siblingFields={siblingFields} />;
           case 'password':

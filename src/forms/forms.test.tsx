@@ -131,3 +131,17 @@ describe('JSON input', () => {
     await waitFor(() => expect(validity).toHaveBeenLastCalledWith(true));
   });
 });
+
+describe('secret key-value rows', () => {
+  it('mask their values (a connection’s secret headers) and offer no variables', async () => {
+    const onValues = vi.fn();
+    renderWithProviders(<Harness fields={[{ key: 'secret_headers', label: 'Secret headers', type: 'key_value', secret: true }]} onValues={onValues} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add row' }));
+    fireEvent.change(screen.getByLabelText('Secret headers key 1'), { target: { value: 'X-Api-Secret' } });
+    const value = screen.getByLabelText('Secret headers value 1');
+    expect(value).toHaveAttribute('type', 'password');
+    fireEvent.change(value, { target: { value: 's3' } });
+    await waitFor(() => expect(onValues).toHaveBeenLastCalledWith({ secret_headers: { 'X-Api-Secret': 's3' } }));
+    expect(screen.queryByRole('button', { name: 'Insert variable' })).not.toBeInTheDocument();
+  });
+});

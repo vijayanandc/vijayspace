@@ -17,7 +17,7 @@ import { MessageBar } from '../../components/MessageBar';
 import { useToast } from '../../components/Toast';
 import { DynamicForm } from '../../forms/DynamicForm';
 import { visibleFields } from '../../forms/visibility';
-import { changedFields, editStart, secretsStillNeeded } from './model/edit';
+import { changedFields, editStart, secretsStillNeeded, settingChanged } from './model/edit';
 import { saveAndTest } from './saveAndTest';
 
 interface Props {
@@ -42,7 +42,9 @@ export function EditConnectionDialog({ connection, manifest, onClose }: Props) {
     setProblem(null);
   }, [connection, manifest]);
   const shown = visibleFields(fields, values);
-  const missing = secretsStillNeeded(fields, config, values, (f) => shown.includes(f));
+  const applies = (f: (typeof fields)[number]) => shown.includes(f);
+  const missing = secretsStillNeeded(fields, config, values, applies);
+  const dropsOptionalSecrets = settingChanged(fields, config, values, applies) && shown.some((f) => f.secret && f.required !== true);
   const save = useMutation({
     mutationFn: async () => {
       if (!connection) throw new Error('No connection');
@@ -88,6 +90,7 @@ export function EditConnectionDialog({ connection, manifest, onClose }: Props) {
         </>
       )}
       {missing.length > 0 && <MessageBar intent="warning">Changing a setting needs the credentials again: enter {missing.join(', ')}.</MessageBar>}
+      {dropsOptionalSecrets && <MessageBar intent="info">Secret headers not entered again are removed when a setting changes.</MessageBar>}
       {isOauth && <MessageBar intent="info">To change the account or the sign-in settings, use Reconnect (sign in again) in the row’s menu.</MessageBar>}
       {problem && !save.isPending && (
         <MessageBar intent="error" role="alert" title="Saved, but the connection test failed:">

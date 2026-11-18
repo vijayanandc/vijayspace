@@ -1,4 +1,5 @@
-// Key → value rows (headers, query parameters, free-form objects).
+// Key → value rows (headers, query parameters, free-form objects). Secret rows (a connection's secret headers)
+// mask their values and take no variables.
 
 import { X } from 'lucide-react';
 import { Fragment, useId, useRef, useState } from 'react';
@@ -9,7 +10,7 @@ import type { VarNode } from '../domain/variables';
 import { MappingInput } from './MappingInput';
 
 /** Rows of key → (mappable) value, stored as an object. The row list is local, so rows keep their order and survive key collisions. */
-export function KeyValueInput({ value, onChange, variables, label }: { value: JsonValue | undefined; onChange: (v: JsonObject) => void; variables: VarNode[]; label: string }) {
+export function KeyValueInput({ value, onChange, variables, label, secret = false }: { value: JsonValue | undefined; onChange: (v: JsonObject) => void; variables: VarNode[]; label: string; secret?: boolean }) {
   const uid = useId();
   const lastId = useRef(0);
   const nextId = () => ++lastId.current;
@@ -43,7 +44,11 @@ export function KeyValueInput({ value, onChange, variables, label }: { value: Js
                 value={row.key}
                 onChange={(e) => edit(row.id, { key: e.target.value })}
               />
-              <MappingInput ariaLabel={`${label} value ${i + 1}`} value={row.value} variables={variables} onChange={(v) => edit(row.id, { value: v })} />
+              {secret ? (
+                <input className="input" type="password" autoComplete="off" aria-label={`${label} value ${i + 1}`} value={row.value} onChange={(e) => edit(row.id, { value: e.target.value })} />
+              ) : (
+                <MappingInput ariaLabel={`${label} value ${i + 1}`} value={row.value} variables={variables} onChange={(v) => edit(row.id, { value: v })} />
+              )}
               <button type="button" className="icon-btn icon-btn-sm" aria-label={`Remove ${label} row ${i + 1}`} onClick={() => update(rows.filter((r) => r.id !== row.id))}>
                 <X size={14} aria-hidden="true" />
               </button>
