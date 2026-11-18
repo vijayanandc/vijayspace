@@ -1,9 +1,10 @@
 //! Run history retention: finished runs older than the org's retention are deleted with their
 //! step runs, trigger events and test snapshots; runs still waiting are never touched; the org
-//! setting overrides the server default.
+//! setting overrides the server default; a run past the cutoff can be re-run but not retried.
 
 use chrono::Duration;
 use serde_json::{Value, json};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 use crate::harness::TestApp;
 
@@ -113,5 +114,47 @@ async fn the_org_setting_overrides_the_default_and_is_validated() {
         .await;
     assert_eq!(reset["retention_days"], Value::Null);
     assert_eq!(reset["retention_days_effective"], 30);
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_run_whose_history_is_being_removed_can_be_rerun_but_not_retried() {
+    let app = TestApp::spawn().await;
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(400).set_body_string("bad"))
+        .mount(&mock)
+        .await;
+    let flow = app
+        .live_flow("Fails", json!({"trigger": {"type": "manual"}, "steps": [
+            {"key": "call", "type": "action", "connector": "core.http", "action": "request", "input": {"method": "POST", "url": mock.uri()}}
+        ]}))
+        .await;
+    let flow_id = flow["id"].as_str().unwrap();
+    let started = app
+        .ok(
+            "POST",
+            &format!("/api/v1/flows/{flow_id}/run"),
+            Some(json!({"payload": {}})),
+        )
+        .await;
+    let exe = started["execution_id"].as_str().unwrap().to_owned();
+    app.drain().await;
+
+    // Within the last hour before the 30-day cutoff, the sweep may already be deleting its steps.
+    app.clock
+        .advance(Duration::days(29) + Duration::hours(23) + Duration::minutes(30));
+    let (status, body) = app
+        .req("POST", &format!("/api/v1/executions/{exe}/retry"), None)
+        .await;
+    assert_eq!(
+        (status.as_u16(), body["code"].as_str()),
+        (409, Some("execution.not_retryable")),
+        "{body}"
+    );
+    let rerun = app
+        .ok("POST", &format!("/api/v1/executions/{exe}/rerun"), None)
+        .await;
+    assert!(rerun["execution_id"].is_string(), "{rerun}");
     app.cleanup().await;
 }

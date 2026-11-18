@@ -49,6 +49,14 @@ async fn memory_bombs_only_kill_the_child() {
         let err = runner().run(code, json!({}), json!({})).await.unwrap_err();
         assert_eq!(err.code(), "script.limit_exceeded", "{code}: {err}");
     }
+    // A child cannot flood the parent: a huge thrown map is cut short in the child.
+    let flood = "let s = \"x\"; for i in 0..19 { s += s; } let m = #{}; for i in 0..150 { m[s + i] = i; } throw m;";
+    let err = runner().run(flood, json!({}), json!({})).await.unwrap_err();
+    assert!(
+        err.to_string().len() < 4_000,
+        "{} bytes",
+        err.to_string().len()
+    );
     // The parent is unharmed and keeps running scripts.
     let ok = runner()
         .run("#{ ok: true }", json!({}), json!({}))

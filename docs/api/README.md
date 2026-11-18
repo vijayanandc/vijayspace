@@ -191,7 +191,7 @@ Secrets are never returned.
 |---|---|---|---|
 | GET | `/api/v1/executions?flow_id=&status=&limit=50&cursor=` | — | `{items: ExecutionSummary[], next_cursor}` |
 | GET | `/api/v1/executions/{id}` | — | `ExecutionDetail` |
-| POST | `/api/v1/executions/{id}/retry` | — | `ExecutionSummary` (from the failed step, same version) |
+| POST | `/api/v1/executions/{id}/retry` | — | `ExecutionSummary` (from the failed step, same version). 409 `execution.not_retryable` if the run is not failed, or finished within an hour of the org's retention cutoff (its history is being removed; re-run it instead). |
 | POST | `/api/v1/executions/{id}/rerun` | — | `{execution_id}` (new execution, latest published version) |
 | POST | `/api/v1/executions/{id}/cancel` | — | `ExecutionSummary` |
 
@@ -236,7 +236,7 @@ For a `decision` step run, `output` is `{"branch": "big"}`; when no branch match
 | Method | Path | Response |
 |---|---|---|
 | GET | `/api/v1/org` | `{id, name, timezone, retention_days (the org's setting, or null), retention_days_effective, retention_days_default}` |
-| PATCH | `/api/v1/org` with `{retention_days: 1..3650 \| null}` | the org (as above). Finished runs older than this are deleted hourly with their step history; queued, running and waiting runs are kept. `null` = the server default (`WEFT_RETENTION_DAYS`, 30). |
+| PATCH | `/api/v1/org` with `{retention_days: 1..3650 \| null}` | the org (as above). Finished runs older than this are deleted (every 15 minutes) with their step history; queued, running and waiting runs are kept. `null` = the server default (`WEFT_RETENTION_DAYS`, 30). |
 | GET | `/api/v1/usage` | `{period: "2026-11", tasks_used, executions}` |
 | GET | `/healthz`, `/readyz` | `ok` |
 

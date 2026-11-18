@@ -10,8 +10,9 @@ use weft_domain::ids::{ConnectionId, OrgId};
 use super::RequestClass;
 use crate::Deps;
 
-/// How long a request waits for a concurrency slot before being retried later.
-const SLOT_WAIT: StdDuration = StdDuration::from_secs(30);
+/// How long a request waits for a concurrency slot before its step is parked and retried later
+/// (short, so a busy connection never ties up worker tasks).
+const SLOT_WAIT: StdDuration = StdDuration::from_secs(2);
 
 /// Wraps the platform sender for one connection and one class of work.
 pub struct LimitedSender {
@@ -67,7 +68,12 @@ impl HttpSender for LimitedSender {
             .limiters
             .entry(&self.deps, self.org, self.connection)
             .await?;
-        let _slot = match &entry.permits {
+        // Inbound event fetches never wait or get refused: refusing would lose the event.
+        let permits = entry
+            .permits
+            .as_ref()
+            .filter(|_| self.class != RequestClass::Inbound);
+        let _slot = match permits {
             Some(permits) => {
                 match tokio::time::timeout(SLOT_WAIT, Arc::clone(permits).acquire_owned()).await {
                     Ok(Ok(permit)) => Some(permit),

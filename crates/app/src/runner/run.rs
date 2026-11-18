@@ -181,11 +181,14 @@ async fn run_action(
     if let StepResult::Failed(err) = &result
         && err.code == error_codes::CONNECTION_THROTTLED
     {
-        // Our own limits held the request back: it was never sent, so it is not an attempt.
-        let at = done_at
-            + Duration::seconds(i64::try_from(err.retry_after_secs.unwrap_or(30)).unwrap_or(30));
-        let job = throttled(deps, exe, &state, step_run_id, err, at, done_at).await?;
-        return Ok((state, Some(job)));
+        // Our own limits held the request back: it was never sent, so it is not an attempt and
+        // leaves no history row; the instruction that issued it is given back too, so parking
+        // never uses up the execution's budget.
+        let mut parked = state;
+        parked.executed = parked.executed.saturating_sub(1);
+        let at = done_at + crate::limits::park_delay(exe.id, err.retry_after_secs.unwrap_or(30));
+        let job = throttled(deps, exe, &parked, step_run_id, at, done_at).await?;
+        return Ok((parked, Some(job)));
     }
     let (next, after) = record_result(plan, state, &step, &result, done_at)
         .map_err(|e| AppError::internal(format!("engine: {e}")))?;
@@ -271,34 +274,26 @@ async fn run_step(
     }
 }
 
-/// Records a step held back by the connection's limits and parks the execution until `at`,
-/// leaving the engine state (and the attempt count) unchanged.
+/// Parks an execution whose step was held back by the connection's limits until `at`.
 async fn throttled(
     deps: &Deps,
     exe: &Execution,
     state: &RunState,
     step_run_id: weft_domain::ids::StepRunId,
-    err: &weft_engine::StepError,
     at: DateTime<Utc>,
     now: DateTime<Utc>,
 ) -> Result<JobOutcome, AppError> {
-    let completion = StepCompletion {
-        step_run_id,
-        status: StepStatus::RetryScheduled,
-        output: None,
-        error: Some(serde_json::to_value(err).unwrap_or(Value::Null)),
-        finished_at: now,
-        execution: Checkpoint {
+    deps.store.discard_step_run(exe.org_id, step_run_id).await?;
+    deps.store
+        .checkpoint(&Checkpoint {
             execution_id: exe.id,
             org_id: exe.org_id,
             status: ExecutionStatus::Waiting,
             run_state: to_value(state),
             waiting_until: Some(at),
             now,
-        },
-        count_task: false,
-    };
-    deps.store.complete_step(&completion).await?;
+        })
+        .await?;
     Ok(JobOutcome::RescheduleAt(at))
 }
 

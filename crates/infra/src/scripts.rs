@@ -9,7 +9,10 @@ use std::{path::PathBuf, process::Stdio, sync::Arc, time::Duration};
 use async_trait::async_trait;
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
-use tokio::{io::AsyncWriteExt as _, process::Command};
+use tokio::{
+    io::{AsyncReadExt as _, AsyncWriteExt as _},
+    process::Command,
+};
 use weft_connector_sdk::{ConnectorError, ScriptRun, ScriptRunner};
 use weft_script::{
     Limits, ScriptError,
@@ -73,6 +76,9 @@ impl ScriptRunner for PooledScriptRunner {
         }
     }
 }
+
+/// The most a child may write: the 1 MB result, the logs and JSON overhead.
+const MAX_STDOUT: u64 = 2 << 20;
 
 /// The subcommand of the `weft` binary that runs one script (see `weft_script::child`).
 pub const CHILD_SUBCOMMAND: &str = "script-child";
@@ -140,20 +146,34 @@ impl ScriptRunner for ProcessScriptRunner {
             // A child that dies early closes the pipe; its exit status tells why.
             let _ = stdin.write_all(&request).await;
         }
-        let output = match tokio::time::timeout(self.wall, child.wait_with_output()).await {
-            Ok(Ok(output)) => output,
+        let Some(stdout) = child.stdout.take() else {
+            return Err(ConnectorError::transient("the script runner has no output"));
+        };
+        // Read at most MAX_STDOUT (+1 to notice more): a script cannot flood this process.
+        let run = async {
+            let mut buf = Vec::new();
+            stdout.take(MAX_STDOUT + 1).read_to_end(&mut buf).await?;
+            if u64::try_from(buf.len()).unwrap_or(u64::MAX) > MAX_STDOUT {
+                return Ok::<_, std::io::Error>(None);
+            }
+            let status = child.wait().await?;
+            Ok(Some((buf, status)))
+        };
+        let (stdout, status) = match tokio::time::timeout(self.wall, run).await {
+            Ok(Ok(Some(done))) => done,
+            // Too much output or too slow: the child is killed when it is dropped.
+            Ok(Ok(None)) | Err(_) => return Err(resources_exceeded()),
             Ok(Err(e)) => {
                 return Err(ConnectorError::transient(format!(
                     "running the script: {e}"
                 )));
             }
-            Err(_) => return Err(resources_exceeded()), // dropped: the child is killed
         };
-        if !output.status.success() {
+        if !status.success() {
             return Err(resources_exceeded());
         }
         let response: ChildResponse =
-            serde_json::from_slice(&output.stdout).map_err(|_| resources_exceeded())?;
+            serde_json::from_slice(&stdout).map_err(|_| resources_exceeded())?;
         let result: Result<weft_script::ScriptOutput, ScriptError> = response.into();
         match result {
             Ok(out) => Ok(ScriptRun {

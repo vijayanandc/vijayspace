@@ -94,8 +94,8 @@ fn engine(limits: &Limits, log: &Arc<Mutex<Log>>) -> Engine {
         .set_max_map_size(limits.max_map_size)
         .set_strict_variables(true);
     engine.disable_symbol("eval");
-    // Values held by function pointers escape the size limits: no `Fn("name")`, no currying,
-    // and (feature `no_closure`) anonymous functions cannot capture variables.
+    // Curried values escape the size limits: no `Fn("name")` and no currying. (Memory as a whole
+    // is capped by the child process's OS limit; this only narrows the in-process runner's risk.)
     engine.disable_symbol("Fn");
     engine.disable_symbol("curry");
     let (print_log, print_limits) = (Arc::clone(log), limits.clone());
@@ -130,11 +130,11 @@ fn check_size(code: &str, limits: &Limits) -> Result<(), ScriptError> {
 
 /// The variables every script sees (strict variables: anything else is a compile error).
 fn scope<'a>(input: Dynamic, context: Dynamic) -> Scope<'a> {
-    // Not constants: the optimizer would copy a constant map into the compiled script at every
-    // mention of it.
+    // Constants, so functions and closures see them. The optimizer may copy a constant at each
+    // mention; the child process's memory cap bounds that for scripts that abuse it.
     let mut scope = Scope::new();
-    scope.push("input", input);
-    scope.push("context", context);
+    scope.push_constant("input", input);
+    scope.push_constant("context", context);
     scope
 }
 

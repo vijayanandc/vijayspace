@@ -63,7 +63,7 @@ wiremock = "0.6"
 # Custom functions. Never enable `unchecked` (it removes every sandbox limit).
 # OS resource limits for the custom-function child process.
 rlimit = "=0.10.2"
-rhai = { version = "=1.27.0", default-features = false, features = ["std", "sync", "serde", "no_time", "no_module", "no_closure"] }
+rhai = { version = "=1.27.0", default-features = false, features = ["std", "sync", "serde", "no_time", "no_module"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

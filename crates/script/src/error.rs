@@ -21,6 +21,18 @@ pub enum ScriptError {
     },
 }
 
+/// Longest error message kept (a thrown value can be arbitrarily large).
+const MAX_MESSAGE_CHARS: usize = 2_000;
+
+fn bounded(message: String) -> String {
+    if message.chars().count() <= MAX_MESSAGE_CHARS {
+        return message;
+    }
+    let mut cut: String = message.chars().take(MAX_MESSAGE_CHARS).collect();
+    cut.push('…');
+    cut
+}
+
 fn located(message: &str, line: Option<usize>, column: Option<usize>) -> String {
     match (line, column) {
         (Some(l), Some(c)) => format!("line {l}, column {c}: {message}"),
@@ -81,7 +93,7 @@ fn pos(p: Position) -> (Option<usize>, Option<usize>) {
 impl From<ParseError> for ScriptError {
     fn from(e: ParseError) -> Self {
         let (line, column) = pos(e.position());
-        let message = e.err_type().to_string();
+        let message = bounded(e.err_type().to_string());
         // Depth limits surface as parse errors; they are limits, not syntax mistakes.
         if matches!(e.err_type(), rhai::ParseErrorType::ExprTooDeep) {
             return Self::LimitExceeded {
@@ -109,13 +121,13 @@ impl From<Box<EvalAltResult>> for ScriptError {
                 | EvalAltResult::ErrorTerminated(..)
         );
         // `throw "message"`: the thrown value is the message.
-        let message = if let EvalAltResult::ErrorRuntime(value, _) = &*e {
+        let message = bounded(if let EvalAltResult::ErrorRuntime(value, _) = &*e {
             value.to_string()
         } else if matches!(*e, EvalAltResult::ErrorTerminated(..)) {
             "the script ran for too long".to_owned()
         } else {
             without_position(&e.to_string())
-        };
+        });
         if limit {
             Self::LimitExceeded {
                 message,

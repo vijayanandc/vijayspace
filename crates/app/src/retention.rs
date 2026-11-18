@@ -2,7 +2,7 @@
 //! in small batches, with their step runs, trigger events and test snapshots; platform
 //! housekeeping removes dead jobs, expired OAuth states and leases, and old usage counters.
 
-use chrono::Duration;
+use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use weft_domain::{error_codes, ids::OrgId, model::Org};
 
@@ -49,6 +49,11 @@ pub fn effective_days(deps: &Deps, org: &Org) -> u32 {
         .clamp(MIN_DAYS, MAX_DAYS)
 }
 
+/// Runs that finished before this time are (or are about to be) deleted by the sweep.
+pub fn history_cutoff(deps: &Deps, org: &Org, now: DateTime<Utc>) -> DateTime<Utc> {
+    now - Duration::days(i64::from(effective_days(deps, org)))
+}
+
 /// One sweep over every org, then platform housekeeping.
 pub async fn sweep(deps: &Deps) -> Result<SweepReport, AppError> {
     let now = deps.clock.now();
@@ -78,10 +83,10 @@ pub async fn sweep(deps: &Deps) -> Result<SweepReport, AppError> {
 async fn sweep_org(
     deps: &Deps,
     org: &Org,
-    now: chrono::DateTime<chrono::Utc>,
+    now: DateTime<Utc>,
     report: &mut SweepReport,
 ) -> Result<(), AppError> {
-    let before = now - Duration::days(i64::from(effective_days(deps, org)));
+    let before = history_cutoff(deps, org, now);
     for _ in 0..MAX_BATCHES {
         let purged = deps.store.purge_history(org.id, before, BATCH).await?;
         report.add(purged);

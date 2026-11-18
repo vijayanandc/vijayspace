@@ -8,7 +8,7 @@ use weft_app::ports::{
     Checkpoint, ExecutionFilter, ExecutionRepo, Finish, NewExecution, NewJob, Res, StepCompletion,
 };
 use weft_domain::{
-    ids::{ExecutionId, FlowId, OrgId},
+    ids::{ExecutionId, FlowId, OrgId, StepRunId},
     model::{Execution, StepRun},
 };
 
@@ -185,6 +185,16 @@ impl ExecutionRepo for MySqlStore {
             outputs.insert(r.step_key, value);
         }
         Ok(outputs)
+    }
+
+    async fn discard_step_run(&self, org: OrgId, id: StepRunId) -> Res<()> {
+        sqlx::query("DELETE FROM step_runs WHERE org_id = ? AND id = ?")
+            .bind(org.as_uuid())
+            .bind(id.as_uuid())
+            .execute(&self.pool)
+            .await
+            .map_err(db_err)?;
+        Ok(())
     }
 
     async fn insert_step_run(&self, org: OrgId, run: &StepRun) -> Res<()> {

@@ -1,5 +1,6 @@
 //! Use cases: retry from the failed step, re-run on the latest version, cancel.
 
+use chrono::{DateTime, Duration, Utc};
 use serde_json::Value;
 use weft_domain::{
     error_codes,
@@ -9,7 +10,7 @@ use weft_domain::{
 use weft_engine::RunState;
 
 use super::start::{new_execution, run_job};
-use crate::{AppError, Deps};
+use crate::{AppError, Deps, retention};
 
 async fn load(
     deps: &Deps,
@@ -22,6 +23,30 @@ async fn load(
         .ok_or_else(|| AppError::not_found(error_codes::EXECUTION_NOT_FOUND, "Execution not found"))
 }
 
+/// A retry resumes from the run's step history, so it is refused once the retention sweep may be
+/// deleting that history (with an hour's margin, as a sweep can be part-way through a batch).
+/// A re-run does not need the history and is always allowed.
+async fn ensure_history_kept(
+    deps: &Deps,
+    org: OrgId,
+    finished_at: Option<DateTime<Utc>>,
+) -> Result<(), AppError> {
+    let Some(finished_at) = finished_at else {
+        return Ok(());
+    };
+    let Some(org_row) = deps.store.get_org(org).await? else {
+        return Ok(());
+    };
+    let cutoff = retention::history_cutoff(deps, &org_row, deps.clock.now()) + Duration::hours(1);
+    if finished_at < cutoff {
+        return Err(AppError::conflict(
+            error_codes::EXECUTION_NOT_RETRYABLE,
+            "This run's history is past the org's retention period and is being removed; re-run it instead",
+        ));
+    }
+    Ok(())
+}
+
 /// Resumes a failed execution at the step that failed, on the same pinned version.
 pub async fn retry_execution(deps: &Deps, org: OrgId, id: ExecutionId) -> Result<(), AppError> {
     let exe = load(deps, org, id).await?;
@@ -31,6 +56,7 @@ pub async fn retry_execution(deps: &Deps, org: OrgId, id: ExecutionId) -> Result
             "Only failed executions can be retried",
         ));
     }
+    ensure_history_kept(deps, org, exe.finished_at).await?;
     let mut state: RunState = serde_json::from_value(exe.run_state.clone()).unwrap_or_default();
     if let Some(step) = &exe.failed_step_key {
         state.attempts.remove(step);

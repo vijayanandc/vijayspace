@@ -120,6 +120,9 @@ fn throw_and_runtime_errors_are_script_errors_with_a_position() {
     assert!(e.to_string().contains("bad input"), "{e}");
     assert_eq!(e.position().0, Some(2));
     assert_eq!(err("undefined_fn(1)").code(), "script.error");
+    // A huge thrown value is cut short.
+    let huge = err("let s = \"x\"; for i in 0..15 { s += s; } throw s;").to_string();
+    assert!(huge.chars().count() < 2_100, "{} chars", huge.len());
     // The position is reported once, not repeated inside the message.
     let runtime = err("let x = 1;\nfor i in x { }").to_string();
     assert_eq!(runtime.matches("line 2").count(), 1, "{runtime}");
@@ -219,27 +222,26 @@ fn the_wall_time_guard_stops_a_script_as_a_safety_net() {
 }
 
 #[test]
-fn values_the_size_limits_cannot_see_are_unreachable() {
-    // Function pointers (curried values) and closures that capture variables.
-    for code in [
-        "fn f(x) { x } Fn(\"f\").curry(1)",
-        "let t = 1; let g = || t; g.call()",
-        "(|x| x).curry(1)",
-    ] {
-        assert!(
-            check(code, &Limits::default()).is_err()
-                || run(code, &json!({}), &json!({}), &Limits::default()).is_err(),
-            "{code}"
-        );
+fn curried_values_are_unreachable_but_closures_and_functions_see_the_input() {
+    for code in ["fn f(x) { x } Fn(\"f\").curry(1)", "(|x| x).curry(1)"] {
+        assert!(check(code, &Limits::default()).is_err(), "{code}");
     }
-    // Anonymous functions without captures still work (e.g. with `map`).
-    assert_eq!(
-        ok("[1, 2, 3].map(|x| x * 2)", json!({})),
-        json!({"result": [2, 4, 6]})
-    );
-    // Mentioning a large input many times does not copy it.
-    let input = json!({"keys": (0..2000).map(|i| format!("k{i}")).collect::<Vec<_>>()});
+    let input = json!({"items": [1, 2, 3], "factor": 10});
+    let cases = [
+        ("input.items.map(|x| x * input.factor)", json!([10, 20, 30])),
+        ("fn g() { input.factor } g()", json!(10)),
+        (
+            "let f = input.factor; input.items.map(|x| x * f)",
+            json!([10, 20, 30]),
+        ),
+        ("[1, 2, 3].map(|x| x * 2)", json!([2, 4, 6])),
+    ];
+    for (code, expected) in cases {
+        assert_eq!(ok(code, input.clone())["result"], expected, "{code}");
+    }
+    // A large input mentioned several times still works.
+    let big = json!({"keys": (0..2000).map(|i| format!("k{i}")).collect::<Vec<_>>()});
     let code =
         "let a = input; let b = input; let c = input; a.keys.len() + b.keys.len() + c.keys.len()";
-    assert_eq!(ok(code, input), json!({"result": 6000}));
+    assert_eq!(ok(code, big), json!({"result": 6000}));
 }

@@ -184,7 +184,13 @@ async fn a_held_back_request_is_not_an_attempt_and_is_never_skipped() {
         held["status"], "waiting",
         "held back, not failed or skipped: {held}"
     );
-    app.clock.advance(Duration::seconds(61));
+    assert_eq!(
+        held["steps"].as_array().map(Vec::len),
+        Some(0),
+        "a held-back request leaves no history row: {held}"
+    );
+    // The park time is the limiter's hint (60 s) plus a spread of up to the same again.
+    app.clock.advance(Duration::seconds(121));
     app.drain().await;
     let done = app
         .ok(
@@ -194,13 +200,14 @@ async fn a_held_back_request_is_not_an_attempt_and_is_never_skipped() {
         )
         .await;
     assert_eq!(done["status"], "succeeded", "{done}");
-    let job = done["steps"]
+    let jobs: Vec<&Value> = done["steps"]
         .as_array()
         .unwrap()
         .iter()
-        .rev()
-        .find(|s| s["step_key"] == "job")
-        .unwrap();
+        .filter(|s| s["step_key"] == "job")
+        .collect();
+    assert_eq!(jobs.len(), 1, "one attempt in the history: {done}");
+    let job = jobs[0];
     assert_eq!(
         job["output"]["record"]["api_id"], "01JOB",
         "the request was sent once the limit allowed: {done}"
