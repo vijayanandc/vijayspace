@@ -5,7 +5,6 @@ export * from './definition';
 import type { JsonObject, JsonValue, FlowDefinition } from './definition';
 
 // ---------- Catalog ----------
-
 export type FieldKind =
   | 'string' | 'text' | 'number' | 'boolean' | 'select' | 'datetime' | 'json' | 'key_value' | 'object' | 'code' | 'password';
 
@@ -31,6 +30,8 @@ export interface FieldSpec {
   advanced?: boolean;
   secret?: boolean;
   read_only?: boolean;
+  /** Shown (and required) only while the field `field` holds one of `in` (e.g. a password for one sign-in type). */
+  show_when?: { field: string; in: string[] };
 }
 
 export interface ActionSpec {
@@ -78,7 +79,6 @@ export interface ConnectorManifest {
 }
 
 // ---------- Connections ----------
-
 export type ConnectionStatus = 'active' | 'needs_reauth' | 'error';
 
 export interface Connection {
@@ -126,7 +126,6 @@ export type ConnectionTestResult =
   | { ok: false; error: { code: string; message: string } };
 
 // ---------- Flows ----------
-
 export type Severity = 'error' | 'warning';
 
 export interface Issue {
@@ -200,7 +199,6 @@ export interface StepTestResult {
 }
 
 // ---------- Executions ----------
-
 export interface ExecutionSummary {
   id: string;
   flow_id: string;
@@ -266,7 +264,6 @@ export interface ExecutionPage {
 }
 
 // ---------- Recipes / misc ----------
-
 export interface RecipeSlot {
   slot: string;
   connector: string;

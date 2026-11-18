@@ -11,6 +11,7 @@ import { parseNumberField } from '../domain/values';
 import { CodeEditor } from './CodeEditor';
 import type { FormEnv } from './env';
 import { JsonInput } from './JsonInput';
+import { visibleFields } from './visibility';
 import { KeyValueInput } from './KeyValueInput';
 import { MappingInput } from './MappingInput';
 import { ParsedMappingInput } from './ParsedMappingInput';
@@ -109,8 +110,10 @@ export function FieldInput({ field, value, onChange, env, siblings, siblingField
 
 export function DynamicForm({ fields, values, onChange, env }: { fields: FieldSpec[]; values: JsonObject; onChange: (v: JsonObject) => void; env: FormEnv }) {
   const set = (key: string, v: JsonValue) => onChange({ ...values, [key]: v });
-  const basic = fields.filter((f) => !f.advanced);
-  const advanced = fields.filter((f) => f.advanced);
+  // Fields another field hides (e.g. a password for another sign-in type) are not shown.
+  const shown = visibleFields(fields, values);
+  const basic = shown.filter((f) => !f.advanced);
+  const advanced = shown.filter((f) => f.advanced);
   const render = (f: FieldSpec) => <FieldInput key={f.key} field={f} value={values[f.key]} onChange={(v) => set(f.key, v)} env={env} siblings={values} siblingFields={fields} />;
   return (
     <div className="dynamic-form">
