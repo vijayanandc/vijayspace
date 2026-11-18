@@ -74,6 +74,12 @@ export function ScriptHelp({ stepKey, onInsert }: { stepKey: string; onInsert: (
             <dt>Input</dt>
             <dd>
               Add <em>Input values</em> below and map data from earlier steps into them. The script reads them as <code>input.&lt;name&gt;</code>, e.g. <code>input.items</code>.
+              Changing <code>input</code> only changes this step’s copy.
+            </dd>
+            <dt>Functions</dt>
+            <dd>
+              A <code>fn</code> sees only its parameters, so pass values in: <code>fn total(items) {'{'} … {'}'}</code>, then <code>total(input.items)</code>. Closures such as{' '}
+              <code>|x| x * 2</code> can read variables.
             </dd>
             <dt>Time</dt>
             <dd>

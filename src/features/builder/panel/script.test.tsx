@@ -94,7 +94,7 @@ describe('custom function panel', () => {
   it('explains input, context, output, throw and print, and lists the helpers', () => {
     renderScript('');
     fireEvent.click(screen.getByRole('button', { name: /How custom functions work/ }));
-    for (const text of ['context.now', 'throw "message"', '_logs', 'hmac_sha256(text, key)', '{{ steps.fn.total }}']) {
+    for (const text of ['context.now', 'throw "message"', '_logs', 'hmac_sha256(text, key)', '{{ steps.fn.total }}', 'total(input.items)']) {
       expect(screen.getAllByText((_, el) => el?.tagName === 'CODE' && el.textContent === text).length).toBeGreaterThan(0);
     }
   });
