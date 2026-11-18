@@ -217,6 +217,7 @@ async fn invitations_go_out_by_email_and_bind_to_the_verified_address() {
             email: Some("cy@example.com".into()),
             email_verified: false,
             name: None,
+            has_profile: true,
         },
     );
     let (status, _) = app

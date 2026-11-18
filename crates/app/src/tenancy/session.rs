@@ -37,8 +37,9 @@ async fn user_for(deps: &Deps, identity: &VerifiedIdentity) -> Result<User, AppE
         ..identity.clone()
     };
     let stored = deps.store.user_by_subject(&identity.subject).await?;
-    // A token without profile claims (a JWT without custom claims) keeps what is known.
-    if let Some(user) = &stored {
+    // A token without profile claims (a JWT without custom claims) keeps what is known; userinfo
+    // is authoritative (an email removed at Logto is removed here too).
+    if let Some(user) = stored.as_ref().filter(|_| !identity.has_profile) {
         if identity.email.is_none() {
             identity.email.clone_from(&user.email);
             identity.email_verified = user.email_verified;

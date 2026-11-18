@@ -234,16 +234,13 @@ impl TenancyRepo for MySqlStore {
         Ok(done.rows_affected() > 0)
     }
 
-    async fn count_invitations_since(&self, org: OrgId, since: DateTime<Utc>) -> Res<u32> {
-        let n: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM org_invitations WHERE org_id = ? AND created_at >= ?",
-        )
-        .bind(org.as_uuid())
-        .bind(since)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(db_err)?;
-        Ok(u32::try_from(n).unwrap_or(u32::MAX))
+    async fn take_send_quota(
+        &self,
+        quotas: &[(String, u32)],
+        day: chrono::NaiveDate,
+        now: DateTime<Utc>,
+    ) -> Res<bool> {
+        self.take_quota(quotas, day, now).await
     }
 
     async fn accept_invitation(

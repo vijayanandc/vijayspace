@@ -65,8 +65,9 @@ fn var(name: &str) -> Option<String> {
 }
 
 impl Settings {
-    /// Reads `WEFT_*` variables. See `README.md` for the full list.
-    pub fn from_env() -> Result<Self, String> {
+    /// Reads `WEFT_*` variables. See `README.md` for the full list. `serves_api`: whether this
+    /// process answers API requests (only then are the sign-in settings required).
+    pub fn from_env(serves_api: bool) -> Result<Self, String> {
         let public_url = var("WEFT_PUBLIC_URL").unwrap_or_else(|| "http://localhost:8080".into());
         let mut oauth_clients = HashMap::new();
         for connector in ["zoho_crm", "autodesk_forma"] {
@@ -112,7 +113,11 @@ impl Settings {
             http_proxy: var("WEFT_HTTP_PROXY"),
             allow_private_networks: var("WEFT_ALLOW_PRIVATE_NETWORKS")
                 .is_some_and(|v| v == "true" || v == "1"),
-            sign_in: crate::auth_settings::sign_in(&var, &bind)?,
+            sign_in: if serves_api {
+                crate::auth_settings::sign_in(&var, &bind)?
+            } else {
+                None
+            },
             app_url: var("WEFT_APP_URL").unwrap_or_else(|| "http://127.0.0.1:3000".into()),
             owner_emails: crate::auth_settings::owner_emails(var("WEFT_OWNER_EMAILS")),
             mail: crate::auth_settings::mail(&var),

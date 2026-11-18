@@ -32,6 +32,10 @@ pub struct OAuthState {
     pub expires_at: DateTime<Utc>,
     /// Who started the sign-in (becomes the connection's creator).
     pub created_by: Option<weft_domain::ids::UserId>,
+    /// The provider's callback (code and parameters), encrypted, once the browser came back.
+    pub callback_cipher: Option<Vec<u8>>,
+    /// SHA-256 of the one-time token that finishes this sign-in.
+    pub finish_hash: Option<Vec<u8>>,
 }
 
 #[async_trait]
@@ -54,6 +58,14 @@ pub trait ConnectionRepo: Send + Sync {
     ) -> Res<()>;
     async fn insert_oauth_state(&self, state: &OAuthState, now: DateTime<Utc>) -> Res<()>;
     /// Removes and returns a state (single use) if it has not expired.
+    /// Keeps the provider's callback with a finish token, once, on an open sign-in; returns it.
+    async fn park_oauth_callback(
+        &self,
+        state_hash: &[u8],
+        callback_cipher: &[u8],
+        finish_hash: &[u8],
+        now: DateTime<Utc>,
+    ) -> Res<Option<OAuthState>>;
     async fn take_oauth_state(
         &self,
         state_hash: &[u8],

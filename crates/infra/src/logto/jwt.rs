@@ -124,6 +124,7 @@ impl LogtoVerifier {
         };
         Ok(Some((
             VerifiedIdentity {
+                has_profile: c.email.is_some() || c.name.is_some(),
                 subject: c.sub,
                 email: c.email,
                 email_verified: c.email_verified.unwrap_or(false),

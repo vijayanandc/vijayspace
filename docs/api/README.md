@@ -130,7 +130,8 @@ Clients switch on `code` (see `crates/domain/src/error_codes.rs`).
 | DELETE | `/api/v1/connections/{id}` | — | 204 |
 | POST | `/api/v1/connections/{id}/test` | — | `{ok: true, info: {}}` or `{ok: false, error: {code, message}}` |
 | POST | `/api/v1/connections/oauth/start` | `{connector, name, connection_id?, fields?: {…non-secret config, e.g. region}, return_to}` | `{authorize_url}` |
-| GET | `/oauth/callback` | (provider redirect) | `302` → `return_to?status=connected&connection_id=cxn_…` or `?status=error&message=…` |
+| GET | `/oauth/callback` | (provider redirect; public) | `302` → `return_to?status=finish&state=…&finish=…` (the provider's answer is kept encrypted, unused, for 10 minutes) or `?status=error&message=…`. `400` text if the state is unknown, expired or already used. |
+| POST | `/api/v1/connections/oauth/finish` | `{state, finish}` (from the `status=finish` redirect) | `{connection_id}`. Signed in, in the org the sign-in started in, by the user who started it; otherwise `422 oauth.state_invalid`. The state is spent either way, so the client calls this once. |
 
 **Limits** (every request made through a connection counts; limits are the app's defaults with the connection's overrides; a request over a limit is retried later, never dropped; background work (polls, backfills) stops at 95% of the daily budget):
 ```json
@@ -250,7 +251,7 @@ Roles: `owner | admin | member | viewer`. The matrix (doc 08 §2): owners do eve
 | PATCH | `/api/v1/members/{user_id}` | `{role}` | the member. `members.manage`; only owners make or change owners (403); the last owner cannot step down (409 `member.last_owner`). |
 | DELETE | `/api/v1/members/{user_id}` | — | 204. Anyone may remove themselves (leave); others need `members.manage`; owners only by owners; never the last owner (409). |
 | GET | `/api/v1/invitations` | — | open invitations `[{id, org_id, org_name, email, role, invited_by, created_at, expires_at}]` (`members.manage`) |
-| POST | `/api/v1/invitations` | `{email, role}` | 201 `{invitation, email_sent}`. Renews an open invitation for the same email (403 if the caller may not give that invitation's current role); 409 `member.exists` if already a member; 409 `invitation.rate_limited` after 100 invitation emails in a day. Emails a link to `WEFT_APP_URL`; valid 14 days. |
+| POST | `/api/v1/invitations` | `{email, role}` | 201 `{invitation, email_sent}`. Renews an open invitation for the same email (403 if the caller may not give that invitation's current role); 409 `member.exists` if already a member; 409 `invitation.rate_limited` after 100 invitation emails in a day for the org (300 for the person sending, across orgs), or within 5 minutes of the last email to that address. Emails a link to `WEFT_APP_URL`; valid 14 days. |
 | POST | `/api/v1/invitations/{id}/resend` | — | `{invitation, email_sent}` (new expiry). 409 `invitation.rate_limited` within 5 minutes of the last email. |
 | DELETE | `/api/v1/invitations/{id}` | — | 204 (it can no longer be accepted) |
 

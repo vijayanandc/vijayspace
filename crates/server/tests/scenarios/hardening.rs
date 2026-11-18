@@ -189,6 +189,24 @@ async fn invitations_keep_their_rules() {
             .all(|i| i["email"] != "boss@example.com"),
         "{open}"
     );
+    app.idp
+        .as_ref()
+        .unwrap()
+        .issue("boss", "boss@example.com", "Boss");
+    let (status, _) = app
+        .req_as(
+            "boss",
+            None,
+            "POST",
+            &format!("/api/v1/me/invitations/{id}/accept"),
+            None,
+        )
+        .await;
+    assert_eq!(
+        status.as_u16(),
+        404,
+        "a revoked invitation cannot be accepted"
+    );
     app.cleanup().await;
 }
 

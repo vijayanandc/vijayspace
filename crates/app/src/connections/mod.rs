@@ -8,7 +8,7 @@ pub use manage::{
     ConnectionTest, create_connection, delete_connection, get_connection, list_connections,
     load_fields, load_options, test_connection, update_connection,
 };
-pub use oauth::{oauth_callback, oauth_start};
+pub use oauth::{oauth_callback, oauth_finish, oauth_start};
 
 use weft_domain::ids::{ConnectionId, OrgId};
 

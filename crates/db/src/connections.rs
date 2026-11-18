@@ -29,6 +29,27 @@ struct StateRow {
     return_to: String,
     expires_at: DateTime<Utc>,
     created_by: Option<uuid::Uuid>,
+    callback_cipher: Option<Vec<u8>>,
+    finish_hash: Option<Vec<u8>>,
+}
+
+impl StateRow {
+    fn into_state(self) -> OAuthState {
+        OAuthState {
+            state_hash: self.state_hash,
+            org_id: OrgId::from_uuid(self.org_id),
+            connector: self.connector_key,
+            connection_id: self.connection_id.map(ConnectionId::from_uuid),
+            connection_name: self.connection_name,
+            config: self.config.0,
+            verifier_cipher: self.verifier_cipher,
+            return_to: self.return_to,
+            expires_at: self.expires_at,
+            created_by: self.created_by.map(UserId::from_uuid),
+            callback_cipher: self.callback_cipher,
+            finish_hash: self.finish_hash,
+        }
+    }
 }
 
 #[async_trait]
@@ -164,7 +185,7 @@ impl ConnectionRepo for MySqlStore {
     ) -> Res<Option<OAuthState>> {
         let mut tx = self.pool.begin().await.map_err(db_err)?;
         let row: Option<StateRow> = sqlx::query_as(
-            "SELECT state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_by FROM oauth_states WHERE state_hash = ? FOR UPDATE",
+            "SELECT state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_by, callback_cipher, finish_hash FROM oauth_states WHERE state_hash = ? FOR UPDATE",
         )
         .bind(state_hash)
         .fetch_optional(&mut *tx)
@@ -176,17 +197,41 @@ impl ConnectionRepo for MySqlStore {
             .await
             .map_err(db_err)?;
         tx.commit().await.map_err(db_err)?;
-        Ok(row.filter(|r| r.expires_at > now).map(|r| OAuthState {
-            state_hash: r.state_hash,
-            org_id: OrgId::from_uuid(r.org_id),
-            connector: r.connector_key,
-            connection_id: r.connection_id.map(ConnectionId::from_uuid),
-            connection_name: r.connection_name,
-            config: r.config.0,
-            verifier_cipher: r.verifier_cipher,
-            return_to: r.return_to,
-            expires_at: r.expires_at,
-            created_by: r.created_by.map(UserId::from_uuid),
-        }))
+        Ok(row.filter(|r| r.expires_at > now).map(StateRow::into_state))
+    }
+
+    async fn park_oauth_callback(
+        &self,
+        state_hash: &[u8],
+        callback_cipher: &[u8],
+        finish_hash: &[u8],
+        now: DateTime<Utc>,
+    ) -> Res<Option<OAuthState>> {
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        let row: Option<StateRow> = sqlx::query_as(
+            "SELECT state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_by, callback_cipher, finish_hash FROM oauth_states WHERE state_hash = ? FOR UPDATE",
+        )
+        .bind(state_hash)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        // Only an open sign-in, and only once (a replayed callback finds it parked already).
+        let Some(row) = row.filter(|r| r.expires_at > now && r.callback_cipher.is_none()) else {
+            return Ok(None);
+        };
+        sqlx::query(
+            "UPDATE oauth_states SET callback_cipher = ?, finish_hash = ? WHERE state_hash = ?",
+        )
+        .bind(callback_cipher)
+        .bind(finish_hash)
+        .bind(state_hash)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        tx.commit().await.map_err(db_err)?;
+        let mut state = row.into_state();
+        state.callback_cipher = Some(callback_cipher.to_vec());
+        state.finish_hash = Some(finish_hash.to_vec());
+        Ok(Some(state))
     }
 }

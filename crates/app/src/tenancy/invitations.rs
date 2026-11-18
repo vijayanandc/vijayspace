@@ -16,8 +16,10 @@ use crate::{AppError, Deps, ports::NewInvitation};
 
 /// How long an invitation stays open.
 const VALID_DAYS: i64 = 14;
-/// Invitation emails an org may send per day (each invitation or resend sends one).
+/// Invitation emails an org may send per day (each invitation, renewal or resend sends one).
 const DAILY_EMAILS: u32 = 100;
+/// Invitation emails one person may send per day across all their orgs.
+const DAILY_EMAILS_PER_USER: u32 = 300;
 /// The shortest time between two emails for the same invitation.
 const RESEND_COOLDOWN_MINUTES: i64 = 5;
 
@@ -94,6 +96,7 @@ pub async fn invite(
         .find(|i| i.email == email);
     if let Some(open) = open {
         may_handle(actor, open.role)?;
+        cooled_down(deps, &open)?;
     }
     issue(deps, actor, &email, role).await
 }
@@ -106,12 +109,18 @@ pub async fn resend(deps: &Deps, actor: &Actor, id: InvitationId) -> Result<Invi
         .await?
         .ok_or_else(not_found)?;
     may_handle(actor, invitation.role)?;
+    cooled_down(deps, &invitation)?;
+    issue(deps, actor, &invitation.email, invitation.role).await
+}
+
+/// One email per invitation every few minutes (inviting the same address again counts too).
+fn cooled_down(deps: &Deps, invitation: &Invitation) -> Result<(), AppError> {
     if deps.clock.now() - invitation.created_at < Duration::minutes(RESEND_COOLDOWN_MINUTES) {
         return Err(rate_limited(
             "This invitation was just sent. Wait a few minutes before sending it again.",
         ));
     }
-    issue(deps, actor, &invitation.email, invitation.role).await
+    Ok(())
 }
 
 pub async fn revoke(deps: &Deps, actor: &Actor, id: InvitationId) -> Result<(), AppError> {
@@ -130,14 +139,18 @@ pub async fn revoke(deps: &Deps, actor: &Actor, id: InvitationId) -> Result<(), 
 
 async fn issue(deps: &Deps, actor: &Actor, email: &str, role: Role) -> Result<Invited, AppError> {
     let now = deps.clock.now();
-    let sent = deps
+    let mut quotas = vec![(format!("org:{}", actor.org), DAILY_EMAILS)];
+    if let Some(user) = actor.user {
+        quotas.push((format!("user:{user}"), DAILY_EMAILS_PER_USER));
+    }
+    if !deps
         .store
-        .count_invitations_since(actor.org, now - Duration::days(1))
-        .await?;
-    if sent >= DAILY_EMAILS {
-        return Err(rate_limited(&format!(
-            "This organisation sent {DAILY_EMAILS} invitations today. Try again tomorrow."
-        )));
+        .take_send_quota(&quotas, now.date_naive(), now)
+        .await?
+    {
+        return Err(rate_limited(
+            "The daily limit of invitation emails is reached. Try again tomorrow.",
+        ));
     }
     deps.store
         .upsert_invitation(

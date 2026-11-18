@@ -25,6 +25,7 @@ pub fn router() -> Router<ApiState> {
     Router::new()
         .route("/api/v1/connections", get(list).post(create))
         .route("/api/v1/connections/oauth/start", post(oauth_start))
+        .route("/api/v1/connections/oauth/finish", post(oauth_finish))
         .route(
             "/api/v1/connections/{id}",
             get(one).patch(update).delete(remove),
@@ -173,6 +174,22 @@ async fn oauth_start(
     )
     .await?;
     Ok(Json(json!({"authorize_url": url})))
+}
+
+#[derive(Debug, Deserialize)]
+struct OAuthFinishBody {
+    state: String,
+    finish: String,
+}
+
+/// The signed-in step of an OAuth sign-in (after the provider sent the browser back).
+async fn oauth_finish(
+    State(s): State<ApiState>,
+    Acting(actor): Acting,
+    Json(b): Json<OAuthFinishBody>,
+) -> ApiResult<Json<Value>> {
+    let id = uc::oauth_finish(&s.deps, &actor, &b.state, &b.finish).await?;
+    Ok(Json(json!({"connection_id": id})))
 }
 
 async fn callback(

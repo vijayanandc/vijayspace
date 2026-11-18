@@ -17,7 +17,11 @@ use weft_connector_sdk::testing::CapturingMailer;
 use weft_domain::ids::OrgId;
 use weft_http::{ReqwestSender, SsrfPolicy};
 use weft_infra::{AesGcmSecretBox, UuidV7Ids};
-use weft_testkit::{FakeIdentityProvider, ManualClock, MemoryRecordsConnector};
+use weft_testkit::{FakeIdentityProvider, ManualClock, MemoryRecordsConnector, OAuthTestConnector};
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
+};
 
 #[allow(dead_code)] // some fields are used only by some scenarios
 pub struct TestApp {
@@ -29,6 +33,8 @@ pub struct TestApp {
     pub dst: MemoryRecordsConnector,
     /// Set by [`TestApp::spawn_signed_in`]: sign-in is on and tokens come from here.
     pub idp: Option<FakeIdentityProvider>,
+    /// The token endpoint of the `oauthapp` test app (answers every code exchange).
+    pub oauth_provider: MockServer,
     base: String,
     db: String,
 }
@@ -65,9 +71,21 @@ impl TestApp {
         let mailer = Arc::new(CapturingMailer::default());
         let src = MemoryRecordsConnector::new("memsrc");
         let dst = MemoryRecordsConnector::new("memdst");
+        let oauth_provider = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "at-1", "refresh_token": "rt-1", "expires_in": 3600, "token_type": "Bearer"
+            })))
+            .mount(&oauth_provider)
+            .await;
         let mut registry = weft_server::wiring::registry();
         registry.register(Arc::new(src.clone()));
         registry.register(Arc::new(dst.clone()));
+        registry.register(Arc::new(OAuthTestConnector::new(&format!(
+            "{}/token",
+            oauth_provider.uri()
+        ))));
         let identity: Option<Arc<dyn weft_app::ports::IdentityVerifier>> = idp
             .clone()
             .map(|i| Arc::new(i) as Arc<dyn weft_app::ports::IdentityVerifier>);
@@ -88,14 +106,19 @@ impl TestApp {
                 public_url: "http://weft.test".into(),
                 default_retention_days: 30,
                 default_org_id: OrgId::from_uuid(weft_server::wiring::DEFAULT_ORG),
-                oauth_clients: std::collections::HashMap::from([(
-                    "zoho_crm".to_owned(),
-                    weft_connector_sdk::oauth::OAuthClient {
-                        client_id: "test-client".into(),
-                        client_secret: "test-secret".into(),
-                        redirect_uri: "http://weft.test/oauth/callback".into(),
-                    },
-                )]),
+                oauth_clients: ["zoho_crm", "oauthapp"]
+                    .into_iter()
+                    .map(|key| {
+                        (
+                            key.to_owned(),
+                            weft_connector_sdk::oauth::OAuthClient {
+                                client_id: "test-client".into(),
+                                client_secret: "test-secret".into(),
+                                redirect_uri: "http://weft.test/oauth/callback".into(),
+                            },
+                        )
+                    })
+                    .collect(),
                 app_url: "http://app.weft.test".into(),
                 client_origins: vec![
                     "http://localhost:5173".into(),
@@ -123,6 +146,7 @@ impl TestApp {
             src,
             dst,
             idp,
+            oauth_provider,
             base,
             db,
         }
@@ -146,6 +170,24 @@ impl TestApp {
             builder = builder.header("x-org-id", org);
         }
         self.send(builder, method, path, body).await
+    }
+
+    /// A GET that answers with a redirect: its `Location`.
+    pub async fn redirect(&self, path: &str) -> String {
+        let resp = self
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(resp.status().is_redirection(), "{path} → {}", resp.status());
+        resp.headers()["location"].to_str().unwrap().to_owned()
     }
 
     async fn send(

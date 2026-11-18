@@ -111,6 +111,8 @@ pub async fn oauth_start(
                 return_to: return_to.to_owned(),
                 expires_at: now + Duration::minutes(10),
                 created_by: actor.user,
+                callback_cipher: None,
+                finish_hash: None,
             },
             now,
         )
@@ -133,42 +135,82 @@ fn with_query(url: &str, params: &[(&str, &str)]) -> String {
     format!("{url}{sep}{}", q.join("&"))
 }
 
-/// Handles the provider redirect; returns the URL to send the browser to.
+fn invalid(message: &str) -> AppError {
+    AppError::validation(error_codes::OAUTH_STATE_INVALID, message)
+}
+
+fn callback_aad(hash: &[u8]) -> Vec<u8> {
+    format!("oauth-callback|{}", hex::encode(hash)).into_bytes()
+}
+
+/// Handles the provider redirect (public: no sign-in), and returns the URL to send the browser to.
+/// The provider's answer is only kept here, encrypted, with a one-time finish token sent to this
+/// browser: the sign-in completes in [`oauth_finish`], a signed-in request by the person who
+/// started it. So a link started in one org and opened by someone else connects nobody's account.
 pub async fn oauth_callback(
     deps: &Deps,
     query: &BTreeMap<String, String>,
 ) -> Result<String, AppError> {
-    let state = query
-        .get("state")
-        .ok_or_else(|| AppError::validation(error_codes::OAUTH_STATE_INVALID, "Missing state"))?;
+    let state = query.get("state").ok_or_else(|| invalid("Missing state"))?;
     let hash = Sha256::digest(state.as_bytes()).to_vec();
     let now = deps.clock.now();
-    let st = deps
-        .store
-        .take_oauth_state(&hash, now)
-        .await?
-        .ok_or_else(|| {
-            AppError::validation(
-                error_codes::OAUTH_STATE_INVALID,
-                "This authorization link has expired; start again",
-            )
-        })?;
+    let expired = || invalid("This authorization link has expired; start again");
     if let Some(err) = query.get("error") {
+        let st = deps
+            .store
+            .take_oauth_state(&hash, now)
+            .await?
+            .ok_or_else(expired)?;
         return Ok(with_query(
             &st.return_to,
             &[("status", "error"), ("message", err)],
         ));
     }
-    match finish_callback(deps, &st, &hash, query).await {
-        Ok(id) => Ok(with_query(
-            &st.return_to,
-            &[("status", "connected"), ("connection_id", &id.to_string())],
-        )),
-        Err(e) => Ok(with_query(
-            &st.return_to,
-            &[("status", "error"), ("message", &e.message)],
-        )),
-    }
+    let callback: BTreeMap<&String, &String> =
+        query.iter().filter(|(k, _)| *k != "state").collect();
+    let plain = serde_json::to_vec(&callback).map_err(|e| AppError::internal(e.to_string()))?;
+    let (cipher, _) = deps.secrets.seal(&plain, &callback_aad(&hash))?;
+    let finish = oauth::random_token();
+    let finish_hash = Sha256::digest(finish.as_bytes()).to_vec();
+    let st = deps
+        .store
+        .park_oauth_callback(&hash, &cipher, &finish_hash, now)
+        .await?
+        .ok_or_else(expired)?;
+    Ok(with_query(
+        &st.return_to,
+        &[("status", "finish"), ("state", state), ("finish", &finish)],
+    ))
+}
+
+/// Completes an OAuth sign-in for the person who started it, in the org they started it in, with
+/// the finish token their browser got back from the provider.
+pub async fn oauth_finish(
+    deps: &Deps,
+    actor: &Actor,
+    state: &str,
+    finish: &str,
+) -> Result<ConnectionId, AppError> {
+    actor.require(Permission::ConnectionCreate)?;
+    let hash = Sha256::digest(state.as_bytes()).to_vec();
+    let st = deps
+        .store
+        .take_oauth_state(&hash, deps.clock.now())
+        .await?
+        .ok_or_else(|| invalid("This sign-in has expired; start again"))?;
+    let finish_hash = Sha256::digest(finish.as_bytes()).to_vec();
+    let mine = st.org_id == actor.org
+        && st.created_by == actor.user
+        && st.finish_hash.as_deref() == Some(finish_hash.as_slice());
+    let Some(cipher) = st.callback_cipher.as_ref().filter(|_| mine) else {
+        return Err(invalid(
+            "This sign-in was started by someone else; start again",
+        ));
+    };
+    let plain = deps.secrets.open(cipher, "", &callback_aad(&hash))?;
+    let query: BTreeMap<String, String> =
+        serde_json::from_slice(&plain).map_err(|e| AppError::internal(e.to_string()))?;
+    finish_callback(deps, &st, &hash, &query).await
 }
 
 async fn finish_callback(

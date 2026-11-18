@@ -14,6 +14,7 @@ mod hardening;
 mod harness;
 mod lifecycle;
 mod limits;
+mod oauth;
 mod order_alert;
 mod recipes;
 mod retention;

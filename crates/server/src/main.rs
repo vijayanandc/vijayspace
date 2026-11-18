@@ -47,10 +47,11 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
                 .unwrap_or_else(|_| "info,sqlx=warn".into()),
         )
         .init();
-    let settings = Settings::from_env().map_err(anyhow::Error::msg)?;
+    let command = cli.command.unwrap_or(Command::Serve);
+    let serves_api = matches!(command, Command::Serve | Command::Api);
+    let settings = Settings::from_env(serves_api).map_err(anyhow::Error::msg)?;
     let pool = weft_db::connect(&settings.database_url, 20).await?;
     weft_db::migrate(&pool).await?;
-    let command = cli.command.unwrap_or(Command::Serve);
     if matches!(command, Command::Migrate) {
         tracing::info!("migrations applied");
         return Ok(());

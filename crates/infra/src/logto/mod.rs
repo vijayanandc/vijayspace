@@ -224,6 +224,7 @@ impl LogtoVerifier {
                 email: info.email,
                 email_verified: info.email_verified.unwrap_or(false),
                 name: info.name.or(info.username),
+                has_profile: true,
             },
             expires,
         )))

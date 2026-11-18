@@ -13,6 +13,7 @@ mod limits;
 mod links;
 mod members;
 mod orgs;
+mod quotas;
 mod retention;
 mod rows;
 mod tenancy;

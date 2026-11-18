@@ -1,12 +1,12 @@
 //! MySQL adapter tests (test binary `db`, excluded from `just test-unit`): job queue leases,
-//! poison jobs and dedupe keys of dead jobs.
+//! poison jobs, dedupe keys of dead jobs and daily send quotas.
 //! Needs MySQL (`WEFT_TEST_DATABASE_URL`, default `mysql://weft:weft@127.0.0.1:3306`).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use chrono::{DateTime, Duration, TimeZone as _, Utc};
 use serde_json::json;
 use sqlx::Executor as _;
-use weft_app::ports::{ClaimedJob, JobQueue, NewJob};
+use weft_app::ports::{ClaimedJob, JobQueue, NewJob, TenancyRepo};
 use weft_db::MySqlStore;
 use weft_domain::ids::JobId;
 
@@ -178,6 +178,54 @@ async fn a_due_subscription_is_claimed_by_one_worker_only() {
             .unwrap()
             .len(),
         1
+    );
+    drop_db(t).await;
+}
+
+#[tokio::test]
+async fn a_send_counts_against_every_quota_only_when_all_have_room() {
+    let t = db().await;
+    let day = t0().date_naive();
+    let quotas = |org: &str| vec![(format!("org:{org}"), 2), ("user:u".to_owned(), 3)];
+    assert!(
+        t.store
+            .take_send_quota(&quotas("a"), day, t0())
+            .await
+            .unwrap()
+    );
+    assert!(
+        t.store
+            .take_send_quota(&quotas("a"), day, t0())
+            .await
+            .unwrap()
+    );
+    assert!(
+        !t.store
+            .take_send_quota(&quotas("a"), day, t0())
+            .await
+            .unwrap(),
+        "org a is full"
+    );
+    assert!(
+        t.store
+            .take_send_quota(&quotas("b"), day, t0())
+            .await
+            .unwrap()
+    );
+    assert!(
+        !t.store
+            .take_send_quota(&quotas("c"), day, t0())
+            .await
+            .unwrap(),
+        "the user has sent 3 today"
+    );
+    let tomorrow = day.succ_opt().unwrap();
+    assert!(
+        t.store
+            .take_send_quota(&quotas("c"), tomorrow, t0())
+            .await
+            .unwrap(),
+        "a new day starts from zero; the refused send above counted nowhere"
     );
     drop_db(t).await;
 }

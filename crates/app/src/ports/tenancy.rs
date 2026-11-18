@@ -17,6 +17,9 @@ pub struct VerifiedIdentity {
     pub email: Option<String>,
     pub email_verified: bool,
     pub name: Option<String>,
+    /// Whether the provider sent the person's profile (userinfo, or a JWT with profile claims).
+    /// Without it, the stored email and name are kept; with it, they are replaced, even by none.
+    pub has_profile: bool,
 }
 
 /// Checks an access token with the identity provider.
@@ -95,8 +98,14 @@ pub trait TenancyRepo: Send + Sync {
         id: InvitationId,
         now: DateTime<Utc>,
     ) -> Res<bool>;
-    /// Invitations of an org created or renewed since `since` (each sends an email).
-    async fn count_invitations_since(&self, org: OrgId, since: DateTime<Utc>) -> Res<u32>;
+    /// Counts one send against every `(scope, daily cap)` if all have room; `false` (nothing
+    /// counted) if any is full.
+    async fn take_send_quota(
+        &self,
+        quotas: &[(String, u32)],
+        day: chrono::NaiveDate,
+        now: DateTime<Utc>,
+    ) -> Res<bool>;
     /// Accepts an open invitation for `email`: adds the membership (an existing one keeps its
     /// role) and deletes the invitation, in one transaction. `None` if there is no such invitation.
     async fn accept_invitation(

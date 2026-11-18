@@ -31,6 +31,7 @@ impl FakeIdentityProvider {
                 email: Some(email.to_owned()),
                 email_verified: true,
                 name: Some(name.to_owned()),
+                has_profile: true,
             },
         );
     }

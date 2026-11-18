@@ -56,6 +56,12 @@ impl MySqlStore {
         now: DateTime<Utc>,
     ) -> Res<bool> {
         let mut tx = self.pool.begin().await.map_err(db_err)?;
+        // The org row is the lock: with no members yet there is no member row to lock.
+        sqlx::query("SELECT id FROM orgs WHERE id = ? FOR UPDATE")
+            .bind(org.as_uuid())
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
         let roles: Vec<String> =
             sqlx::query_scalar("SELECT role FROM org_members WHERE org_id = ? FOR UPDATE")
                 .bind(org.as_uuid())

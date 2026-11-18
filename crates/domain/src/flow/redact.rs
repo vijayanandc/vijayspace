@@ -1,21 +1,50 @@
 //! Flow definitions with data removed: test data (steps' `sample_output`), and for viewers also
-//! the action input values, which can hold literal credentials such as an HTTP header.
+//! every value a flow author typed (action inputs, variable values, condition operands, stop
+//! messages, app trigger input), which can hold literal credentials such as an HTTP header.
 
 use serde_json::{Map, Value};
+use weft_expr::Condition;
 
-use super::definition::{FlowDefinition, Step, StepKind};
+use super::definition::{FlowDefinition, Step, StepKind, TriggerNode};
 
-fn clear(steps: &mut [Step], inputs: bool) {
+/// Keeps a condition's shape (operators, nesting) without its operands.
+fn clear_condition(c: &mut Condition) {
+    match c {
+        Condition::All { all: items } | Condition::Any { any: items } => {
+            items.iter_mut().for_each(clear_condition);
+        }
+        Condition::Not { not } => clear_condition(not),
+        Condition::Leaf(leaf) => {
+            leaf.left = Value::Null;
+            leaf.right = Value::Null;
+        }
+    }
+}
+
+fn clear_values(kind: &mut StepKind) {
+    match kind {
+        StepKind::Action(a) => a.input = Value::Object(Map::new()),
+        StepKind::SetVariable(v) => v.assignments.iter_mut().for_each(|a| a.value = Value::Null),
+        StepKind::Stop(s) => s.message = None,
+        StepKind::Decision(d) => d
+            .branches
+            .iter_mut()
+            .for_each(|b| clear_condition(&mut b.condition)),
+        StepKind::Delay(_) => {}
+    }
+}
+
+fn clear(steps: &mut [Step], values: bool) {
     for step in steps {
         step.sample_output = None;
-        if inputs && let StepKind::Action(a) = &mut step.kind {
-            a.input = Value::Object(Map::new());
+        if values {
+            clear_values(&mut step.kind);
         }
         if let StepKind::Decision(d) = &mut step.kind {
             for branch in &mut d.branches {
-                clear(&mut branch.steps, inputs);
+                clear(&mut branch.steps, values);
             }
-            clear(&mut d.otherwise, inputs);
+            clear(&mut d.otherwise, values);
         }
     }
 }
@@ -35,6 +64,9 @@ impl FlowDefinition {
     pub fn for_viewers(&self) -> Self {
         let mut def = self.clone();
         clear(&mut def.steps, true);
+        if let TriggerNode::App(app) = &mut def.trigger {
+            app.input = Value::Object(Map::new());
+        }
         def
     }
 }
@@ -73,6 +105,30 @@ mod tests {
             }
         });
         (samples, inputs)
+    }
+
+    #[test]
+    fn viewers_see_no_typed_values_anywhere() {
+        let def: FlowDefinition = serde_json::from_value(json!({
+            "schema_version": 1,
+            "trigger": {"type": "app", "connector": "memsrc", "trigger": "changed", "input": {"filter": "TRIGGER_SECRET"}},
+            "steps": [
+                {"key": "v", "type": "set_variable", "assignments": [{"name": "token", "value": "VAR_SECRET"}]},
+                {"key": "d", "type": "decision", "branches": [{"key": "b",
+                    "condition": {"any": [{"left": "{{ vars.token }}", "op": "eq", "right": "COND_SECRET"}]}, "steps": []}]},
+                {"key": "s", "type": "stop", "status": "failed", "message": "STOP_SECRET"}
+            ]
+        }))
+        .unwrap();
+        let shown = serde_json::to_string(&def.for_viewers()).unwrap();
+        for secret in ["TRIGGER_SECRET", "VAR_SECRET", "COND_SECRET", "STOP_SECRET"] {
+            assert!(!shown.contains(secret), "{secret} in {shown}");
+        }
+        assert!(shown.contains("\"token\""), "variable names stay");
+        assert!(
+            shown.contains("\"op\":\"eq\""),
+            "the condition's shape stays"
+        );
     }
 
     #[test]
