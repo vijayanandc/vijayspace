@@ -32,6 +32,8 @@ pub struct AppConfig {
     pub sign_in: Option<SignInConfig>,
     /// Who may create organisations (`WEFT_ORG_CREATION`, staff by default).
     pub org_creation: crate::tenancy::staff::OrgCreation,
+    /// Who gets staff alerts by email (`WEFT_ALERT_EMAILS`; empty = logged only).
+    pub alert_emails: Vec<String>,
 }
 
 /// What the web client needs to sign in with Logto (public values only).

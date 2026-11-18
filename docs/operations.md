@@ -108,6 +108,23 @@ time the number of workers doubles.
 - More workers still cut the worst wait from 6.5 s to 3.8 s.
 - Past that point, add API instances for intake.
 
+## Alerts and what to do
+
+Every 5 minutes one server checks the platform, as the Appblocks tenant monitor does. New conditions are logged
+(`WARN`) and emailed to `WEFT_ALERT_EMAILS`. A condition that persists is repeated once an hour. Staff see the
+current list in `GET /api/v1/ops/status` and on the client's Platform page.
+
+| Alert | What to do |
+|---|---|
+| No worker is running (critical) | Start `weft worker` (or check why it exits: its log, the database, `WEFT_DB_POOL_SIZE`). |
+| Jobs in a queue have waited N min | Start another `weft worker`. If workers are idle, look for errors in their log (database, lease timeouts). |
+| N jobs stopped retrying | Their worker kept failing on them. Check the server logs around that time; the affected runs failed and can be re-run. |
+| N runs failed in an org | Open History in that org, filter by Failed. An app outage clears on its own (retries); a mapping error needs the flow fixed. |
+| A connection needs signing in again | Reconnect it under Connections (the app revoked or expired its token). Its runs fail until then. |
+
+A step that fails with `app.outcome_unknown` timed out on a change that is not safe to repeat. Check the app: if the
+change is missing, use **Retry from failed step**; if it is there, re-run is not needed.
+
 ## Run history and retention
 
 History is kept for at most 30 days, the platform cap. Each org can choose fewer (1–30); `WEFT_RETENTION_DAYS`

@@ -3,7 +3,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
-use weft_app::ports::{Instance, OpsRepo, QueueDepth, QueueStats, Res};
+use weft_app::ports::{
+    AlertFacts, Instance, OpsRepo, OrgFailures, QueueDepth, QueueStats, Res, StaleConnection,
+};
 
 use crate::{MySqlStore, codec::db_err};
 
@@ -56,6 +58,57 @@ impl OpsRepo for MySqlStore {
             .await
             .map_err(db_err)?;
         Ok(())
+    }
+
+    async fn alert_facts(&self, since: DateTime<Utc>) -> Res<AlertFacts> {
+        let new_dead_jobs: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM jobs WHERE status = 'dead' AND updated_at >= ?",
+        )
+        .bind(since)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        // `day` prunes to the window's partitions (a run's day is when it was queued: at most a day before).
+        let failed: Vec<(Uuid, String, i64)> = sqlx::query_as(
+            "SELECT e.org_id, o.name, COUNT(*) FROM executions e JOIN orgs o ON o.id = e.org_id \
+             WHERE e.day >= ? AND e.status = 'failed' AND e.finished_at >= ? \
+             GROUP BY e.org_id, o.name ORDER BY COUNT(*) DESC LIMIT 50",
+        )
+        .bind((since - chrono::Duration::days(1)).date_naive())
+        .bind(since)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        let stale: Vec<(Uuid, String, Uuid, String, String)> = sqlx::query_as(
+            "SELECT c.org_id, o.name, c.id, c.name, c.connector_key FROM connections c JOIN orgs o ON o.id = c.org_id \
+             WHERE c.status = 'needs_reauth' AND c.deleted_at IS NULL ORDER BY c.updated_at LIMIT 50",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(AlertFacts {
+            new_dead_jobs: u64::try_from(new_dead_jobs).unwrap_or(0),
+            failed_runs: failed
+                .into_iter()
+                .map(|(org_id, org_name, n)| OrgFailures {
+                    org_id,
+                    org_name,
+                    failed: u64::try_from(n).unwrap_or(0),
+                })
+                .collect(),
+            needs_reauth: stale
+                .into_iter()
+                .map(
+                    |(org_id, org_name, connection_id, name, connector)| StaleConnection {
+                        org_id,
+                        org_name,
+                        connection_id,
+                        name,
+                        connector,
+                    },
+                )
+                .collect(),
+        })
     }
 
     async fn queue_stats(&self, now: DateTime<Utc>) -> Res<QueueStats> {

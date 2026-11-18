@@ -129,7 +129,7 @@ fn map_error(err: &reqwest::Error) -> ConnectorError {
         source = e.source();
     }
     if err.is_timeout() {
-        ConnectorError::transient("the app did not respond in time")
+        ConnectorError::timeout()
     } else if err.is_redirect() {
         ConnectorError::invalid(format!("redirect refused: {err}"))
     } else {

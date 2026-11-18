@@ -140,6 +140,21 @@ pub fn action_ctx_for(
     }
 }
 
+/// A timeout of an action that is not safe to repeat (e.g. a create) is not retried: the app may have made the
+/// change. The step fails with `app.outcome_unknown`, and a person checks the app before retrying it.
+fn unless_unsafe_to_repeat(err: ConnectorError, repeatable: bool) -> ConnectorError {
+    if repeatable || !err.is_timeout() {
+        return err;
+    }
+    ConnectorError::Coded {
+        code: error_codes::APP_OUTCOME_UNKNOWN,
+        message: "The app did not answer in time, so it may or may not have made this change. Check the app, \
+                  then retry the step if the change is missing."
+            .to_owned(),
+        details: serde_json::json!({"timeout": true}),
+    }
+}
+
 /// Idempotency key for one step of one execution (stable across retries).
 #[must_use]
 pub fn idempotency_key(execution: &str, step: &str) -> String {
@@ -180,10 +195,12 @@ pub async fn call_action(
     };
     let ctx = action_ctx_for(deps, org, connection, idem, class);
     let limit = outer_timeout(&input);
-    let output = match tokio::time::timeout(limit, connector.execute(&ctx, action, input)).await {
-        Ok(result) => result?,
-        Err(_) => return Err(ConnectorError::transient("the action timed out")),
+    let repeatable = connector.is_idempotent(action, &input);
+    let result = match tokio::time::timeout(limit, connector.execute(&ctx, action, input)).await {
+        Ok(result) => result,
+        Err(_) => Err(ConnectorError::timeout()),
     };
+    let output = result.map_err(|e| unless_unsafe_to_repeat(e, repeatable))?;
     if output.to_string().len() > MAX_OUTPUT_BYTES {
         return Err(ConnectorError::InvalidInput {
             field: None,
@@ -199,6 +216,24 @@ pub async fn call_action(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_timeout_is_retried_only_when_the_action_is_safe_to_repeat() {
+        let create = unless_unsafe_to_repeat(ConnectorError::timeout(), false);
+        assert_eq!(create.code(), error_codes::APP_OUTCOME_UNKNOWN);
+        assert!(
+            !create.retryable(),
+            "a create that may have happened is not repeated"
+        );
+        let read = unless_unsafe_to_repeat(ConnectorError::timeout(), true);
+        assert!(read.retryable() && read.is_timeout());
+        let refused = unless_unsafe_to_repeat(ConnectorError::transient("HTTP 503"), false);
+        assert!(
+            refused.retryable(),
+            "an answer (even an error) means nothing ambiguous happened"
+        );
+        assert!(!ConnectorError::transient("network error").is_timeout());
+    }
 
     #[test]
     fn the_runner_waits_as_long_as_the_step_asked() {

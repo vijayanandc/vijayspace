@@ -83,6 +83,7 @@ pub fn build(settings: &Settings, store: MySqlStore) -> anyhow::Result<Deps> {
             client_origins: settings.client_origins.clone(),
             owner_emails: settings.owner_emails.clone(),
             org_creation: settings.org_creation,
+            alert_emails: settings.alert_emails.clone(),
             sign_in: settings.sign_in.as_ref().map(|s| SignInConfig {
                 endpoint: s.endpoint.clone(),
                 app_id: s.client_app_id.clone(),

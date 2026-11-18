@@ -54,6 +54,16 @@ impl Connector for HttpConnector {
         &self.manifest
     }
 
+    /// GET, HEAD, PUT and DELETE are idempotent by HTTP's own rules; POST and PATCH are not.
+    fn is_idempotent(&self, _action: &str, input: &Value) -> bool {
+        let method = input
+            .get("method")
+            .and_then(Value::as_str)
+            .unwrap_or("GET")
+            .to_ascii_uppercase();
+        matches!(method.as_str(), "GET" | "HEAD" | "PUT" | "DELETE")
+    }
+
     async fn execute(
         &self,
         ctx: &ActionCtx,
@@ -105,7 +115,16 @@ impl Connector for HttpConnector {
         }
         let resp = ctx.http.send(req).await?;
         if opt_bool(&input, "fail_on_error_status").unwrap_or(true) && !resp.is_success() {
-            return Err(ConnectorError::from_http(&resp));
+            // No Weft connection is involved: a 401 means this request's own credentials are wrong (a step
+            // setting to fix), not a connection to sign in to again.
+            let err = ConnectorError::from_http(&resp);
+            return Err(if let ConnectorError::AuthExpired { message } = err {
+                ConnectorError::invalid(format!(
+                    "{message} (the app refused this request's credentials: check its headers)"
+                ))
+            } else {
+                err
+            });
         }
         let headers: Map<String, Value> = resp
             .headers

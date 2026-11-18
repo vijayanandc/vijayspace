@@ -42,6 +42,7 @@ The run appears under **History** with each step's input and output.
 | `WEFT_LOGTO_SCOPES` | `openid,profile,email` | Scopes an opaque token must carry (the client also asks for `offline_access`) |
 | `WEFT_LOGTO_CACHE_SECS` | `300` | How long a checked token is trusted before Logto is asked again (never past its expiry) |
 | `WEFT_OWNER_EMAILS` | none | Verified emails that become owners of the default org when they sign in (comma-separated). Owners and admins of the default org are the operator's **staff**. |
+| `WEFT_ALERT_EMAILS` | none | Staff who get alert emails (comma-separated): a worker missing, queue lag, dead jobs, failing orgs, connections to reconnect. Without it, alerts are only logged. |
 | `WEFT_ORG_CREATION` | `staff` | Who may create organisations: `staff`, or `anyone` signed in. The Logto tenant is shared with other apps, so keep `staff`: staff set up each customer's org and invite its people. |
 | `WEFT_APP_URL` | `http://127.0.0.1:3000` | Where people open Weft (links in invitation emails) |
 | `WEFT_MASTER_KEYS`, `WEFT_ACTIVE_KEY_ID` | development key on a loopback `WEFT_BIND` only | `id:base64key,…` for encrypting connection secrets. Required otherwise: the server does not start without them. |

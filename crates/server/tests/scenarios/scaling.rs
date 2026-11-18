@@ -1,5 +1,5 @@
-//! Several servers on one database: heartbeats and the staff-only status (servers and queue lag), and an
-//! OAuth refresh that another server is already doing (it is awaited, not repeated).
+//! Several servers on one database: heartbeats and the staff-only status (servers, queue lag, alerts), an OAuth
+//! refresh that another server is already doing (it is awaited, not repeated), and staff alert emails.
 
 use chrono::Duration;
 use serde_json::json;
@@ -172,5 +172,57 @@ async fn a_token_refresh_running_on_another_server_is_awaited_and_its_token_used
         .unwrap();
     assert_eq!(ours.await.unwrap().unwrap(), "theirs");
     accounts.verify().await;
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn staff_are_emailed_each_new_condition_once_an_hour() {
+    let app = TestApp::spawn().await;
+    let cxn = app.connection("memsrc", "Source CRM").await;
+    let now = app.clock.now();
+    app.deps
+        .store
+        .set_connection_status(
+            cxn.parse().unwrap(),
+            weft_domain::model::ConnectionStatus::NeedsReauth,
+            now,
+        )
+        .await
+        .unwrap();
+    // No worker has heartbeated: that is critical. And the connection needs signing in again.
+    assert_eq!(weft_app::alerts::check(&app.deps).await.unwrap(), 2);
+    let sent = app.mailer.sent.lock().unwrap().clone();
+    assert_eq!(sent.len(), 1, "one email per check");
+    assert_eq!(sent[0].to, ["ops@weft.test"]);
+    assert!(
+        sent[0]
+            .subject
+            .starts_with("[Weft] 2 alerts: No worker is running"),
+        "{}",
+        sent[0].subject
+    );
+    assert!(
+        sent[0].body.contains("Connection Source CRM (memsrc)"),
+        "{}",
+        sent[0].body
+    );
+    // Within the hour: nothing new to send. A worker coming back clears that condition.
+    instances::heartbeat(&app.deps, &server(&app, "worker"))
+        .await
+        .unwrap();
+    assert_eq!(weft_app::alerts::check(&app.deps).await.unwrap(), 0);
+    let status = weft_app::alerts::current(&app.deps).await.unwrap();
+    assert_eq!(
+        status.len(),
+        1,
+        "only the connection is still a problem: {status:?}"
+    );
+    // An hour later the unresolved condition is reported again.
+    app.clock.advance(Duration::minutes(61));
+    instances::heartbeat(&app.deps, &server(&app, "worker"))
+        .await
+        .unwrap();
+    assert_eq!(weft_app::alerts::check(&app.deps).await.unwrap(), 1);
+    assert_eq!(app.mailer.sent.lock().unwrap().clone().len(), 2);
     app.cleanup().await;
 }

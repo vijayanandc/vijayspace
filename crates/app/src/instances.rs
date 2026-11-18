@@ -118,6 +118,8 @@ pub struct OpsStatus {
     pub queues: Vec<QueueLag>,
     pub running_jobs: u64,
     pub dead_jobs: u64,
+    /// Conditions staff should look at now (see `alerts`).
+    pub alerts: Vec<crate::alerts::Alert>,
 }
 
 /// Live servers and queue lag. Staff only: owners and admins of the default (operator's) org.
@@ -146,6 +148,7 @@ pub async fn status(deps: &Deps, actor: &Actor) -> Result<OpsStatus, AppError> {
             .collect(),
         running_jobs: running,
         dead_jobs: dead,
+        alerts: crate::alerts::current(deps).await?,
     })
 }
 

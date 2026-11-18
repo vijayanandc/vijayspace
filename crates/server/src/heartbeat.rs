@@ -1,5 +1,7 @@
 //! This process's heartbeat into `instances` (every 15 s until shutdown, then it leaves the list), so servers
-//! sharing one database know how many of them are live and staff can see them.
+//! sharing one database know how many of them are live and staff can see them; and the staff alert check
+//! (every 5 minutes, one server at a time), which runs in every kind of process so an API server notices when
+//! no worker is left.
 
 use std::time::Duration;
 
@@ -37,6 +39,25 @@ pub fn spawn(deps: Deps, me: Me, shutdown: CancellationToken) -> JoinHandle<()> 
             }
         }
         instances::leave(&deps, &me).await;
+    })
+}
+
+/// Checks for staff alerts every 5 minutes until `shutdown`.
+pub fn spawn_alerts(deps: Deps, shutdown: CancellationToken) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut every = tokio::time::interval(Duration::from_secs(weft_app::alerts::CHECK_SECS));
+        // The first tick is immediate: wait one period so a starting cluster is not reported as down.
+        every.tick().await;
+        loop {
+            tokio::select! {
+                () = shutdown.cancelled() => break,
+                _ = every.tick() => {
+                    if let Err(e) = weft_app::alerts::check(&deps).await {
+                        tracing::warn!(error = %e, "alert check");
+                    }
+                }
+            }
+        }
     })
 }
 

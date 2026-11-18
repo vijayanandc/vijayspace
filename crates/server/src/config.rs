@@ -40,6 +40,8 @@ pub struct Settings {
     pub connector_options: weft_connectors::ConnectorOptions,
     /// `WEFT_ORG_CREATION`: `staff` (default) or `anyone`.
     pub org_creation: weft_app::tenancy::staff::OrgCreation,
+    /// `WEFT_ALERT_EMAILS`: staff who get alert emails (comma-separated).
+    pub alert_emails: Vec<String>,
 }
 
 /// `WEFT_RETENTION_DAYS`: 1..=30 (the platform cap), default 30.
@@ -184,6 +186,14 @@ impl Settings {
             connector_options: weft_connectors::ConnectorOptions {
                 zoho_accounts_url: zoho_accounts_url(var("WEFT_ZOHO_ACCOUNTS_URL"))?,
             },
+            alert_emails: var("WEFT_ALERT_EMAILS")
+                .map(|v| {
+                    v.split(',')
+                        .map(|e| e.trim().to_owned())
+                        .filter(|e| !e.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default(),
             org_creation: match var("WEFT_ORG_CREATION").as_deref() {
                 None | Some("staff") => weft_app::tenancy::staff::OrgCreation::Staff,
                 Some("anyone") => weft_app::tenancy::staff::OrgCreation::Anyone,

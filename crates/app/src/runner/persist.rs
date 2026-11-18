@@ -183,6 +183,7 @@ pub(super) fn leak(code: &str) -> &'static str {
         c if c == error_codes::SCRIPT_ERROR => error_codes::SCRIPT_ERROR,
         c if c == error_codes::CONNECTION_THROTTLED => error_codes::CONNECTION_THROTTLED,
         c if c == error_codes::SCRIPT_LIMIT_EXCEEDED => error_codes::SCRIPT_LIMIT_EXCEEDED,
+        c if c == error_codes::APP_OUTCOME_UNKNOWN => error_codes::APP_OUTCOME_UNKNOWN,
         _ => error_codes::APP_ERROR,
     }
 }

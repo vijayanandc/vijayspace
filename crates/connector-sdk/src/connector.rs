@@ -89,6 +89,12 @@ pub struct EventBatch {
 pub trait Connector: Send + Sync {
     fn manifest(&self) -> &ConnectorManifest;
 
+    /// Whether running `action` with `input` twice has the same effect as once, so it may be repeated after
+    /// a timeout. Defaults to the action's manifest flag (`ActionSpec::idempotent`).
+    fn is_idempotent(&self, action: &str, _input: &Value) -> bool {
+        self.manifest().action(action).is_some_and(|a| a.idempotent)
+    }
+
     /// Runs one action with rendered input; returns the step output.
     async fn execute(
         &self,

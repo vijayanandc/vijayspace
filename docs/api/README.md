@@ -16,7 +16,7 @@ JSON is snake_case. Timestamps are RFC 3339 UTC. IDs are prefixed strings (`flw_
   "detail": "Fix 2 issues before publishing.",
   "issues": [{ "severity": "error", "path": "/steps/0/input/url", "code": "field.required", "message": "`url` is required" }] }
 ```
-Clients switch on `code` (see `crates/domain/src/error_codes.rs`). Errors the framework raises before a handler runs (malformed JSON, a bad query value, an unknown route or method, a body over 6 MB) are problem+json too, with `code` `http.<status>`. **429** means try later (`invitation.rate_limited`; `webhook.rate_limited` with `Retry-After`). Every response carries `X-Request-ID` (sent back if the client sent one); a request that takes over 2 minutes ends with **503**.
+Clients switch on `code` (see `crates/domain/src/error_codes.rs`). A step that fails with `app.outcome_unknown` timed out on a change that is not safe to repeat. It is not retried automatically: check the app, then retry. Errors the framework raises before a handler runs (malformed JSON, a bad query value, an unknown route or method, a body over 6 MB) are problem+json too, with `code` `http.<status>`. **429** means try later (`invitation.rate_limited`; `webhook.rate_limited` with `Retry-After`). Every response carries `X-Request-ID` (sent back if the client sent one); a request that takes over 2 minutes ends with **503**.
 
 ---
 
@@ -292,7 +292,7 @@ Roles: `owner | admin | member | viewer`. The matrix (doc 08 §2): owners do eve
 | PATCH | `/api/v1/org` with `{name?, timezone?, retention_days?: 1..30 \| null}` | the org (as above); owners only (403 otherwise). Finished runs older than this are deleted (every 15 minutes) with their step history. Run history is kept 30 days at most: runs queued more than 30 days ago are removed with their day, and one still unfinished then ends as failed (`execution.expired`). `null` = the server default (`WEFT_RETENTION_DAYS`, 30). |
 | GET | `/api/v1/usage` | `{period: "2026-11", tasks_used, executions}` |
 | GET | `/healthz`, `/readyz` | `ok` |
-| GET | `/api/v1/ops/status` | Staff only (owners and admins acting in the default org; others 403): `{now, instances: [{id, kind: "api"\|"worker"\|"all", host, version, started_at, seen_at}], queues: [{queue, ready, lag_seconds}], running_jobs, dead_jobs}`. `lag_seconds` is how long the oldest due job has waited: when it keeps growing, start another `weft worker`. |
+| GET | `/api/v1/ops/status` | Staff only (owners and admins acting in the default org; others 403): `{now, instances: [{id, kind: "api"\|"worker"\|"all", host, version, started_at, seen_at}], queues: [{queue, ready, lag_seconds}], running_jobs, dead_jobs, alerts: [{key, severity: "critical"\|"warning", title, detail}]}`. `lag_seconds` is how long the oldest due job has waited: when it keeps growing, start another `weft worker`. `alerts` lists the conditions now: no worker, a queue lagging over 5 min, jobs that died in the last hour, orgs with 10 or more failed runs in the last hour, and connections that need signing in again. |
 
 ## Public ingress
 | Method | Path | Response |

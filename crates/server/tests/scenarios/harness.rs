@@ -134,6 +134,7 @@ impl TestApp {
                 ],
                 owner_emails: vec!["owner@weft.test".into()],
                 org_creation,
+                alert_emails: vec!["ops@weft.test".into()],
                 sign_in: idp.as_ref().map(|_| weft_app::SignInConfig {
                     endpoint: "https://tenant.logto.test".into(),
                     app_id: "web-app".into(),

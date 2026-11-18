@@ -54,7 +54,25 @@ pub enum ConnectorError {
     },
 }
 
+/// The message of a timeout (see [`ConnectorError::timeout`]).
+const TIMEOUT_MESSAGE: &str = "the app did not respond in time";
+
 impl ConnectorError {
+    /// The app did not answer in time. Retryable, but the request may have been applied: the runner does not
+    /// repeat a non-idempotent action after a timeout.
+    #[must_use]
+    pub fn timeout() -> Self {
+        Self::Transient {
+            message: TIMEOUT_MESSAGE.to_owned(),
+        }
+    }
+
+    /// Whether this is a timeout (made by [`ConnectorError::timeout`]).
+    #[must_use]
+    pub fn is_timeout(&self) -> bool {
+        matches!(self, Self::Transient { message } if message == TIMEOUT_MESSAGE)
+    }
+
     pub fn transient(message: impl Into<String>) -> Self {
         Self::Transient {
             message: message.into(),

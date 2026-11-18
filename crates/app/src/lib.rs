@@ -3,6 +3,7 @@
 //! One use case per file under its feature folder. Use cases take `&Deps` and an org ID,
 //! scope every read by org, and never call `tokio::spawn`.
 
+pub mod alerts;
 pub mod connections;
 pub mod deps;
 pub mod error;

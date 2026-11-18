@@ -127,6 +127,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         concurrency: settings.worker_concurrency,
     };
     let beats = heartbeat::spawn(deps.clone(), me, shutdown.clone());
+    let alerts = heartbeat::spawn_alerts(deps.clone(), shutdown.clone());
     let worker = matches!(command, Command::Serve | Command::Worker).then(|| {
         tokio::spawn(weft_worker::run(
             deps.clone(),
@@ -157,5 +158,6 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         let _ = w.await;
     }
     let _ = beats.await;
+    let _ = alerts.await;
     Ok(())
 }

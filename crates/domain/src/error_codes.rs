@@ -54,6 +54,8 @@ pub const APP_RATE_LIMITED: &str = "app.rate_limited";
 pub const APP_INVALID_INPUT: &str = "app.invalid_input";
 pub const APP_NOT_FOUND: &str = "app.not_found";
 pub const APP_ERROR: &str = "app.error";
+/// A change the app may or may not have made: it did not answer in time and the step is not safe to repeat.
+pub const APP_OUTCOME_UNKNOWN: &str = "app.outcome_unknown";
 pub const STEP_TIMEOUT: &str = "step.timeout";
 pub const STEP_OUTPUT_TOO_LARGE: &str = "step.output_too_large";
 pub const MAPPING_ERROR: &str = "mapping.error";
