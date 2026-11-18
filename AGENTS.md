@@ -2,7 +2,7 @@
 <!-- CLAUDE.md is a symlink to this file. Changes to this client are made by AI agents: keep the rules exact. -->
 
 ## What this is
-The React web client for Weft, a Zoho Flow–style integration platform. This is the `client` branch; the Rust server is on the `backend` branch.
+The React web client for Weft, a Zoho Flow–style integration platform. This is the `client` branch; the Rust server is in [`vijayanandc/appblocks_flow`](https://github.com/vijayanandc/appblocks_flow) (`main`).
 - **API contract:** the backend's `docs/api/README.md`, mirrored by `src/api/types.ts` and `src/api/definition.ts`.
 - **Plan:** the backend's `docs/plan/` (doc 10 covers client UX intent; doc 13 is the current MVP).
 

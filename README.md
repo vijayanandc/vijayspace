@@ -1,6 +1,6 @@
 # Weft web client
 
-The browser UI for Weft (a Zoho Flow–style integration platform): flows list, a drag-and-drop flow builder, connections, run history and prebuilt recipes. The server lives on the `backend` branch of this repository.
+The browser UI for Weft (a Zoho Flow–style integration platform): flows list, a drag-and-drop flow builder, connections, run history and prebuilt recipes. The server lives in [`vijayanandc/appblocks_flow`](https://github.com/vijayanandc/appblocks_flow).
 
 ## Run with the backend
 ```sh
