@@ -40,7 +40,9 @@ fn not_found() -> AppError {
 
 fn checked_email(email: &str) -> Result<String, AppError> {
     let email = normalize_email(email).unwrap_or_default();
+    // ASCII only: an international domain is entered in its xn-- form, so no two addresses look alike.
     let valid = email.len() <= 320
+        && email.is_ascii()
         && !email.chars().any(char::is_whitespace)
         && email.split_once('@').is_some_and(|(local, domain)| {
             !local.is_empty() && domain.contains('.') && !domain.contains('@')
@@ -50,7 +52,7 @@ fn checked_email(email: &str) -> Result<String, AppError> {
     } else {
         Err(AppError::validation(
             error_codes::VALIDATION_FAILED,
-            "Enter a valid email address",
+            "Enter a valid email address (international domains in their xn-- form)",
         ))
     }
 }
@@ -270,7 +272,8 @@ pub async fn decline(deps: &Deps, user: Option<&User>, id: InvitationId) -> Resu
         .invitations_for_email(email, deps.clock.now())
         .await?
         .into_iter()
-        .find(|i| i.id == id)
+        // Exact match as well as the database's (binary) comparison.
+        .find(|i| i.id == id && i.email == email)
         .ok_or_else(not_found)?;
     deps.store
         .delete_invitation(invitation.org_id, invitation.id)

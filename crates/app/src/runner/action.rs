@@ -35,10 +35,14 @@ pub fn step_error(err: &ConnectorError) -> StepError {
 }
 
 /// Loads a connection handle for `connection_id` (scoped to `org`).
+///
+/// `app`: the app the caller will call with it. A connection of another app is refused, so one app's credentials
+/// are never sent to another app's API (`None`: the connection's own app, whatever it is).
 pub async fn load_connection(
     deps: &Deps,
     org: OrgId,
     connection_id: Option<&str>,
+    app: Option<&str>,
 ) -> Result<Option<Arc<dyn ConnectionHandle>>, ConnectorError> {
     let Some(raw) = connection_id.filter(|s| !s.is_empty()) else {
         return Ok(None);
@@ -54,6 +58,15 @@ pub async fn load_connection(
         .ok_or_else(|| {
             ConnectorError::invalid_field("connection_id", "The connection no longer exists")
         })?;
+    if let Some(app) = app.filter(|a| *a != stored.connection.connector) {
+        return Err(ConnectorError::invalid_field(
+            "connection_id",
+            format!(
+                "This connection is for {}, not {app}: choose a connection of this app",
+                stored.connection.connector
+            ),
+        ));
+    }
     Ok(Some(Arc::new(DbConnectionHandle::new(
         deps.clone(),
         stored,
@@ -98,7 +111,13 @@ pub fn action_ctx_for(
         http,
         connection,
         idempotency_key,
-        mailer: deps.mailer.clone(),
+        mailer: deps.mailer.clone().map(|inner| {
+            Arc::new(crate::limits::QuotaMailer {
+                deps: deps.clone(),
+                org,
+                inner,
+            }) as Arc<dyn weft_connector_sdk::Mailer>
+        }),
         scripts: deps.scripts.clone(),
         timeout: ACTION_TIMEOUT,
         now: deps.clock.now(),
@@ -132,7 +151,7 @@ pub async fn call_action(
         .cloned()
         .ok_or_else(|| ConnectorError::invalid(format!("Unknown app `{connector_key}`")))?;
     let connection = if connector.manifest().requires_connection() {
-        let handle = load_connection(deps, org, connection_id).await?;
+        let handle = load_connection(deps, org, connection_id, Some(connector_key)).await?;
         if handle.is_none() {
             return Err(ConnectorError::invalid_field(
                 "connection_id",

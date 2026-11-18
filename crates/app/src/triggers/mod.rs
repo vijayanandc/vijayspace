@@ -1,6 +1,7 @@
 //! Triggers at runtime: registration sync, webhook and app-event ingress, schedules, polling,
 //! and provider subscriptions.
 
+mod inbound;
 mod ingress;
 mod items;
 mod poll;

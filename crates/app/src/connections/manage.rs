@@ -314,8 +314,9 @@ async fn ctx_for(
     deps: &Deps,
     org: OrgId,
     connection_id: Option<&str>,
+    app: &str,
 ) -> Result<weft_connector_sdk::ActionCtx, AppError> {
-    let handle = crate::runner::action::load_connection(deps, org, connection_id)
+    let handle = crate::runner::action::load_connection(deps, org, connection_id, Some(app))
         .await
         .map_err(|e| AppError::validation(error_codes::CONNECTION_NOT_FOUND, e.to_string()))?;
     Ok(action_ctx(deps, org, handle, String::new()))
@@ -342,7 +343,7 @@ pub async fn load_options(
             .map_err(|e| bad_gateway(&e));
     }
     let c = connector(deps, connector_key)?;
-    let ctx = ctx_for(deps, org, connection_id).await?;
+    let ctx = ctx_for(deps, org, connection_id, connector_key).await?;
     c.options(&ctx, source, input)
         .await
         .map_err(|e| bad_gateway(&e))
@@ -365,7 +366,7 @@ pub async fn load_fields(
             .map_err(|e| bad_gateway(&e));
     }
     let c = connector(deps, connector_key)?;
-    let ctx = ctx_for(deps, org, connection_id).await?;
+    let ctx = ctx_for(deps, org, connection_id, connector_key).await?;
     c.fields(&ctx, source, input)
         .await
         .map_err(|e| bad_gateway(&e))

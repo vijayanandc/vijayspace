@@ -39,7 +39,7 @@ pub(crate) async fn open(
     id: ConnectionId,
     class: crate::limits::RequestClass,
 ) -> Result<(Arc<dyn Connector>, ActionCtx), ConnectorError> {
-    let handle = load_connection(deps, org, Some(&id.to_string()))
+    let handle = load_connection(deps, org, Some(&id.to_string()), None)
         .await?
         .ok_or_else(|| ConnectorError::invalid("connection not found"))?;
     let stored = deps

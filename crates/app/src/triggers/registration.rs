@@ -124,8 +124,13 @@ async fn unsubscribe(deps: &Deps, reg: &TriggerRegistration, sub: &Subscription)
     let Some(connector) = deps.connectors.get(&sub.connector).cloned() else {
         return;
     };
-    let Ok(connection) =
-        load_connection(deps, reg.org_id, Some(&sub.connection_id.to_string())).await
+    let Ok(connection) = load_connection(
+        deps,
+        reg.org_id,
+        Some(&sub.connection_id.to_string()),
+        Some(&sub.connector),
+    )
+    .await
     else {
         return;
     };
@@ -166,10 +171,15 @@ pub(crate) async fn subscribe(
         return Ok(());
     };
     let now = deps.clock.now();
-    let connection = load_connection(deps, reg.org_id, Some(&connection_id.to_string()))
-        .await
-        .ok()
-        .flatten();
+    let connection = load_connection(
+        deps,
+        reg.org_id,
+        Some(&connection_id.to_string()),
+        Some(&app.connector),
+    )
+    .await
+    .ok()
+    .flatten();
     let ctx = action_ctx(deps, reg.org_id, connection, String::new());
     let channel_id = u64::from_be_bytes(
         deps.ids.uuid().as_bytes()[8..16]

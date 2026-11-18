@@ -200,6 +200,41 @@ impl ConnectionRepo for MySqlStore {
         Ok(row.filter(|r| r.expires_at > now).map(StateRow::into_state))
     }
 
+    async fn take_parked_oauth_state(
+        &self,
+        state_hash: &[u8],
+        org: OrgId,
+        user: Option<UserId>,
+        finish_hash: &[u8],
+        now: DateTime<Utc>,
+    ) -> Res<Option<OAuthState>> {
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        let row: Option<StateRow> = sqlx::query_as(
+            "SELECT state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_by, callback_cipher, finish_hash FROM oauth_states WHERE state_hash = ? FOR UPDATE",
+        )
+        .bind(state_hash)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        let Some(state) = row.filter(|r| r.expires_at > now).map(StateRow::into_state) else {
+            return Ok(None);
+        };
+        let owner = state.org_id == org
+            && state.created_by == user
+            && state.callback_cipher.is_some()
+            && state.finish_hash.as_deref() == Some(finish_hash);
+        if !owner {
+            return Ok(None);
+        }
+        sqlx::query("DELETE FROM oauth_states WHERE state_hash = ?")
+            .bind(state_hash)
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
+        tx.commit().await.map_err(db_err)?;
+        Ok(Some(state))
+    }
+
     async fn park_oauth_callback(
         &self,
         state_hash: &[u8],

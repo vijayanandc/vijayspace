@@ -170,6 +170,8 @@ impl ScriptRunner for ProcessScriptRunner {
         .map_err(|e| ConnectorError::permanent(format!("encoding the script request: {e}")))?;
         let mut child = Command::new(&self.exe)
             .arg(CHILD_SUBCOMMAND)
+            // Nothing of the server's environment (master keys, database URL, app secrets) reaches user code.
+            .env_clear()
             .env("WEFT_SCRIPT_MEMORY_MB", self.memory_mb.to_string())
             // One malloc arena (a second thread would reserve another 64 MB of address space),
             // and no backtrace capture for the panics the sandbox catches.

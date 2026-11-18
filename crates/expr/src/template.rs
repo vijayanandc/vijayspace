@@ -2,7 +2,11 @@
 
 use serde_json::{Map, Value};
 
-use crate::{env::env, error::ExprError};
+use crate::{
+    env::env,
+    error::ExprError,
+    limits::{CappedWriter, MAX_RENDERED_BYTES, check_source},
+};
 
 /// Returns the inner expression when `s` is exactly one `{{ … }}` block.
 ///
@@ -29,6 +33,7 @@ pub fn eval_expression(expr: &str, scope: &Value) -> Result<Value, ExprError> {
 }
 
 fn eval_with(expr: &str, ctx: &minijinja::Value) -> Result<Value, ExprError> {
+    check_source(expr).map_err(|m| ExprError::refused(expr, m))?;
     let compiled = env()
         .compile_expression(expr)
         .map_err(|e| ExprError::syntax(expr, &e))?;
@@ -54,9 +59,21 @@ fn render_text_with(template: &str, ctx: &minijinja::Value) -> Result<String, Ex
     if !has_template(template) {
         return Ok(template.to_owned());
     }
-    env()
-        .render_str(template, ctx.clone())
-        .map_err(|e| ExprError::eval(template, &e))
+    check_source(template).map_err(|m| ExprError::refused(template, m))?;
+    let compiled = env()
+        .template_from_str(template)
+        .map_err(|e| ExprError::syntax(template, &e))?;
+    let mut out = CappedWriter::default();
+    let rendered = compiled.render_captured_to(ctx.clone(), &mut out);
+    if out.overflowed {
+        let limit = format!(
+            "the rendered text is larger than {} MB",
+            MAX_RENDERED_BYTES / (1024 * 1024)
+        );
+        return Err(ExprError::refused(template, limit));
+    }
+    rendered.map_err(|e| ExprError::eval(template, &e))?;
+    String::from_utf8(out.buf).map_err(|e| ExprError::eval(template, &e))
 }
 
 /// Renders every string leaf of `input` against `scope` (recursively through arrays and objects).
@@ -89,6 +106,9 @@ fn render_with(input: &Value, ctx: &minijinja::Value) -> Result<Value, ExprError
 
 /// Checks that a template string compiles, without evaluating it.
 pub fn check_template(s: &str) -> Result<(), ExprError> {
+    if has_template(s) {
+        check_source(s).map_err(|m| ExprError::refused(s, m))?;
+    }
     if let Some(expr) = single_expression(s) {
         return env()
             .compile_expression(expr)
@@ -254,5 +274,24 @@ mod props {
             let scope = json!({"trigger": {"v": s.clone()}});
             prop_assert_eq!(render_value(&json!("{{ trigger.v }}"), &scope).unwrap(), json!(s));
         }
+    }
+
+    #[test]
+    fn user_templates_stay_within_the_limits() {
+        let scope = json!({});
+        let flood = "{% for i in range(60) %}{{ 'x' * 1000000 }}{% endfor %}";
+        let err = render_text(flood, &scope).unwrap_err();
+        assert!(err.to_string().contains("larger than 10 MB"), "{err}");
+        let grow =
+            "{% set a = 'x' %}{% for i in range(30) %}{% set a = a ~ a %}{% endfor %}{{ a }}";
+        assert!(render_text(grow, &scope).is_err());
+        assert!(
+            check_template(grow).is_err(),
+            "rejected when the flow is saved"
+        );
+        assert_eq!(
+            render_text("{% if true %}ok{% endif %}", &scope).unwrap(),
+            "ok"
+        );
     }
 }

@@ -75,8 +75,8 @@ async fn token_exchanges(app: &TestApp) -> usize {
 async fn only_the_person_who_started_an_oauth_sign_in_can_finish_it() {
     let app = TestApp::spawn_signed_in().await;
     let Team { org } = team(&app).await;
-    // An admin opens the link a member started: the callback parks the answer, and finishing it
-    // as the admin is refused and spends the sign-in.
+    // An admin opens the link a member started: the callback parks the answer, and finishing it as
+    // the admin (or with a wrong finish token) is refused without spending it.
     let state = start(&app, MEMBER, &org, None).await;
     let token = come_back(&app, &state).await;
     let (status, body) = finish(&app, ADMIN, &org, &state, &token).await;
@@ -85,15 +85,14 @@ async fn only_the_person_who_started_an_oauth_sign_in_can_finish_it() {
         (422, Some("oauth.state_invalid")),
         "{body}"
     );
-    let (status, _) = finish(&app, MEMBER, &org, &state, &token).await;
-    assert_eq!(status, 422, "a refused sign-in cannot be finished later");
-    assert_eq!(token_exchanges(&app).await, 0, "no code was exchanged");
-    // The member finishes their own; a wrong finish token or a replayed callback does nothing.
-    let state = start(&app, MEMBER, &org, None).await;
     let (status, _) = finish(&app, MEMBER, &org, &state, "guess").await;
+    assert_eq!(status, 422, "a wrong finish token");
+    assert_eq!(token_exchanges(&app).await, 0, "no code was exchanged");
+    // The member finishes their own; a sign-in whose callback has not come back, or a replayed
+    // callback, does nothing.
+    let waiting = start(&app, MEMBER, &org, None).await;
+    let (status, _) = finish(&app, MEMBER, &org, &waiting, "guess").await;
     assert_eq!(status, 422, "the callback has not come back yet");
-    let state = start(&app, MEMBER, &org, None).await;
-    let token = come_back(&app, &state).await;
     let (status, body) = finish(&app, MEMBER, &org, &state, &token).await;
     assert_eq!(status, 200, "{body}");
     let id = body["connection_id"].as_str().unwrap().to_owned();

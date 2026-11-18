@@ -52,10 +52,15 @@ async fn renew_one(
     let Some(connector) = deps.connectors.get(&sub.connector).cloned() else {
         return Ok(());
     };
-    let connection = load_connection(deps, reg.org_id, Some(&sub.connection_id.to_string()))
-        .await
-        .ok()
-        .flatten();
+    let connection = load_connection(
+        deps,
+        reg.org_id,
+        Some(&sub.connection_id.to_string()),
+        Some(&sub.connector),
+    )
+    .await
+    .ok()
+    .flatten();
     let ctx = action_ctx(deps, reg.org_id, connection, String::new());
     let channel_id = sub
         .data

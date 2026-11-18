@@ -7,6 +7,7 @@
     clippy::too_many_lines
 )]
 
+mod abuse;
 mod app_events;
 mod connections;
 mod custom_functions;

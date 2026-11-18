@@ -75,9 +75,14 @@ pub async fn backfill(
         .ok_or_else(|| {
             AppError::validation(error_codes::VALIDATION_FAILED, "The trigger has no module")
         })?;
-    let connection = load_connection(deps, org, app.connection_id.as_deref())
-        .await
-        .map_err(|e| AppError::validation(error_codes::CONNECTION_NOT_FOUND, e.to_string()))?;
+    let connection = load_connection(
+        deps,
+        org,
+        app.connection_id.as_deref(),
+        Some(&app.connector),
+    )
+    .await
+    .map_err(|e| AppError::validation(error_codes::CONNECTION_NOT_FOUND, e.to_string()))?;
     let ctx = action_ctx_for(
         deps,
         org,

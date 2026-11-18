@@ -161,3 +161,55 @@ async fn viewers_see_runs_without_their_data() {
     assert_eq!(seen["status"], "succeeded");
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn an_invitation_matches_its_exact_address_only() {
+    let app = TestApp::spawn_signed_in().await;
+    let Team { org } = team(&app).await;
+    let (status, _) = call(
+        &app,
+        OWNER,
+        &org,
+        "POST",
+        "/api/v1/invitations",
+        Some(json!({"email": "alice@acme.com", "role": "admin"})),
+    )
+    .await;
+    assert_eq!(status, 201);
+    let (status, _) = call(
+        &app,
+        OWNER,
+        &org,
+        "POST",
+        "/api/v1/invitations",
+        Some(json!({"email": "alice@acmé.com", "role": "viewer"})),
+    )
+    .await;
+    assert_eq!(status, 422, "look-alike (non-ASCII) addresses are refused");
+    // A verified look-alike identity (an IDN domain) sees and accepts nothing.
+    app.idp
+        .as_ref()
+        .unwrap()
+        .issue("mallory", "alice@acmé.com", "Mallory");
+    let me = app
+        .req_as("mallory", None, "GET", "/api/v1/me", None)
+        .await
+        .1;
+    assert_eq!(me["invitations"], json!([]), "{me}");
+    let (_, open) = call(&app, OWNER, &org, "GET", "/api/v1/invitations", None).await;
+    let id = open.as_array().unwrap()[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (status, _) = app
+        .req_as(
+            "mallory",
+            None,
+            "POST",
+            &format!("/api/v1/me/invitations/{id}/accept"),
+            None,
+        )
+        .await;
+    assert_eq!(status.as_u16(), 404);
+    app.cleanup().await;
+}

@@ -160,7 +160,7 @@ Secrets are never returned.
 | PATCH | `/api/v1/flows/{id}` | `{name?, description?}` | `Flow` |
 | DELETE | `/api/v1/flows/{id}` | — | 204 |
 | PUT | `/api/v1/flows/{id}/draft` | `{definition, revision}` | `{revision, issues, has_unpublished_changes}`; 409 `flow.revision_conflict` when `revision` is stale |
-| POST | `/api/v1/flows/{id}/validate` | — | `{issues}` |
+| POST | `/api/v1/flows/{id}/validate` | — | `{issues}`. Editors only (owners, admins, members): issue messages quote the draft's templates, which viewers do not see. |
 | POST | `/api/v1/flows/{id}/publish` | — | `{version: {id, version, created_at}, issues}`; 422 `flow.invalid` with `issues` |
 | POST | `/api/v1/flows/{id}/enable` | — | `Flow` (409 `flow.not_published` if never published) |
 | POST | `/api/v1/flows/{id}/disable` | — | `Flow` |

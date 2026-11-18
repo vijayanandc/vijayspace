@@ -95,14 +95,19 @@ pub async fn run_poll(deps: &Deps, id: RegistrationId) -> Result<usize, AppError
     let Some(connector) = deps.connectors.get(&app.connector).cloned() else {
         return Ok(0);
     };
-    let connection = load_connection(deps, reg.org_id, app.connection_id.as_deref())
-        .await
-        .map_err(|e| {
-            AppError::validation(
-                weft_domain::error_codes::CONNECTION_NOT_FOUND,
-                e.to_string(),
-            )
-        })?;
+    let connection = load_connection(
+        deps,
+        reg.org_id,
+        app.connection_id.as_deref(),
+        Some(&app.connector),
+    )
+    .await
+    .map_err(|e| {
+        AppError::validation(
+            weft_domain::error_codes::CONNECTION_NOT_FOUND,
+            e.to_string(),
+        )
+    })?;
     let ctx = action_ctx_for(
         deps,
         reg.org_id,

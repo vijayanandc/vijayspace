@@ -42,12 +42,13 @@ The run appears under **History** with each step's input and output.
 | `WEFT_LOGTO_CACHE_SECS` | `300` | How long a checked token is trusted before Logto is asked again (never past its expiry) |
 | `WEFT_OWNER_EMAILS` | none | Verified emails that become owners of the default org when they sign in (comma-separated) |
 | `WEFT_APP_URL` | `http://127.0.0.1:3000` | Where people open Weft (links in invitation emails) |
-| `WEFT_MASTER_KEYS`, `WEFT_ACTIVE_KEY_ID` | development key | `id:base64key,…` for encrypting connection secrets. **Set in production.** |
+| `WEFT_MASTER_KEYS`, `WEFT_ACTIVE_KEY_ID` | development key on a loopback `WEFT_BIND` only | `id:base64key,…` for encrypting connection secrets. Required otherwise: the server does not start without them. |
 | `WEFT_ALLOW_PRIVATE_NETWORKS` | `false` | Let HTTP steps reach private/loopback addresses (local testing only) |
 | `WEFT_HTTP_PROXY` | none | Egress proxy for calls to apps (`HTTP(S)_PROXY` is ignored on purpose). With a proxy set, Weft no longer checks the addresses that hostnames resolve to (only literal IPs and redirects), so the proxy must block private destinations itself. |
 | `WEFT_ZEPTOMAIL_API_KEY`, `WEFT_ZEPTOMAIL_API_URL` | — | Email through ZeptoMail (as the Appblocks servers send it; key only in the environment). Takes precedence over SMTP. |
 | `WEFT_SMTP_URL`, `WEFT_MAIL_FROM` | log only | Email (invitations and the email step) over SMTP (Mailpit: `smtp://localhost:1025`). `WEFT_MAIL_FROM` is `Name <address>`, also used for ZeptoMail |
-| `WEFT_WORKER_CONCURRENCY` | `16` | Jobs processed in parallel |
+| `WEFT_WORKER_CONCURRENCY` | `16` | Jobs processed in parallel (1–256) |
+| `WEFT_DB_POOL_SIZE` | worker concurrency + 16 | Database connections per process (at least worker concurrency + 4) |
 | `WEFT_RETENTION_DAYS` | `30` | Days finished runs are kept (orgs can set their own, 1–3650) |
 | `WEFT_SCRIPT_ISOLATION` | `process` | Run custom functions in child processes under OS memory/CPU limits; `thread` runs them inside the server (development only) |
 | `WEFT_SCRIPT_MEMORY_MB` | `512` | Memory a custom-function process may use (64–65536; its 64 MB stack comes on top) |

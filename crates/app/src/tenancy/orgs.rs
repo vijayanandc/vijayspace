@@ -41,7 +41,13 @@ pub async fn me(deps: &Deps, user: Option<&User>) -> Result<MeView, AppError> {
     // Picks up an owner email added to the configuration after the user first signed in.
     super::session::bootstrap_owner(deps, user).await?;
     let invitations = match user.email.as_deref().filter(|_| user.email_verified) {
-        Some(email) => deps.store.invitations_for_email(email, now).await?,
+        Some(email) => deps
+            .store
+            .invitations_for_email(email, now)
+            .await?
+            .into_iter()
+            .filter(|i| i.email == email)
+            .collect(),
         None => Vec::new(),
     };
     Ok(MeView {

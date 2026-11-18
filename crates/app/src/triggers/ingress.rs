@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use weft_connector_sdk::{ConnectorError, InboundRequest};
 use weft_domain::{
     error_codes,
@@ -11,6 +11,7 @@ use weft_domain::{
     model::{ExecutionMode, Flow, FlowVersion, RegistrationKind, TriggerRegistration},
 };
 
+use super::inbound::{constant_eq, parse_body, visible_headers};
 use super::items::{bounded_key, start_items};
 use crate::{
     AppError, Deps,
@@ -23,7 +24,6 @@ use crate::{
 /// Maximum webhook body size (doc 01 §4).
 pub const MAX_BODY_BYTES: usize = 5 * 1024 * 1024;
 const MAX_SPLIT: usize = 100;
-const HIDDEN_HEADERS: [&str; 3] = ["authorization", "cookie", "proxy-authorization"];
 
 /// A raw inbound HTTP request.
 #[derive(Debug, Clone, Default)]
@@ -43,46 +43,6 @@ pub struct IngressResult {
     pub executions: Vec<ExecutionId>,
     /// An immediate response body requested by the connector (handshakes).
     pub response: Option<Value>,
-}
-
-fn parse_form(body: &str) -> Value {
-    let mut map = Map::new();
-    for pair in body.split('&').filter(|p| !p.is_empty()) {
-        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
-        let decode = |s: &str| {
-            urlencoding::decode(&s.replace('+', " "))
-                .map_or_else(|_| s.to_owned(), std::borrow::Cow::into_owned)
-        };
-        map.insert(decode(k), Value::String(decode(v)));
-    }
-    Value::Object(map)
-}
-
-/// Parses a body by content type: JSON, form-urlencoded, or text.
-#[must_use]
-pub fn parse_body(content_type: &str, body: &[u8]) -> Value {
-    let text = String::from_utf8_lossy(body);
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return Value::Null;
-    }
-    if (content_type.contains("json") || trimmed.starts_with('{') || trimmed.starts_with('['))
-        && let Ok(v) = serde_json::from_str(trimmed)
-    {
-        return v;
-    }
-    if content_type.contains("x-www-form-urlencoded") {
-        return parse_form(trimmed);
-    }
-    Value::String(text.into_owned())
-}
-
-fn visible_headers(headers: &BTreeMap<String, String>) -> Map<String, Value> {
-    headers
-        .iter()
-        .filter(|(k, _)| !HIDDEN_HEADERS.contains(&k.as_str()))
-        .map(|(k, v)| (k.clone(), Value::String(v.clone())))
-        .collect()
 }
 
 async fn load_target(deps: &Deps, token: &str) -> Result<(TriggerRegistration, Flow), AppError> {
@@ -160,6 +120,10 @@ pub async fn ingest_webhook(
     });
     let listening = reg.listening_until.is_some_and(|u| u > now);
     if listening {
+        // A sample becomes the default test payload: only a request with the secret (as the draft asks) sets it.
+        if let TriggerNode::Webhook(cfg) = &flow.draft.trigger {
+            check_secret(cfg, req, &reg)?;
+        }
         deps.store.set_sample(reg.id, &data, now).await?;
         deps.store.set_listening(reg.id, None, now).await?;
     }
@@ -267,9 +231,14 @@ pub async fn ingest_app_event(
         .get(&app.connector)
         .cloned()
         .ok_or_else(|| AppError::not_found(error_codes::CONNECTOR_NOT_FOUND, "Unknown app"))?;
-    let connection = load_connection(deps, reg.org_id, app.connection_id.as_deref())
-        .await
-        .map_err(|e| AppError::validation(error_codes::CONNECTION_NOT_FOUND, e.to_string()))?;
+    let connection = load_connection(
+        deps,
+        reg.org_id,
+        app.connection_id.as_deref(),
+        Some(&app.connector),
+    )
+    .await
+    .map_err(|e| AppError::validation(error_codes::CONNECTION_NOT_FOUND, e.to_string()))?;
     // Fetching the record an app just announced is counted but never refused: refusing would
     // lose the event.
     let ctx = action_ctx_for(
@@ -351,45 +320,5 @@ fn event_error(e: ConnectorError) -> AppError {
             other.code(),
             other.to_string(),
         ),
-    }
-}
-
-/// Constant-time string comparison for secrets.
-#[must_use]
-pub fn constant_eq(a: &str, b: &str) -> bool {
-    let (a, b) = (a.as_bytes(), b.as_bytes());
-    if a.len() != b.len() {
-        return false;
-    }
-    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn bodies_are_parsed_by_content_type() {
-        assert_eq!(
-            parse_body("application/json", br#"{"a":1}"#),
-            json!({"a": 1})
-        );
-        assert_eq!(
-            parse_body(
-                "application/x-www-form-urlencoded",
-                b"name=Ann+Lee&e=a%40b.io"
-            ),
-            json!({"name": "Ann Lee", "e": "a@b.io"})
-        );
-        assert_eq!(parse_body("text/plain", b"hello"), json!("hello"));
-        assert_eq!(parse_body("", b""), Value::Null);
-        assert_eq!(parse_body("", b"[1,2]"), json!([1, 2]));
-    }
-
-    #[test]
-    fn constant_time_compare() {
-        assert!(constant_eq("abc", "abc"));
-        assert!(!constant_eq("abc", "abd"));
-        assert!(!constant_eq("abc", "ab"));
     }
 }

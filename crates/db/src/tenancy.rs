@@ -1,4 +1,5 @@
-//! `TenancyRepo` for MySQL: users (created on first sign-in), memberships and invitations.
+//! `TenancyRepo` for MySQL: users (created on first sign-in), memberships and invitations. Emails are matched
+//! exactly (`COLLATE utf8mb4_bin`): the columns' default collation treats accented letters as equal.
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -100,9 +101,10 @@ impl TenancyRepo for MySqlStore {
     async fn is_member_email(&self, org: OrgId, email: &str) -> Res<bool> {
         let found: Option<i32> = sqlx::query_scalar(
             "SELECT 1 FROM org_members m JOIN users u ON u.id = m.user_id \
-             WHERE m.org_id = ? AND u.email = ? LIMIT 1",
+             WHERE m.org_id = ? AND u.email = ? AND u.email = ? COLLATE utf8mb4_bin LIMIT 1",
         )
         .bind(org.as_uuid())
+        .bind(email)
         .bind(email)
         .fetch_optional(&self.pool)
         .await
@@ -197,8 +199,9 @@ impl TenancyRepo for MySqlStore {
 
     async fn invitations_for_email(&self, email: &str, now: DateTime<Utc>) -> Res<Vec<Invitation>> {
         let rows: Vec<InvitationRow> = sqlx::query_as(&format!(
-            "{INVITATION_SELECT} WHERE i.email = ? AND i.expires_at > ? ORDER BY i.created_at DESC LIMIT 50"
+            "{INVITATION_SELECT} WHERE i.email = ? AND i.email = ? COLLATE utf8mb4_bin AND i.expires_at > ? ORDER BY i.created_at DESC LIMIT 50"
         ))
+        .bind(email)
         .bind(email)
         .bind(now)
         .fetch_all(&self.pool)
@@ -252,7 +255,7 @@ impl TenancyRepo for MySqlStore {
     ) -> Res<Option<Membership>> {
         let mut tx = self.pool.begin().await.map_err(db_err)?;
         let found: Option<(uuid::Uuid, String)> = sqlx::query_as(
-            "SELECT org_id, role FROM org_invitations WHERE id = ? AND email = ? AND expires_at > ? FOR UPDATE",
+            "SELECT org_id, role FROM org_invitations WHERE id = ? AND email = ? COLLATE utf8mb4_bin AND expires_at > ? FOR UPDATE",
         )
         .bind(id.as_uuid())
         .bind(email)

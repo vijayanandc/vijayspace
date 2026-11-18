@@ -50,7 +50,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
     let command = cli.command.unwrap_or(Command::Serve);
     let serves_api = matches!(command, Command::Serve | Command::Api);
     let settings = Settings::from_env(serves_api).map_err(anyhow::Error::msg)?;
-    let pool = weft_db::connect(&settings.database_url, 20).await?;
+    let pool = weft_db::connect(&settings.database_url, settings.db_pool_size).await?;
     weft_db::migrate(&pool).await?;
     if matches!(command, Command::Migrate) {
         tracing::info!("migrations applied");

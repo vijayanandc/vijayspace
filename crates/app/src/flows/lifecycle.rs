@@ -12,13 +12,14 @@ use crate::tenancy::Actor;
 use crate::{AppError, Deps, triggers::sync_registration};
 use weft_domain::permissions::Permission;
 
-/// Validates the current draft.
+/// Validates the current draft. For editors only: issue messages quote the draft's templates and field names,
+/// which viewers do not see.
 pub async fn validate_draft(
     deps: &Deps,
     actor: &Actor,
     id: FlowId,
 ) -> Result<Vec<Issue>, AppError> {
-    actor.require(Permission::FlowView)?;
+    actor.require(Permission::FlowEdit)?;
     let org = actor.org;
     let flow = load(deps, org, id).await?;
     Ok(validate(&flow.draft, deps.connectors.as_ref()))

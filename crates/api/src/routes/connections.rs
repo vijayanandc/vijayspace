@@ -198,10 +198,18 @@ async fn callback(
 ) -> Response {
     match uc::oauth_callback(&s.deps, &q).await {
         Ok(url) => Redirect::to(&url).into_response(),
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            format!("Could not complete the connection: {}", e.message),
-        )
-            .into_response(),
+        Err(e) => {
+            // A public page: internal failures (database, decryption) are not described.
+            let reason = if matches!(e.kind, weft_app::ErrorKind::Internal) {
+                "something went wrong; start again".to_owned()
+            } else {
+                e.message
+            };
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Could not complete the connection: {reason}"),
+            )
+                .into_response()
+        }
     }
 }

@@ -80,6 +80,12 @@ pub async fn oauth_start(
         })?;
         // Signing a connection in again replaces its account: managing it, like deleting it.
         actor.require_on(Permission::ConnectionDelete, existing.connection.created_by)?;
+        if existing.connection.connector != connector_key {
+            return Err(AppError::validation(
+                error_codes::VALIDATION_FAILED,
+                "This connection belongs to another app",
+            ));
+        }
     }
     let state = oauth::random_token();
     let hash = Sha256::digest(state.as_bytes()).to_vec();
@@ -193,19 +199,17 @@ pub async fn oauth_finish(
 ) -> Result<ConnectionId, AppError> {
     actor.require(Permission::ConnectionCreate)?;
     let hash = Sha256::digest(state.as_bytes()).to_vec();
+    let finish_hash = Sha256::digest(finish.as_bytes()).to_vec();
+    // Spent only by its owner: someone else's attempt leaves it for the person who started it.
     let st = deps
         .store
-        .take_oauth_state(&hash, deps.clock.now())
+        .take_parked_oauth_state(&hash, actor.org, actor.user, &finish_hash, deps.clock.now())
         .await?
-        .ok_or_else(|| invalid("This sign-in has expired; start again"))?;
-    let finish_hash = Sha256::digest(finish.as_bytes()).to_vec();
-    let mine = st.org_id == actor.org
-        && st.created_by == actor.user
-        && st.finish_hash.as_deref() == Some(finish_hash.as_slice());
-    let Some(cipher) = st.callback_cipher.as_ref().filter(|_| mine) else {
-        return Err(invalid(
-            "This sign-in was started by someone else; start again",
-        ));
+        .ok_or_else(|| {
+            invalid("This sign-in has expired, or was started by someone else or in another organisation")
+        })?;
+    let Some(cipher) = st.callback_cipher.as_ref() else {
+        return Err(invalid("The app has not answered this sign-in yet"));
     };
     let plain = deps.secrets.open(cipher, "", &callback_aad(&hash))?;
     let query: BTreeMap<String, String> =
@@ -275,6 +279,12 @@ async fn finish_callback(
         Some(id) => deps.store.get_connection(st.org_id, id).await?,
         None => None,
     };
+    if existing
+        .as_ref()
+        .is_some_and(|s| s.connection.connector != st.connector)
+    {
+        return Err(invalid("This connection belongs to another app"));
+    }
     let connection = existing.as_ref().map_or_else(
         || Connection {
             id: deps.new_connection_id(),

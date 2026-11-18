@@ -32,6 +32,8 @@ pub struct Settings {
     pub mail: crate::auth_settings::MailSettings,
     pub mail_from: String,
     pub worker_concurrency: usize,
+    /// Database connections for this process (`WEFT_DB_POOL_SIZE`).
+    pub db_pool_size: u32,
     pub oauth_clients: HashMap<String, OAuthClient>,
 }
 
@@ -90,11 +92,18 @@ impl Settings {
             }
         }
         let bind = var("WEFT_BIND").unwrap_or_else(|| "0.0.0.0:8080".into());
-        let master_keys = match (var("WEFT_MASTER_KEYS"), var("WEFT_ACTIVE_KEY_ID")) {
-            (Some(keys), Some(active)) => Some((keys, active)),
-            (None, None) => None,
-            _ => return Err("set both WEFT_MASTER_KEYS and WEFT_ACTIVE_KEY_ID".into()),
-        };
+        let master_keys = master_keys(var("WEFT_MASTER_KEYS"), var("WEFT_ACTIVE_KEY_ID"), &bind)?;
+        let worker_concurrency = number(var("WEFT_WORKER_CONCURRENCY").as_deref(), 16, 1, 256)
+            .map_err(|e| format!("WEFT_WORKER_CONCURRENCY {e}"))?;
+        // The worker holds a connection per running job (heartbeats, checkpoints) while the API serves requests.
+        let workers = u32::try_from(worker_concurrency).unwrap_or(256);
+        let db_pool_size = number(
+            var("WEFT_DB_POOL_SIZE").as_deref(),
+            workers + 16,
+            workers + 4,
+            1000,
+        )
+        .map_err(|e| format!("WEFT_DB_POOL_SIZE {e} (at least WEFT_WORKER_CONCURRENCY + 4)"))?;
         Ok(Self {
             database_url: var("WEFT_DATABASE_URL")
                 .or_else(|| var("DATABASE_URL"))
@@ -122,17 +131,64 @@ impl Settings {
             owner_emails: crate::auth_settings::owner_emails(var("WEFT_OWNER_EMAILS")),
             mail: crate::auth_settings::mail(&var),
             mail_from: var("WEFT_MAIL_FROM").unwrap_or_else(|| "Weft <no-reply@localhost>".into()),
-            worker_concurrency: var("WEFT_WORKER_CONCURRENCY")
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(16),
+            worker_concurrency,
+            db_pool_size,
             oauth_clients,
         })
+    }
+}
+
+/// `WEFT_MASTER_KEYS` with `WEFT_ACTIVE_KEY_ID`. Without them connection secrets would be encrypted with the
+/// development key, which anyone can derive from the source: allowed only on a loopback bind (local development).
+fn master_keys(
+    keys: Option<String>,
+    active: Option<String>,
+    bind: &str,
+) -> Result<Option<(String, String)>, String> {
+    match (keys, active) {
+        (Some(keys), Some(active)) => Ok(Some((keys, active))),
+        (None, None) if crate::auth_settings::is_loopback(bind) => Ok(None),
+        (None, None) => Err(format!(
+            "set WEFT_MASTER_KEYS and WEFT_ACTIVE_KEY_ID: the development key is only for a loopback WEFT_BIND, not `{bind}`"
+        )),
+        _ => Err("set both WEFT_MASTER_KEYS and WEFT_ACTIVE_KEY_ID".into()),
+    }
+}
+
+/// A whole number in `min..=max`, or `default` when unset.
+fn number<T>(value: Option<&str>, default: T, min: T, max: T) -> Result<T, String>
+where
+    T: std::str::FromStr + PartialOrd + std::fmt::Display + Copy,
+{
+    let Some(raw) = value else {
+        return Ok(default);
+    };
+    match raw.trim().parse::<T>() {
+        Ok(n) if n >= min && n <= max => Ok(n),
+        _ => Err(format!(
+            "must be a whole number from {min} to {max}, not `{raw}`"
+        )),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn production_needs_master_keys_and_numbers_are_checked() {
+        assert_eq!(master_keys(None, None, "127.0.0.1:8080"), Ok(None));
+        assert!(master_keys(None, None, "0.0.0.0:8080").is_err());
+        assert!(master_keys(Some("k".into()), None, "127.0.0.1:8080").is_err());
+        assert!(master_keys(Some("k".into()), Some("1".into()), "0.0.0.0:8080").is_ok());
+        assert_eq!(number::<usize>(None, 16, 1, 256), Ok(16));
+        assert_eq!(number::<usize>(Some("32"), 16, 1, 256), Ok(32));
+        assert!(
+            number::<usize>(Some("lots"), 16, 1, 256).is_err(),
+            "no silent default"
+        );
+        assert!(number::<u32>(Some("8"), 36, 20, 1000).is_err());
+    }
 
     #[test]
     fn retention_and_script_memory_are_range_checked() {

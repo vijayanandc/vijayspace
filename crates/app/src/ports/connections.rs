@@ -71,4 +71,14 @@ pub trait ConnectionRepo: Send + Sync {
         state_hash: &[u8],
         now: DateTime<Utc>,
     ) -> Res<Option<OAuthState>>;
+    /// Takes (deletes and returns) a parked sign-in only for its owner: started in `org` by `user`, with the
+    /// provider's answer parked under `finish_hash`. Anyone else gets `None` and the sign-in stays for its owner.
+    async fn take_parked_oauth_state(
+        &self,
+        state_hash: &[u8],
+        org: weft_domain::ids::OrgId,
+        user: Option<weft_domain::ids::UserId>,
+        finish_hash: &[u8],
+        now: DateTime<Utc>,
+    ) -> Res<Option<OAuthState>>;
 }

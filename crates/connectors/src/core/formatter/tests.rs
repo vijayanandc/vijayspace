@@ -39,6 +39,28 @@ fn text_actions() {
 }
 
 #[test]
+fn replacing_text_cannot_ask_for_unbounded_memory() {
+    let flood = json!({"text": "a".repeat(1 << 20), "find": "a", "replace": "x".repeat(1 << 20)});
+    assert!(
+        run("text_replace", &flood).is_err(),
+        "matches × replacement is refused"
+    );
+    let empty_regex = json!({"text": "abc", "find": "x?", "replace": "-", "regex": true});
+    assert_eq!(
+        run("text_replace", &empty_regex).unwrap(),
+        json!({"result": "-a-b-c-"})
+    );
+    let dollars = json!({"text": "price", "find": "price", "replace": "$5"});
+    assert_eq!(
+        run("text_replace", &dollars).unwrap(),
+        json!({"result": "$5"}),
+        "plain mode keeps $"
+    );
+    let wide = json!({"value": "1", "thousands_separator": ",".repeat(100)});
+    assert!(run("number_format", &wide).is_err());
+}
+
+#[test]
 fn number_and_date_actions() {
     assert_eq!(
         run("number_format", &json!({"value": "1234.5", "decimals": 2})).unwrap(),

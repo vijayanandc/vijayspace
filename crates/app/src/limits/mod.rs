@@ -3,6 +3,7 @@
 //! connector's defaults with the connection's overrides; background work stops at 95% of the day.
 
 mod bucket;
+mod mail;
 mod manage;
 mod sender;
 
@@ -17,6 +18,7 @@ use weft_connector_sdk::{ConnectionLimits, ConnectorError};
 use weft_domain::ids::{ConnectionId, ExecutionId, OrgId};
 
 pub use bucket::TokenBucket;
+pub use mail::{FLOW_EMAILS_PER_DAY, MAX_RECIPIENTS, QuotaMailer};
 pub use manage::{LimitsView, UsageView, connection_limits, set_connection_limits, usage_today};
 pub use sender::LimitedSender;
 

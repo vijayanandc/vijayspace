@@ -25,6 +25,14 @@ impl ExprError {
         }
     }
 
+    /// A template outside the limits (`crate::limits`): too long, a block tag that is not allowed, too much output.
+    pub(crate) fn refused(source_text: &str, message: String) -> Self {
+        Self::Syntax {
+            source_text: clip(source_text),
+            message,
+        }
+    }
+
     pub(crate) fn eval(source_text: &str, err: &impl ToString) -> Self {
         Self::Eval {
             source_text: clip(source_text),

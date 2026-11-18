@@ -62,7 +62,7 @@ fn list(value: Option<String>) -> Vec<String> {
 }
 
 /// Whether a bind address only accepts connections from this machine.
-fn is_loopback(bind: &str) -> bool {
+pub(crate) fn is_loopback(bind: &str) -> bool {
     let host = bind.rsplit_once(':').map_or(bind, |(h, _)| h);
     let host = host.trim_start_matches('[').trim_end_matches(']');
     host == "localhost"

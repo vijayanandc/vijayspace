@@ -139,15 +139,14 @@ fn run(action: &str, input: &Value) -> Result<Value, ConnectorError> {
             let text = req_str(input, "text")?;
             let find = req_str(input, "find")?;
             let replace = opt_str(input, "replace").unwrap_or_default();
-            let result = if crate::util::opt_bool(input, "regex").unwrap_or(false) {
-                let re = regex::RegexBuilder::new(&find)
-                    .size_limit(1 << 16)
-                    .build()
-                    .map_err(|e| ConnectorError::invalid_field("find", e.to_string()))?;
-                re.replace_all(&text, replace.as_str()).into_owned()
+            // Bounded like the template function: matches × replacement can otherwise ask for terabytes.
+            let (pattern, replacement) = if crate::util::opt_bool(input, "regex").unwrap_or(false) {
+                (find, replace)
             } else {
-                text.replace(&find, &replace)
+                (regex::escape(&find), replace.replace('$', "$$"))
             };
+            let result = weft_expr::funcs::regex_replace(&text, &pattern, &replacement)
+                .map_err(|e| ConnectorError::invalid_field("find", e))?;
             Ok(json!({"result": result}))
         }
         "text_split" => {
@@ -190,8 +189,19 @@ fn run(action: &str, input: &Value) -> Result<Value, ConnectorError> {
             let decimals = opt_f64(input, "decimals").unwrap_or(2.0).clamp(0.0, 10.0);
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // clamped to 0..=10
             let decimals = decimals as usize;
-            let thousands = opt_str(input, "thousands_separator").unwrap_or_else(|| ",".into());
-            let decimal = opt_str(input, "decimal_separator").unwrap_or_else(|| ".".into());
+            // Separators are a few characters; longer ones would multiply the output.
+            let separator = |key: &str, default: &str| -> Result<String, ConnectorError> {
+                let s = opt_str(input, key).unwrap_or_else(|| default.into());
+                if s.chars().count() > 8 {
+                    return Err(ConnectorError::invalid_field(
+                        key,
+                        "use at most 8 characters",
+                    ));
+                }
+                Ok(s)
+            };
+            let thousands = separator("thousands_separator", ",")?;
+            let decimal = separator("decimal_separator", ".")?;
             Ok(json!({"result": format_number(value, decimals, &thousands, &decimal)}))
         }
         "math" => {
