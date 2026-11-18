@@ -10,19 +10,22 @@ import type {
   TriggerType,
 } from '../../../api/types';
 import { uniqueKey } from './keys';
+import { SCRIPT_ACTION, SCRIPT_CONNECTOR, starterScriptInput } from './script';
 
-export type LogicType = 'decision' | 'delay' | 'set_variable' | 'stop';
+/** Logic palette items: the flow-control steps, plus custom functions (an action of `core.script`). */
+export type LogicType = 'decision' | 'delay' | 'set_variable' | 'stop' | 'custom_function';
 
 /** Something that can be dragged from the palette. */
 export type PaletteItem =
   | { kind: 'logic'; type: LogicType }
   | { kind: 'action'; connector: string; action: string };
 
-export const LOGIC_ITEMS: { type: LogicType; label: string; icon: string; description: string }[] = [
-  { type: 'decision', label: 'Decision', icon: '◇', description: 'Branch on conditions' },
-  { type: 'delay', label: 'Delay', icon: '⏱', description: 'Wait for a time or until a date' },
-  { type: 'set_variable', label: 'Set variable', icon: '𝑥', description: 'Store values for later steps' },
-  { type: 'stop', label: 'Stop', icon: '■', description: 'End the flow' },
+export const LOGIC_ITEMS: { type: LogicType; label: string; icon: string; description: string; group: 'Flow control' | 'Code' }[] = [
+  { type: 'decision', label: 'Decision', icon: '◇', description: 'Branch on conditions', group: 'Flow control' },
+  { type: 'delay', label: 'Delay', icon: '⏱', description: 'Wait for a time or until a date', group: 'Flow control' },
+  { type: 'set_variable', label: 'Set variable', icon: '𝑥', description: 'Store values for later steps', group: 'Flow control' },
+  { type: 'stop', label: 'Stop', icon: '■', description: 'End the flow', group: 'Flow control' },
+  { type: 'custom_function', label: 'Custom function', icon: 'ƒ', description: 'Write a Rhai script for custom logic', group: 'Code' },
 ];
 
 export function defaultCondition(): Condition {
@@ -46,6 +49,16 @@ export function createStep(def: FlowDefinition, item: PaletteItem, manifests: Co
         return { key: uniqueKey(def, 'set_variable'), name: 'Set variable', type: 'set_variable', assignments: [{ name: 'value', value: '' }] };
       case 'stop':
         return { key: uniqueKey(def, 'stop'), name: 'Stop', type: 'stop', status: 'succeeded' };
+      case 'custom_function':
+        return {
+          key: uniqueKey(def, 'custom_function'),
+          name: 'Custom function',
+          type: 'action',
+          connector: SCRIPT_CONNECTOR,
+          action: SCRIPT_ACTION,
+          connection_id: null,
+          input: starterScriptInput(),
+        };
     }
   }
   const manifest = manifests.find((m) => m.key === item.connector);

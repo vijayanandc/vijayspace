@@ -1,5 +1,6 @@
 // What dynamic form fields need to know about where they are rendered.
 
+import type { Issue } from '../../../api/types';
 import type { VarNode } from '../model/variables';
 
 export interface FormEnv {
@@ -8,6 +9,8 @@ export interface FormEnv {
   /** When true, dynamic options/fields wait for a connection to be chosen. */
   requiresConnection: boolean;
   variables: VarNode[];
+  /** Validation issues of the step being edited (full paths such as `/steps/0/input/code`). */
+  issues?: Issue[];
 }
 
 /** Splits text into plain and `{{ … }}` token segments (for highlighting). */

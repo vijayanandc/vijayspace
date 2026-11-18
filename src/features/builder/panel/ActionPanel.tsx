@@ -9,7 +9,7 @@ import { buildVariableTree } from '../model/variables';
 import { ConnectionPicker } from './ConnectionPicker';
 
 export function ActionPanel({ step }: { step: ActionStep }) {
-  const { def, apply, manifests, flow } = useBuilder();
+  const { def, apply, manifests, flow, issues } = useBuilder();
   const manifest = manifests.find((m) => m.key === step.connector);
   const spec = manifest?.actions.find((a) => a.key === step.action);
   const variables = buildVariableTree(def, step.key, manifests, flow.trigger?.sample);
@@ -60,7 +60,7 @@ export function ActionPanel({ step }: { step: ActionStep }) {
             fields={spec.fields}
             values={step.input ?? {}}
             onChange={(input: JsonObject) => set({ input }, `input:${step.key}`)}
-            env={{ connector: step.connector, connectionId: step.connection_id, requiresConnection: manifest?.auth.kind !== 'none', variables }}
+            env={{ connector: step.connector, connectionId: step.connection_id, requiresConnection: manifest?.auth.kind !== 'none', variables, issues: issues.get(step.key) }}
           />
         </section>
       )}

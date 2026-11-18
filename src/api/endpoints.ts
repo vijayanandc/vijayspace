@@ -3,7 +3,9 @@
 import { api } from './client';
 import type {
   Connection,
+  ConnectionLimits,
   ConnectionTestResult,
+  ConnectionUsage,
   ConnectorManifest,
   ExecutionDetail,
   ExecutionPage,
@@ -16,6 +18,7 @@ import type {
   Issue,
   JsonObject,
   JsonValue,
+  LimitsView,
   OptionItem,
   Org,
   PublishResult,
@@ -43,6 +46,10 @@ export const endpoints = {
   updateConnection: (id: string, body: { name?: string; fields?: JsonObject }) =>
     api.patch<Connection>(`/api/v1/connections/${enc(id)}`, body),
   deleteConnection: (id: string) => api.del(`/api/v1/connections/${enc(id)}`),
+  connectionLimits: (id: string) => api.get<LimitsView>(`/api/v1/connections/${enc(id)}/limits`),
+  /** Replaces all overrides: `null` = the app default, `0` = no limit. */
+  setConnectionLimits: (id: string, body: ConnectionLimits) => api.put<LimitsView>(`/api/v1/connections/${enc(id)}/limits`, body),
+  connectionUsage: () => api.get<ConnectionUsage[]>('/api/v1/connections/usage'),
   testConnection: (id: string) => api.post<ConnectionTestResult>(`/api/v1/connections/${enc(id)}/test`),
   oauthStart: (body: { connector: string; name: string; connection_id?: string; fields?: JsonObject; return_to: string }) =>
     api.post<{ authorize_url: string }>('/api/v1/connections/oauth/start', body),
@@ -89,5 +96,6 @@ export const endpoints = {
   installRecipe: (key: string, connections: Record<string, string>) =>
     api.post<{ flow_ids: string[] }>(`/api/v1/recipes/${enc(key)}/install`, { connections }),
   org: () => api.get<Org>('/api/v1/org'),
+  updateOrg: (body: { retention_days: number | null }) => api.patch<Org>('/api/v1/org', body),
   usage: () => api.get<Usage>('/api/v1/usage'),
 };

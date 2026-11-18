@@ -24,8 +24,8 @@ npm run check      # typecheck + lint + tests + build — MUST pass before you f
 | Contract types | `src/api/types.ts` — change only when the backend contract changes |
 | UI primitives | `src/components/` (Button, Dialog, Field, Badge, JsonView, Tabs, Toast, Empty, MessageBar, PageHeader, SearchBox, Switch, Popover/OverflowMenu, Table sort header, AppIcon monogram tiles, ErrorBoundary) |
 | App shell | `src/features/shell/` (global header, global search, collapsible nav rail) |
-| Flow builder | `src/features/builder/` — `model/` (pure: tree ops, keys, layout, variables, conditions, schedule, history, selection, key/value rows, typed values such as integers and number fields), `canvas/` (React Flow nodes and edges; `viewLayout.ts` spaces the model layout out for the wider cards, presentation only), `panel/` (Configure / Settings / Test tabs) (side panels), `forms/` (dynamic FieldSpec forms, mapping input, variable picker), `condition/` |
-| Flows list / history / connections / recipes | `src/features/{flows,history,connections,recipes}/` |
+| Flow builder | `src/features/builder/` — `model/` (pure: tree ops, keys, layout, variables, conditions, schedule, history, selection, key/value rows, typed values such as integers and number fields, code editor edits and issue lines, custom functions (`core.script`) starter/examples/logs), `canvas/` (React Flow nodes and edges; `viewLayout.ts` spaces the model layout out for the wider cards, presentation only), `panel/` (Configure / Settings / Test tabs) (side panels), `forms/` (dynamic FieldSpec forms, mapping input, variable picker, `CodeEditor` for `code` fields), `condition/` |
+| Flows list / history / connections (usage, limits) / recipes / settings (retention) | `src/features/{flows,history,connections,recipes,settings}/` |
 
 ## Rules
 - **Pure model first:** any change to how the definition tree is edited or laid out goes in `features/builder/model/*.ts` with a unit test. Components only call those functions.

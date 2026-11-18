@@ -2,6 +2,7 @@
 
 import type { ConnectorManifest, Step, TriggerNode } from '../../../api/types';
 import { LOGIC_ITEMS } from '../model/factories';
+import { isScriptStep } from '../model/script';
 
 export interface NodeLabel {
   title: string;
@@ -46,7 +47,17 @@ export function triggerLabel(t: TriggerNode, manifests: ConnectorManifest[]): No
   }
 }
 
+/** "Rhai · 5 lines" for a custom function card. */
+function scriptSubtitle(code: unknown): string {
+  if (typeof code !== 'string' || code.trim() === '') return 'Rhai · No code yet';
+  const lines = code.trimEnd().split('\n').length;
+  return `Rhai · ${lines} line${lines === 1 ? '' : 's'}`;
+}
+
 export function stepLabel(s: Step, manifests: ConnectorManifest[]): NodeLabel {
+  if (isScriptStep(s)) {
+    return { title: s.name || 'Custom function', subtitle: scriptSubtitle(s.input.code), kind: 'Custom function', icon: 'logic:custom_function', iconName: 'Custom function' };
+  }
   if (s.type === 'action') {
     const m = manifests.find((x) => x.key === s.connector);
     const a = m?.actions.find((x) => x.key === s.action);

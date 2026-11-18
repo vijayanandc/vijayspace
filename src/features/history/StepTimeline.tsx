@@ -6,7 +6,10 @@ import { CircleCheck, CircleMinus, CircleX, Clock, LoaderCircle, TriangleAlert }
 import type { StepRun } from '../../api/types';
 import { Badge, StatusBadge } from '../../components/Badge';
 import { JsonView } from '../../components/JsonView';
+import { LogBlock } from '../../components/LogBlock';
 import { formatDuration, formatTime } from '../../lib/format';
+import { formatLocation } from '../builder/model/code';
+import { scriptError, splitLogs } from '../builder/model/script';
 import { describeRun, groupRuns } from './timeline';
 
 const ICONS: Record<StepRun['status'], LucideIcon> = {
@@ -17,6 +20,27 @@ const ICONS: Record<StepRun['status'], LucideIcon> = {
   skipped: CircleMinus,
   unknown_outcome: TriangleAlert,
 };
+
+/** A run's output (with custom function `print` lines as a log) and its error (scripts: with line and column). */
+function RunResult({ run }: { run: StepRun }) {
+  const { logs, rest } = splitLogs(run.output ?? undefined);
+  const script = scriptError(run.error);
+  return (
+    <>
+      {run.output !== null && <JsonView label="Output" value={rest} collapsed={run.kind !== 'action'} />}
+      <LogBlock lines={logs} />
+      {script && (
+        <div className="script-error" role="note">
+          <CircleX size={14} aria-hidden="true" />
+          <span>
+            <strong>{script.code}</strong> {formatLocation(script.line, script.column, script.text)}
+          </span>
+        </div>
+      )}
+      {run.error !== null && <JsonView label="Error" value={run.error} collapsed={Boolean(script)} />}
+    </>
+  );
+}
 
 export function StepTimeline({ steps }: { steps: StepRun[] }) {
   const groups = groupRuns(steps);
@@ -53,8 +77,7 @@ export function StepTimeline({ steps }: { steps: StepRun[] }) {
                     </div>
                   )}
                   {run.input !== null && <JsonView label="Input" value={run.input} collapsed />}
-                  {run.output !== null && <JsonView label="Output" value={run.output} collapsed={run.kind !== 'action'} />}
-                  {run.error !== null && <JsonView label="Error" value={run.error} />}
+                  <RunResult run={run} />
                 </div>
               ))}
             </div>

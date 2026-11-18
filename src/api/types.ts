@@ -91,6 +91,34 @@ export interface Connection {
   updated_at: string;
 }
 
+/** Request limits of a connection. `null` means no limit (in `defaults`/`effective`) or the app default (in `overrides`). */
+export interface ConnectionLimits {
+  requests_per_minute: number | null;
+  max_concurrent: number | null;
+  daily_requests: number | null;
+}
+
+export type UsageLevel = 'ok' | 'warning' | 'critical';
+
+/** Today's (UTC) requests through one connection against its daily budget. */
+export interface ConnectionUsage {
+  connection_id: string;
+  day: string;
+  requests: number;
+  refused: number;
+  daily_limit: number | null;
+  percent: number | null;
+  level: UsageLevel;
+}
+
+/** `GET/PUT /connections/{id}/limits`: the app's defaults, the connection's overrides, the result, and today's usage. */
+export interface LimitsView {
+  defaults: ConnectionLimits;
+  overrides: ConnectionLimits;
+  effective: ConnectionLimits;
+  usage: ConnectionUsage;
+}
+
 export type ConnectionTestResult =
   | { ok: true; info?: JsonValue }
   | { ok: false; error: { code: string; message: string } };
@@ -163,7 +191,7 @@ export interface FlowVersionInfo {
 export interface StepTestResult {
   input?: JsonValue;
   output?: JsonValue;
-  error?: { code: string; message: string } | null;
+  error?: { code: string; message: string; retryable?: boolean } | null;
 }
 
 // ---------- Executions ----------
@@ -233,6 +261,10 @@ export interface Org {
   id: string;
   name: string;
   timezone: string;
+  /** Days finished runs are kept; null = the server default. */
+  retention_days: number | null;
+  retention_days_effective: number;
+  retention_days_default: number;
 }
 
 export interface Usage {

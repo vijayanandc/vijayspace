@@ -16,13 +16,20 @@ function LogicList({ query }: { query: string }) {
   const q = query.trim().toLowerCase();
   const items = LOGIC_ITEMS.filter((l) => !q || l.label.toLowerCase().includes(q) || l.description.toLowerCase().includes(q));
   if (items.length === 0) return <p className="palette-empty">No logic steps match “{query.trim()}”.</p>;
+  const groups = [...new Set(items.map((l) => l.group))];
   return (
-    <section>
-      <h3 className="palette-group">Flow control</h3>
-      {items.map((l) => (
-        <PaletteItem key={l.type} item={{ kind: 'logic', type: l.type }} icon={`logic:${l.type}`} label={l.label} description={l.description} />
+    <>
+      {groups.map((group) => (
+        <section key={group}>
+          <h3 className="palette-group">{group}</h3>
+          {items
+            .filter((l) => l.group === group)
+            .map((l) => (
+              <PaletteItem key={l.type} item={{ kind: 'logic', type: l.type }} icon={`logic:${l.type}`} label={l.label} description={l.description} />
+            ))}
+        </section>
       ))}
-    </section>
+    </>
   );
 }
 

@@ -8,6 +8,9 @@ import type { ConnectorManifest } from './types';
 export const qk = {
   connectors: ['connectors'] as const,
   connections: ['connections'] as const,
+  /** Under `connections`, so invalidating the connections refreshes usage and limits too. */
+  connectionUsage: ['connections', 'usage'] as const,
+  connectionLimits: (id: string) => ['connections', id, 'limits'] as const,
   flows: ['flows'] as const,
   flow: (id: string) => ['flow', id] as const,
   executions: (filters: object) => ['executions', filters] as const,
@@ -33,6 +36,11 @@ export function useConnector(key: string | undefined): ConnectorManifest | undef
 
 export function useConnections() {
   return useQuery({ queryKey: qk.connections, queryFn: endpoints.connections });
+}
+
+/** Today's usage of every connection (refreshed every 30 s while shown). */
+export function useConnectionUsage() {
+  return useQuery({ queryKey: qk.connectionUsage, queryFn: endpoints.connectionUsage, refetchInterval: 30_000, retry: false });
 }
 
 export function useOrg() {

@@ -7,6 +7,7 @@ import { type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode,
 import { AppIcon, tileColor } from '../../../components/AppIcon';
 import { useBuilder } from '../BuilderContext';
 import { isWeftDrag, readDrag, writeMoveDrag } from '../model/factories';
+import { isScriptStep } from '../model/script';
 import type { BuilderNode } from '../model/layout';
 import { TRIGGER_ID } from '../model/paths';
 import { allSteps, sameList } from '../model/tree';
@@ -78,7 +79,7 @@ export function StepNodeView({ data }: NodeProps<BuilderNode>) {
   const onDragStart = (e: DragEvent) => writeMoveDrag(e.dataTransfer, step.key);
   return (
     <div
-      className={`node node-step node-${step.type}${selected === step.key ? ' node-selected' : ''} nodrag nopan`}
+      className={`node node-step node-${step.type}${isScriptStep(step) ? ' node-script' : ''}${selected === step.key ? ' node-selected' : ''} nodrag nopan`}
       style={accent(label.icon)}
       draggable
       onDragStart={onDragStart}

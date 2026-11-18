@@ -7,6 +7,7 @@ import { FlowsPage } from './features/flows/FlowsPage';
 import { ExecutionPage } from './features/history/ExecutionPage';
 import { HistoryPage } from './features/history/HistoryPage';
 import { RecipesPage } from './features/recipes/RecipesPage';
+import { SettingsPage } from './features/settings/SettingsPage';
 import { Layout } from './features/shell/Layout';
 
 export function App() {
@@ -21,6 +22,7 @@ export function App() {
         <Route path="/connections/callback" element={<ConnectionCallbackPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/history/:executionId" element={<ExecutionPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/flows" replace />} />
       </Route>
     </Routes>

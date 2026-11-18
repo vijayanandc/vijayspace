@@ -6,12 +6,13 @@ import { Link, useSearchParams } from 'react-router-dom';
 
 import { errorMessage } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
-import { qk } from '../../api/hooks';
+import { qk, useOrg } from '../../api/hooks';
 import { Badge, StatusBadge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { EmptyState, ErrorBox, Loading } from '../../components/Empty';
 import { PageHeader } from '../../components/PageHeader';
 import { formatDuration, formatTime, relativeTime } from '../../lib/format';
+import { retentionNote } from '../settings/retention';
 import { MODE_LABELS } from './labels';
 
 const STATUSES: { value: string; label: string }[] = [
@@ -29,6 +30,7 @@ export function HistoryPage() {
   const flowId = params.get('flow_id') ?? '';
   const status = params.get('status') ?? '';
   const flows = useQuery({ queryKey: qk.flows, queryFn: endpoints.flows });
+  const { data: org } = useOrg();
   const filters = { flow_id: flowId || undefined, status: status || undefined };
   const executions = useInfiniteQuery({
     queryKey: qk.executions(filters),
@@ -54,7 +56,19 @@ export function HistoryPage() {
           tone="#ca5010"
           label="History"
           title="Execution history"
-          meta={executions.data ? `${count} · Refreshes every 5 seconds` : 'Loading…'}
+          meta={
+            <>
+              {executions.data ? `${count} · Refreshes every 5 seconds` : 'Loading…'}
+              {typeof org?.retention_days_effective === 'number' && (
+                <>
+                  {' · '}
+                  <Link to="/settings" className="meta-link" title="Change in Settings">
+                    {retentionNote(org.retention_days_effective)}
+                  </Link>
+                </>
+              )}
+            </>
+          }
           actions={
             <Button icon={RefreshCw} onClick={() => void executions.refetch()} disabled={executions.isFetching}>
               Refresh

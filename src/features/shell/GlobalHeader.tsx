@@ -1,13 +1,13 @@
 // Global header: app launcher, wordmark, global search, help, settings, org and avatar.
 
 import { CircleHelp, Grip, Settings } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 
 import { useOrg } from '../../api/hooks';
 import { Popover } from '../../components/Popover';
 import { WeftLogo } from '../../components/WeftLogo';
 import { GlobalSearch } from './GlobalSearch';
-import { NAV, initials } from './nav';
+import { LAUNCHER, initials } from './nav';
 
 function AppLauncher() {
   return (
@@ -24,7 +24,7 @@ function AppLauncher() {
         <nav aria-label="App launcher">
           <div className="popover-title">Weft</div>
           <div className="launcher-grid">
-            {NAV.map((item) => (
+            {LAUNCHER.map((item) => (
               <Link key={item.to} to={item.to} className="launcher-item" onClick={close}>
                 <span className="launcher-tile" style={{ background: item.tone }} aria-hidden="true">
                   <item.icon size={18} />
@@ -78,36 +78,12 @@ function HelpMenu() {
   );
 }
 
-function SettingsMenu() {
-  const { data: org } = useOrg();
+/** The gear opens the Settings page. */
+function SettingsLink() {
   return (
-    <Popover
-      trigger={(open, toggle) => (
-        <button type="button" className="header-btn" aria-label="Settings" title="Settings" aria-expanded={open} onClick={toggle}>
-          <Settings size={20} aria-hidden="true" />
-        </button>
-      )}
-    >
-      {(close) => (
-        <div className="help-pop">
-          <div className="popover-title">Organization</div>
-          <dl className="kbd-list">
-            <div className="kbd-row">
-              <dt>Name</dt>
-              <dd>{org?.name ?? '—'}</dd>
-            </div>
-            <div className="kbd-row">
-              <dt>Time zone</dt>
-              <dd>{org?.timezone ?? '—'}</dd>
-            </div>
-          </dl>
-          {org && <div className="popover-note mono">{org.id}</div>}
-          <Link to="/connections" className="menu-item" onClick={close}>
-            Manage connections
-          </Link>
-        </div>
-      )}
-    </Popover>
+    <NavLink to="/settings" className={({ isActive }) => `header-btn${isActive ? ' header-btn-active' : ''}`} aria-label="Settings" title="Settings">
+      <Settings size={20} aria-hidden="true" />
+    </NavLink>
   );
 }
 
@@ -126,7 +102,7 @@ export function GlobalHeader() {
       <GlobalSearch />
       <div className="header-right">
         <HelpMenu />
-        <SettingsMenu />
+        <SettingsLink />
         <span className="header-org" title={org?.timezone ? `${orgName} · ${org.timezone}` : orgName}>
           {orgName}
         </span>

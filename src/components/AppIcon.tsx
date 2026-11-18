@@ -2,7 +2,7 @@
 
 import type { LucideIcon } from 'lucide-react';
 import {
-  ArrowLeftRight, CalendarClock, Globe, Hourglass, Mail, OctagonX, Play, Split, Variable, WandSparkles, Webhook, Zap,
+  ArrowLeftRight, CalendarClock, Globe, Hourglass, Mail, OctagonX, Play, Split, SquareFunction, Variable, WandSparkles, Webhook, Zap,
 } from 'lucide-react';
 
 interface TileSpec {
@@ -27,6 +27,8 @@ const TILES: Record<string, TileSpec> = {
   'logic:delay': { bg: '#ca5010', icon: Hourglass },
   'logic:set_variable': { bg: '#00727c', icon: Variable },
   'logic:stop': { bg: '#c4314b', icon: OctagonX },
+  'logic:custom_function': { bg: '#3b4a6b', icon: SquareFunction },
+  'core.script': { bg: '#3b4a6b', icon: SquareFunction },
 };
 
 const FALLBACK_COLORS = ['#5c6bc0', '#00897b', '#8e24aa', '#6d4c41', '#3949ab', '#00838f'];
@@ -41,6 +43,7 @@ export const TILE_NAMES: Record<string, string> = {
   'logic:delay': 'Delay',
   'logic:set_variable': 'Set variable',
   'logic:stop': 'Stop',
+  'logic:custom_function': 'Custom function',
 };
 
 /** The tile for a key; unknown connectors get the first letter of their name on a stable color. */

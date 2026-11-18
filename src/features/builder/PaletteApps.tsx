@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import type { ConnectorManifest } from '../../api/types';
 import { AppIcon } from '../../components/AppIcon';
+import { SCRIPT_CONNECTOR } from './model/script';
 import { PaletteItem } from './PaletteItem';
 
 function Actions({ manifest, actions }: { manifest: ConnectorManifest; actions: ConnectorManifest['actions'] }) {
@@ -24,7 +25,8 @@ interface Props {
 }
 
 export function PaletteApps({ manifests, query, drill, onDrill }: Props) {
-  const apps = manifests.filter((m) => m.actions.length > 0);
+  // Custom functions are listed under Logic.
+  const apps = manifests.filter((m) => m.actions.length > 0 && m.key !== SCRIPT_CONNECTOR);
   const q = query.trim().toLowerCase();
 
   if (q) {

@@ -6,7 +6,9 @@ import { errorMessage } from '../../../api/client';
 import { endpoints } from '../../../api/endpoints';
 import type { FieldSpec, JsonObject, JsonValue } from '../../../api/types';
 import { Field } from '../../../components/Field';
+import { fieldIssues } from '../model/code';
 import { parseNumberField } from '../model/values';
+import { CodeEditor } from './CodeEditor';
 import type { FormEnv } from './env';
 import { JsonInput } from './JsonInput';
 import { KeyValueInput } from './KeyValueInput';
@@ -79,8 +81,9 @@ export function FieldInput({ field, value, onChange, env, siblings }: FieldProps
           case 'number':
             if (!mappable) return <input id={id} className="input" type="number" value={asText(value)} onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))} />;
             return <ParsedMappingInput id={id} value={value} parse={parseNumberField} onChange={onChange} variables={env.variables} placeholder={field.placeholder} />;
-          case 'text':
           case 'code':
+            return <CodeEditor id={id} value={asText(value)} onChange={onChange} issues={fieldIssues(env.issues, field.key)} placeholder={field.placeholder} />;
+          case 'text':
             return mappable ? (
               <MappingInput id={id} multiline value={asText(value)} onChange={onChange} variables={env.variables} placeholder={field.placeholder} />
             ) : (

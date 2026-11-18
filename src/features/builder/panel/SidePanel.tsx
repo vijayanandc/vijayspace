@@ -6,11 +6,13 @@ import { type Tab, Tabs } from '../../../components/Tabs';
 import { useBuilder } from '../BuilderContext';
 import { stepLabel, triggerLabel } from '../canvas/labels';
 import { TRIGGER_ID } from '../model/paths';
+import { isScriptStep } from '../model/script';
 import { findStep } from '../model/tree';
 import { ActionPanel } from './ActionPanel';
 import { DecisionPanel } from './DecisionPanel';
 import { DelayPanel, SetVariablePanel, StopPanel } from './LogicPanels';
 import { NodeIssues, PanelHeader } from './PanelHeader';
+import { ScriptPanel } from './ScriptPanel';
 import { StepSettings } from './StepSettings';
 import { TestStepBox } from './TestStepBox';
 import { TriggerSettings, TriggerTest } from './TriggerExtras';
@@ -67,7 +69,7 @@ export function SidePanel() {
         {shown === 'configure' && (
           <>
             <NodeIssues id={step.key} />
-            {step.type === 'action' && <ActionPanel step={step} />}
+            {step.type === 'action' && (isScriptStep(step) ? <ScriptPanel step={step} /> : <ActionPanel step={step} />)}
             {step.type === 'decision' && <DecisionPanel step={step} />}
             {step.type === 'delay' && <DelayPanel step={step} />}
             {step.type === 'set_variable' && <SetVariablePanel step={step} />}

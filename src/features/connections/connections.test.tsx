@@ -33,6 +33,7 @@ function stubApi() {
     const url = String(input);
     if (url.endsWith('/connectors')) return new Response(JSON.stringify([crm]));
     if (url.endsWith('/connections')) return new Response(JSON.stringify([stale]));
+    if (url.endsWith('/connections/usage')) return new Response(JSON.stringify([]));
     if (url.endsWith('/oauth/start')) {
       starts.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
       return new Response(JSON.stringify({ authorize_url: '#signin' }));

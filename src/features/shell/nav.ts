@@ -1,7 +1,7 @@
 // Main navigation areas, shared by the left rail and the app launcher.
 
 import type { LucideIcon } from 'lucide-react';
-import { History, LayoutGrid, Plug, Workflow } from 'lucide-react';
+import { History, LayoutGrid, Plug, Settings, Workflow } from 'lucide-react';
 
 export interface NavItem {
   to: string;
@@ -18,6 +18,12 @@ export const NAV: NavItem[] = [
   { to: '/connections', label: 'Connections', description: 'Accounts your flows use', icon: Plug, tone: '#0b7a75' },
   { to: '/history', label: 'History', description: 'Monitor runs and fix failures', icon: History, tone: '#ca5010' },
 ];
+
+/** Settings: in the app launcher and behind the header's gear, not in the rail. */
+export const SETTINGS_NAV: NavItem = { to: '/settings', label: 'Settings', description: 'Organization and run history retention', icon: Settings, tone: '#616161' };
+
+/** Everything the app launcher lists. */
+export const LAUNCHER: NavItem[] = [...NAV, SETTINGS_NAV];
 
 /** Up to two initials for an avatar ("Default org" → "DO"). */
 export function initials(name: string): string {
