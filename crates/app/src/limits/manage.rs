@@ -7,7 +7,9 @@ use weft_domain::{
     ids::{ConnectionId, OrgId},
 };
 
+use crate::tenancy::Actor;
 use crate::{AppError, Deps};
+use weft_domain::permissions::Permission;
 
 /// The largest value a limit may be set to.
 const MAX_LIMIT: u32 = 10_000_000;
@@ -98,9 +100,11 @@ pub(crate) fn usage_view(
 /// A connection's limits and today's usage.
 pub async fn connection_limits(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: ConnectionId,
 ) -> Result<LimitsView, AppError> {
+    actor.require(Permission::FlowView)?;
+    let org = actor.org;
     let (defaults, overrides) = defaults_and_overrides(deps, org, id).await?;
     let effective = defaults.with_overrides(&overrides);
     let today = deps.clock.now().date_naive();
@@ -126,10 +130,12 @@ pub async fn connection_limits(
 /// Sets the connection's overrides (`None` = the connector default, `0` = no limit).
 pub async fn set_connection_limits(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: ConnectionId,
     overrides: ConnectionLimits,
 ) -> Result<LimitsView, AppError> {
+    actor.require(Permission::ConnectionCreate)?;
+    let org = actor.org;
     let too_big = [
         overrides.requests_per_minute,
         overrides.max_concurrent,
@@ -152,11 +158,13 @@ pub async fn set_connection_limits(
         .set_connection_limits(org, id, &overrides, deps.clock.now())
         .await?;
     deps.limiters.invalidate(id);
-    connection_limits(deps, org, id).await
+    connection_limits(deps, actor, id).await
 }
 
 /// Today's usage for every connection of the org (connections without requests show zero).
-pub async fn usage_today(deps: &Deps, org: OrgId) -> Result<Vec<UsageView>, AppError> {
+pub async fn usage_today(deps: &Deps, actor: &Actor) -> Result<Vec<UsageView>, AppError> {
+    actor.require(Permission::FlowView)?;
+    let org = actor.org;
     let today = deps.clock.now().date_naive();
     let counters = deps.store.connection_usage(org, today).await?;
     let mut out = Vec::new();

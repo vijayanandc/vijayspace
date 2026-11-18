@@ -38,6 +38,9 @@ pub struct Flow {
     pub published_version: Option<u32>,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
+    /// Who created it (`None` for flows from before sign-in, or with sign-in turned off).
+    #[serde(default)]
+    pub created_by: Option<crate::ids::UserId>,
 }
 
 /// Kind of stored version.
@@ -169,6 +172,9 @@ pub struct Connection {
     pub status: ConnectionStatus,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
+    /// Who created it (`None` for connections from before sign-in, or with sign-in turned off).
+    #[serde(default)]
+    pub created_by: Option<crate::ids::UserId>,
 }
 
 /// How a flow is triggered at runtime.
@@ -199,4 +205,47 @@ pub struct TriggerRegistration {
     /// Poll cursor, last fired slot, and similar trigger-specific state.
     pub state: Value,
     pub sample: Option<Value>,
+}
+
+/// A person who signs in through Logto (created on first sign-in).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct User {
+    pub id: crate::ids::UserId,
+    /// Logto's ID for the person; internal, never sent to clients.
+    #[serde(skip_serializing, default)]
+    pub logto_subject: String,
+    pub email: Option<String>,
+    pub email_verified: bool,
+    pub name: Option<String>,
+    pub created_at: Timestamp,
+}
+
+/// A user's membership of an org.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Member {
+    pub org_id: OrgId,
+    pub user: User,
+    pub role: crate::permissions::Role,
+    pub joined_at: Timestamp,
+}
+
+/// An org the user belongs to, with their role.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Membership {
+    pub org: Org,
+    pub role: crate::permissions::Role,
+}
+
+/// An open invitation to join an org (accepted by signing in with the invited, verified email).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Invitation {
+    pub id: crate::ids::InvitationId,
+    pub org_id: OrgId,
+    pub org_name: String,
+    /// Lower-cased.
+    pub email: String,
+    pub role: crate::permissions::Role,
+    pub invited_by: Option<String>,
+    pub created_at: Timestamp,
+    pub expires_at: Timestamp,
 }

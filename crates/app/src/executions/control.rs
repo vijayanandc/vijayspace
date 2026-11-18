@@ -10,7 +10,9 @@ use weft_domain::{
 use weft_engine::RunState;
 
 use super::start::{new_execution, run_job};
+use crate::tenancy::Actor;
 use crate::{AppError, Deps, retention};
+use weft_domain::permissions::Permission;
 
 async fn load(
     deps: &Deps,
@@ -48,7 +50,9 @@ async fn ensure_history_kept(
 }
 
 /// Resumes a failed execution at the step that failed, on the same pinned version.
-pub async fn retry_execution(deps: &Deps, org: OrgId, id: ExecutionId) -> Result<(), AppError> {
+pub async fn retry_execution(deps: &Deps, actor: &Actor, id: ExecutionId) -> Result<(), AppError> {
+    actor.require(Permission::ExecutionRerun)?;
+    let org = actor.org;
     let exe = load(deps, org, id).await?;
     if exe.status != ExecutionStatus::Failed {
         return Err(AppError::conflict(
@@ -77,9 +81,11 @@ pub async fn retry_execution(deps: &Deps, org: OrgId, id: ExecutionId) -> Result
 /// Starts a new execution with the same trigger data on the latest published version.
 pub async fn rerun_execution(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: ExecutionId,
 ) -> Result<ExecutionId, AppError> {
+    actor.require(Permission::ExecutionRerun)?;
+    let org = actor.org;
     let exe = load(deps, org, id).await?;
     let flow = deps
         .store
@@ -115,7 +121,9 @@ pub async fn rerun_execution(
 }
 
 /// Cancels a queued or waiting execution now; a running one stops at its next checkpoint.
-pub async fn cancel_execution(deps: &Deps, org: OrgId, id: ExecutionId) -> Result<(), AppError> {
+pub async fn cancel_execution(deps: &Deps, actor: &Actor, id: ExecutionId) -> Result<(), AppError> {
+    actor.require(Permission::ExecutionRerun)?;
+    let org = actor.org;
     let exe = load(deps, org, id).await?;
     if exe.status.is_terminal() {
         return Err(AppError::conflict(

@@ -23,7 +23,13 @@ pub struct Settings {
     /// Memory a script process may use (`WEFT_SCRIPT_MEMORY_MB`, 64..=65536, default 512); its
     /// address-space cap adds the script stack.
     pub script_memory_mb: u64,
-    pub smtp_url: Option<String>,
+    /// Logto sign-in; `None` = sign-in turned off (`WEFT_AUTH=off`, or no Logto settings).
+    pub sign_in: Option<crate::auth_settings::SignInSettings>,
+    /// Where people open Weft (`WEFT_APP_URL`; links in emails).
+    pub app_url: String,
+    /// `WEFT_OWNER_EMAILS`: verified emails that become owners of the default org.
+    pub owner_emails: Vec<String>,
+    pub mail: crate::auth_settings::MailSettings,
     pub mail_from: String,
     pub worker_concurrency: usize,
     pub oauth_clients: HashMap<String, OAuthClient>,
@@ -93,7 +99,7 @@ impl Settings {
                 .unwrap_or_else(|| "mysql://weft:weft@127.0.0.1:3306/weft".into()),
             bind: var("WEFT_BIND").unwrap_or_else(|| "0.0.0.0:8080".into()),
             client_origins: var("WEFT_CLIENT_ORIGINS")
-                .unwrap_or_else(|| "http://localhost:5173".into())
+                .unwrap_or_else(|| "http://127.0.0.1:3000,http://localhost:5173".into())
                 .split(',')
                 .map(|s| s.trim().to_owned())
                 .collect(),
@@ -105,7 +111,10 @@ impl Settings {
             http_proxy: var("WEFT_HTTP_PROXY"),
             allow_private_networks: var("WEFT_ALLOW_PRIVATE_NETWORKS")
                 .is_some_and(|v| v == "true" || v == "1"),
-            smtp_url: var("WEFT_SMTP_URL"),
+            sign_in: crate::auth_settings::sign_in(&var)?,
+            app_url: var("WEFT_APP_URL").unwrap_or_else(|| "http://127.0.0.1:3000".into()),
+            owner_emails: crate::auth_settings::owner_emails(var("WEFT_OWNER_EMAILS")),
+            mail: crate::auth_settings::mail(&var),
             mail_from: var("WEFT_MAIL_FROM").unwrap_or_else(|| "Weft <no-reply@localhost>".into()),
             worker_concurrency: var("WEFT_WORKER_CONCURRENCY")
                 .and_then(|v| v.parse().ok())

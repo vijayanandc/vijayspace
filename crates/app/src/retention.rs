@@ -4,9 +4,11 @@
 
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
-use weft_domain::{error_codes, ids::OrgId, model::Org};
+use weft_domain::{error_codes, model::Org};
 
+use crate::tenancy::Actor;
 use crate::{AppError, Deps, ports::Purged};
+use weft_domain::permissions::Permission;
 
 /// Rows per batch (executions, events or snapshots; step runs go in smaller chunks).
 const BATCH: u32 = 200;
@@ -107,9 +109,11 @@ async fn sweep_org(
 /// Sets the org's retention (`None` = the server default).
 pub async fn set_retention_days(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     days: Option<u32>,
 ) -> Result<Org, AppError> {
+    actor.require(Permission::OrgManage)?;
+    let org = actor.org;
     if let Some(d) = days
         && !(MIN_DAYS..=MAX_DAYS).contains(&d)
     {

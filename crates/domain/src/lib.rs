@@ -6,6 +6,7 @@ pub mod error_codes;
 pub mod flow;
 pub mod ids;
 pub mod model;
+pub mod permissions;
 pub mod schedule;
 pub mod text;
 

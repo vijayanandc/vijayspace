@@ -10,7 +10,9 @@ use weft_domain::{
     model::{Flow, FlowVersion, RegistrationKind, TriggerRegistration},
 };
 
+use crate::tenancy::Actor;
 use crate::{AppError, Deps, ports::FlowListRow, triggers::registration_kind};
+use weft_domain::permissions::Permission;
 
 /// A flow plus its trigger registration (what the API shows).
 #[derive(Debug, Clone)]
@@ -40,11 +42,13 @@ pub(crate) async fn registration(
 /// Creates a flow (webhook trigger by default) with its trigger registration.
 pub async fn create_flow(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     name: &str,
     description: Option<&str>,
     definition: Option<FlowDefinition>,
 ) -> Result<FlowView, AppError> {
+    actor.require(Permission::FlowEdit)?;
+    let org = actor.org;
     let name = name.trim();
     if name.is_empty() {
         return Err(AppError::validation(
@@ -67,6 +71,7 @@ pub async fn create_flow(
         published_version: None,
         created_at: now,
         updated_at: now,
+        created_by: actor.user,
     };
     let registration = TriggerRegistration {
         id: deps.new_registration_id(),
@@ -85,23 +90,29 @@ pub async fn create_flow(
     Ok(FlowView { flow, registration })
 }
 
-pub async fn get_flow(deps: &Deps, org: OrgId, id: FlowId) -> Result<FlowView, AppError> {
+pub async fn get_flow(deps: &Deps, actor: &Actor, id: FlowId) -> Result<FlowView, AppError> {
+    actor.require(Permission::FlowView)?;
+    let org = actor.org;
     let flow = load(deps, org, id).await?;
     let registration = registration(deps, id).await?;
     Ok(FlowView { flow, registration })
 }
 
-pub async fn list_flows(deps: &Deps, org: OrgId) -> Result<Vec<FlowListRow>, AppError> {
+pub async fn list_flows(deps: &Deps, actor: &Actor) -> Result<Vec<FlowListRow>, AppError> {
+    actor.require(Permission::FlowView)?;
+    let org = actor.org;
     deps.store.list_flows(org).await
 }
 
 pub async fn update_flow(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: FlowId,
     name: Option<&str>,
     description: Option<Option<&str>>,
 ) -> Result<FlowView, AppError> {
+    actor.require(Permission::FlowEdit)?;
+    let org = actor.org;
     let flow = load(deps, org, id).await?;
     let name = name
         .map(str::trim)
@@ -112,17 +123,19 @@ pub async fn update_flow(
     deps.store
         .update_flow_meta(org, id, &name, description.as_deref(), deps.clock.now())
         .await?;
-    get_flow(deps, org, id).await
+    get_flow(deps, actor, id).await
 }
 
 /// Saves the draft (optimistic concurrency on `revision`) and returns validation issues.
 pub async fn save_draft(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: FlowId,
     definition: &FlowDefinition,
     revision: u32,
 ) -> Result<(u32, Vec<Issue>), AppError> {
+    actor.require(Permission::FlowEdit)?;
+    let org = actor.org;
     load(deps, org, id).await?;
     let new_revision = deps
         .store
@@ -132,8 +145,10 @@ pub async fn save_draft(
 }
 
 /// Soft-deletes a flow and deactivates its trigger.
-pub async fn delete_flow(deps: &Deps, org: OrgId, id: FlowId) -> Result<(), AppError> {
+pub async fn delete_flow(deps: &Deps, actor: &Actor, id: FlowId) -> Result<(), AppError> {
+    let org = actor.org;
     let mut flow = load(deps, org, id).await?;
+    actor.require_on(Permission::FlowDelete, flow.created_by)?;
     flow.is_enabled = false;
     crate::triggers::sync_registration(deps, &flow, None).await?;
     deps.store.soft_delete_flow(org, id, deps.clock.now()).await
@@ -141,22 +156,26 @@ pub async fn delete_flow(deps: &Deps, org: OrgId, id: FlowId) -> Result<(), AppE
 
 pub async fn list_versions(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: FlowId,
 ) -> Result<Vec<FlowVersion>, AppError> {
+    actor.require(Permission::FlowView)?;
+    let org = actor.org;
     load(deps, org, id).await?;
     deps.store.list_versions(org, id).await
 }
 
 /// Captures the next webhook/app event as the trigger sample for five minutes.
-pub async fn start_listening(deps: &Deps, org: OrgId, id: FlowId) -> Result<FlowView, AppError> {
+pub async fn start_listening(deps: &Deps, actor: &Actor, id: FlowId) -> Result<FlowView, AppError> {
+    actor.require(Permission::FlowEdit)?;
+    let org = actor.org;
     load(deps, org, id).await?;
     let reg = registration(deps, id).await?;
     let now = deps.clock.now();
     deps.store
         .set_listening(reg.id, Some(now + Duration::minutes(5)), now)
         .await?;
-    get_flow(deps, org, id).await
+    get_flow(deps, actor, id).await
 }
 
 /// Public URL of a registration for webhooks.

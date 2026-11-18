@@ -8,15 +8,17 @@ use sha2::{Digest, Sha256};
 use weft_connector_sdk::{AuthKind, oauth};
 use weft_domain::{
     error_codes,
-    ids::{ConnectionId, OrgId},
+    ids::ConnectionId,
     model::{Connection, ConnectionStatus},
 };
 
-use super::{handle::encrypt, manage::split_fields, test_connection};
+use super::{handle::encrypt, manage::split_fields};
+use crate::tenancy::Actor;
 use crate::{
     AppError, Deps,
     ports::{OAuthState, StoredConnection},
 };
+use weft_domain::permissions::Permission;
 
 fn state_aad(hash: &[u8]) -> Vec<u8> {
     format!("oauth|{}", hex::encode(hash)).into_bytes()
@@ -25,13 +27,15 @@ fn state_aad(hash: &[u8]) -> Vec<u8> {
 /// Returns the provider authorization URL. `config` holds non-secret auth fields (e.g. region).
 pub async fn oauth_start(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     connector_key: &str,
     name: &str,
     connection_id: Option<ConnectionId>,
     config: &Map<String, Value>,
     return_to: &str,
 ) -> Result<String, AppError> {
+    actor.require(Permission::ConnectionCreate)?;
+    let org = actor.org;
     let c = deps
         .connectors
         .get(connector_key)
@@ -92,6 +96,7 @@ pub async fn oauth_start(
                 verifier_cipher,
                 return_to: return_to.to_owned(),
                 expires_at: now + Duration::minutes(10),
+                created_by: actor.user,
             },
             now,
         )
@@ -224,6 +229,7 @@ async fn finish_callback(
             status: ConnectionStatus::Active,
             created_at: now,
             updated_at: now,
+            created_by: st.created_by,
         },
         |s| {
             let mut c = s.connection.clone();
@@ -244,6 +250,6 @@ async fn finish_callback(
     } else {
         deps.store.insert_connection(&stored).await?;
     }
-    let _ = test_connection(deps, st.org_id, connection.id).await;
+    let _ = super::manage::check_connection(deps, st.org_id, connection.id).await;
     Ok(connection.id)
 }

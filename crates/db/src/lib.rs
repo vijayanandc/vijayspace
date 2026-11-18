@@ -11,9 +11,12 @@ mod flows;
 mod jobs;
 mod limits;
 mod links;
+mod members;
 mod orgs;
 mod retention;
 mod rows;
+mod tenancy;
+mod tenancy_rows;
 mod triggers;
 mod usage;
 

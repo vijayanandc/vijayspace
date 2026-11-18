@@ -276,7 +276,9 @@ async fn upsert_locked(
 /// A conflict (side B taken by another source record) is permanent; anything else may pass.
 fn link_save_error(e: &crate::AppError) -> ConnectorError {
     match e.kind {
-        crate::ErrorKind::Conflict => ConnectorError::invalid(e.message.clone()),
+        crate::ErrorKind::Conflict | crate::ErrorKind::Forbidden => {
+            ConnectorError::invalid(e.message.clone())
+        }
         crate::ErrorKind::Validation
         | crate::ErrorKind::NotFound
         | crate::ErrorKind::Unauthorized

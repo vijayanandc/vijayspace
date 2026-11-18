@@ -5,7 +5,9 @@ mod connections;
 mod executions;
 mod flows;
 mod hooks;
+mod members;
 mod misc;
+mod orgs;
 mod recipes;
 
 use axum::Router;
@@ -15,6 +17,8 @@ use crate::state::ApiState;
 pub fn router() -> Router<ApiState> {
     Router::new()
         .merge(misc::router())
+        .merge(orgs::router())
+        .merge(members::router())
         .merge(catalog::router())
         .merge(connections::router())
         .merge(flows::router())

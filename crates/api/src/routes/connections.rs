@@ -17,7 +17,7 @@ use weft_domain::{ids::ConnectionId, model::Connection};
 
 use crate::{
     error::{ApiResult, bad_id},
-    extract::Org,
+    extract::Acting,
     state::ApiState,
 };
 
@@ -52,54 +52,57 @@ struct CreateBody {
 
 async fn usage(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
 ) -> ApiResult<Json<Vec<limits_uc::UsageView>>> {
-    Ok(Json(limits_uc::usage_today(&s.deps, org).await?))
+    Ok(Json(limits_uc::usage_today(&s.deps, &actor).await?))
 }
 
 async fn limits(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path(raw): Path<String>,
 ) -> ApiResult<Json<limits_uc::LimitsView>> {
     Ok(Json(
-        limits_uc::connection_limits(&s.deps, org, id(&raw)?).await?,
+        limits_uc::connection_limits(&s.deps, &actor, id(&raw)?).await?,
     ))
 }
 
 /// `null` or absent = the connector default; `0` = no limit.
 async fn set_limits(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path(raw): Path<String>,
     Json(overrides): Json<ConnectionLimits>,
 ) -> ApiResult<Json<limits_uc::LimitsView>> {
     Ok(Json(
-        limits_uc::set_connection_limits(&s.deps, org, id(&raw)?, overrides).await?,
+        limits_uc::set_connection_limits(&s.deps, &actor, id(&raw)?, overrides).await?,
     ))
 }
 
-async fn list(State(s): State<ApiState>, Org(org): Org) -> ApiResult<Json<Vec<Connection>>> {
-    Ok(Json(uc::list_connections(&s.deps, org).await?))
+async fn list(
+    State(s): State<ApiState>,
+    Acting(actor): Acting,
+) -> ApiResult<Json<Vec<Connection>>> {
+    Ok(Json(uc::list_connections(&s.deps, &actor).await?))
 }
 
 async fn create(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Json(b): Json<CreateBody>,
 ) -> ApiResult<(StatusCode, Json<Connection>)> {
     Ok((
         StatusCode::CREATED,
-        Json(uc::create_connection(&s.deps, org, &b.connector, &b.name, &b.fields).await?),
+        Json(uc::create_connection(&s.deps, &actor, &b.connector, &b.name, &b.fields).await?),
     ))
 }
 
 async fn one(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path(raw): Path<String>,
 ) -> ApiResult<Json<Connection>> {
-    Ok(Json(uc::get_connection(&s.deps, org, id(&raw)?).await?))
+    Ok(Json(uc::get_connection(&s.deps, &actor, id(&raw)?).await?))
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,14 +113,14 @@ struct UpdateBody {
 
 async fn update(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path(raw): Path<String>,
     Json(b): Json<UpdateBody>,
 ) -> ApiResult<Json<Connection>> {
     Ok(Json(
         uc::update_connection(
             &s.deps,
-            org,
+            &actor,
             id(&raw)?,
             b.name.as_deref(),
             b.fields.as_ref(),
@@ -128,19 +131,19 @@ async fn update(
 
 async fn remove(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path(raw): Path<String>,
 ) -> ApiResult<StatusCode> {
-    uc::delete_connection(&s.deps, org, id(&raw)?).await?;
+    uc::delete_connection(&s.deps, &actor, id(&raw)?).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn test(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path(raw): Path<String>,
 ) -> ApiResult<Json<uc::ConnectionTest>> {
-    Ok(Json(uc::test_connection(&s.deps, org, id(&raw)?).await?))
+    Ok(Json(uc::test_connection(&s.deps, &actor, id(&raw)?).await?))
 }
 
 #[derive(Debug, Deserialize)]
@@ -155,13 +158,13 @@ struct OAuthStartBody {
 
 async fn oauth_start(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Json(b): Json<OAuthStartBody>,
 ) -> ApiResult<Json<Value>> {
     let existing = b.connection_id.as_deref().map(id).transpose()?;
     let url = uc::oauth_start(
         &s.deps,
-        org,
+        &actor,
         &b.connector,
         &b.name,
         existing,

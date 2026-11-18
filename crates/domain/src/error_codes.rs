@@ -21,6 +21,21 @@ pub const CONNECTOR_NOT_FOUND: &str = "connector.not_found";
 pub const ACTION_NOT_FOUND: &str = "connector.action_not_found";
 pub const OAUTH_STATE_INVALID: &str = "oauth.state_invalid";
 
+/// No valid sign-in (missing, expired or revoked token).
+pub const AUTH_UNAUTHENTICATED: &str = "auth.unauthenticated";
+/// Signed in, but the role in this org does not allow the action.
+pub const AUTH_FORBIDDEN: &str = "auth.forbidden";
+/// The identity provider could not be reached to check a sign-in.
+pub const AUTH_UNAVAILABLE: &str = "auth.unavailable";
+pub const ORG_NOT_FOUND: &str = "org.not_found";
+pub const MEMBER_NOT_FOUND: &str = "member.not_found";
+/// The change would leave the org without an owner.
+pub const MEMBER_LAST_OWNER: &str = "member.last_owner";
+pub const MEMBER_EXISTS: &str = "member.exists";
+pub const INVITATION_NOT_FOUND: &str = "invitation.not_found";
+/// The signed-in user's verified email is not the invited address.
+pub const INVITATION_EMAIL_MISMATCH: &str = "invitation.email_mismatch";
+
 pub const EXECUTION_NOT_FOUND: &str = "execution.not_found";
 pub const EXECUTION_NOT_RETRYABLE: &str = "execution.not_retryable";
 

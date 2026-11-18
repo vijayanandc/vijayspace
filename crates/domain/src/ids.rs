@@ -82,6 +82,8 @@ define_id!(JobId, "job");
 define_id!(LinkId, "lnk");
 define_id!(SubscriptionId, "sub");
 define_id!(BackfillId, "bkf");
+define_id!(UserId, "usr");
+define_id!(InvitationId, "inv");
 
 #[cfg(test)]
 mod tests {

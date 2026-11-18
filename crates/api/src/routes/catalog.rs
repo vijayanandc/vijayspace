@@ -10,7 +10,7 @@ use weft_app::AppError;
 use weft_connector_sdk::ConnectorManifest;
 use weft_domain::error_codes;
 
-use crate::{dto::DynamicRequest, error::ApiResult, extract::Org, state::ApiState};
+use crate::{dto::DynamicRequest, error::ApiResult, extract::Acting, state::ApiState};
 
 pub fn router() -> Router<ApiState> {
     Router::new()
@@ -38,13 +38,13 @@ async fn one(
 
 async fn options(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path((key, source)): Path<(String, String)>,
     Json(req): Json<DynamicRequest>,
 ) -> ApiResult<Json<Value>> {
     let options = weft_app::connections::load_options(
         &s.deps,
-        org,
+        &actor,
         &key,
         &source,
         req.connection_id.as_deref(),
@@ -56,13 +56,13 @@ async fn options(
 
 async fn fields(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path((key, source)): Path<(String, String)>,
     Json(req): Json<DynamicRequest>,
 ) -> ApiResult<Json<Value>> {
     let fields = weft_app::connections::load_fields(
         &s.deps,
-        org,
+        &actor,
         &key,
         &source,
         req.connection_id.as_deref(),

@@ -22,11 +22,12 @@ One line per third-party crate: what it is for. Add a line here in the same chan
 | axum, tower, tower-http | api | HTTP server, middleware (CORS, body limit, tracing) |
 | http-body-util | server (tests) | Reading response bodies in scenario tests |
 | sqlx (`mysql`, `json`, `chrono`, `uuid`, `migrate`) | db | MySQL access and embedded migrations |
-| reqwest (`rustls`) | http | Outbound HTTP behind the SSRF guard |
+| reqwest (`rustls`) | http, infra | Outbound HTTP behind the SSRF guard (http); calls to the configured Logto tenant and ZeptoMail (infra) |
+| jsonwebtoken (`=9.3.1`) | infra | Verifying Logto access tokens (JWTs) against the tenant's JWKS; uses `ring`, already in the tree |
 | aes-gcm | infra | Encrypting connection secrets (nonces from its `OsRng`) |
 | lettre | infra | SMTP for the email action |
 | tracing, tracing-subscriber | all | Structured logs |
 | clap | server | `weft` subcommands |
 | url, urlencoding | http, app, connector-sdk, connectors | URL parsing and encoding |
 | proptest | engine (tests) | Property tests for the interpreter |
-| wiremock | connectors, server (tests) | Mock third-party APIs in tests |
+| wiremock | connectors, http, infra, server (tests) | Mock third-party APIs in tests (Logto, ZeptoMail) |

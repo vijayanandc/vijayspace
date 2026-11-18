@@ -179,6 +179,8 @@ impl ExecutionSummaryDto {
 pub struct ExecutionDetailDto {
     #[serde(flatten)]
     pub summary: ExecutionSummaryDto,
+    /// True for viewers: trigger data and step inputs and outputs are left out.
+    pub payloads_hidden: bool,
     pub trigger_data: Value,
     pub steps: Vec<StepRun>,
 }

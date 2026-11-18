@@ -16,7 +16,8 @@ pub mod recipes;
 pub mod retention;
 pub mod runner;
 pub mod sync;
+pub mod tenancy;
 pub mod triggers;
 
-pub use deps::{AppConfig, Deps};
+pub use deps::{AppConfig, Deps, SignInConfig};
 pub use error::{AppError, ErrorKind};

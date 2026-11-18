@@ -11,7 +11,7 @@ use weft_app::{
 use weft_domain::{
     ids::{
         ConnectionId, ExecutionId, FlowId, FlowVersionId, OrgId, RegistrationId, StepRunId,
-        SubscriptionId, TriggerEventId,
+        SubscriptionId, TriggerEventId, UserId,
     },
     model::{Connection, Execution, Flow, FlowVersion, Org, StepRun, TriggerRegistration},
 };
@@ -52,6 +52,7 @@ pub(crate) struct FlowRow {
     pub published_version: Option<u32>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub created_by: Option<Uuid>,
 }
 
 impl TryFrom<FlowRow> for Flow {
@@ -69,6 +70,7 @@ impl TryFrom<FlowRow> for Flow {
             published_version: r.published_version,
             created_at: r.created_at,
             updated_at: r.updated_at,
+            created_by: r.created_by.map(UserId::from_uuid),
         })
     }
 }
@@ -268,6 +270,7 @@ pub(crate) struct ConnectionRow {
     pub status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub created_by: Option<Uuid>,
 }
 
 impl TryFrom<ConnectionRow> for StoredConnection {
@@ -283,6 +286,7 @@ impl TryFrom<ConnectionRow> for StoredConnection {
                 status: parse_enum(&r.status)?,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
+                created_by: r.created_by.map(UserId::from_uuid),
             },
             ciphertext: r.secret_ciphertext,
             key_id: r.secret_key_id,

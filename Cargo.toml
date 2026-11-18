@@ -57,6 +57,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 clap = { version = "4", features = ["derive", "env"] }
 url = "2"
 urlencoding = "2"
+# Sign-in: verifying Logto JWTs (ES256/ES384/RS256 via ring, already in the tree for rustls).
+jsonwebtoken = "=9.3.1"
 # Test-only
 proptest = "1"
 wiremock = "0.6"

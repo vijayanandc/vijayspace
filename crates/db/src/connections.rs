@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use sqlx::types::Json;
 use weft_app::ports::{ConnectionRepo, OAuthState, Res, StoredConnection};
 use weft_domain::{
-    ids::{ConnectionId, OrgId},
+    ids::{ConnectionId, OrgId, UserId},
     model::{Connection, ConnectionStatus},
 };
 
@@ -15,7 +15,7 @@ use crate::{
     rows::ConnectionRow,
 };
 
-const COLUMNS: &str = "id, org_id, connector_key, name, config, secret_ciphertext, secret_key_id, status, created_at, updated_at";
+const COLUMNS: &str = "id, org_id, connector_key, name, config, secret_ciphertext, secret_key_id, status, created_at, updated_at, created_by";
 
 #[derive(Debug, sqlx::FromRow)]
 struct StateRow {
@@ -28,6 +28,7 @@ struct StateRow {
     verifier_cipher: Option<Vec<u8>>,
     return_to: String,
     expires_at: DateTime<Utc>,
+    created_by: Option<uuid::Uuid>,
 }
 
 #[async_trait]
@@ -35,7 +36,7 @@ impl ConnectionRepo for MySqlStore {
     async fn insert_connection(&self, c: &StoredConnection) -> Res<()> {
         let conn = &c.connection;
         sqlx::query(&format!(
-            "INSERT INTO connections ({COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO connections ({COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         ))
         .bind(conn.id.as_uuid())
         .bind(conn.org_id.as_uuid())
@@ -47,6 +48,7 @@ impl ConnectionRepo for MySqlStore {
         .bind(enum_str(&conn.status))
         .bind(conn.created_at)
         .bind(conn.updated_at)
+        .bind(conn.created_by.map(|u| u.as_uuid()))
         .execute(&self.pool)
         .await
         .map_err(db_err)?;
@@ -135,8 +137,8 @@ impl ConnectionRepo for MySqlStore {
             .await
             .map_err(db_err)?;
         sqlx::query(
-            "INSERT INTO oauth_states (state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO oauth_states (state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_at, created_by) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&s.state_hash)
         .bind(s.org_id.as_uuid())
@@ -148,6 +150,7 @@ impl ConnectionRepo for MySqlStore {
         .bind(&s.return_to)
         .bind(s.expires_at)
         .bind(now)
+        .bind(s.created_by.map(|u| u.as_uuid()))
         .execute(&self.pool)
         .await
         .map_err(db_err)?;
@@ -161,7 +164,7 @@ impl ConnectionRepo for MySqlStore {
     ) -> Res<Option<OAuthState>> {
         let mut tx = self.pool.begin().await.map_err(db_err)?;
         let row: Option<StateRow> = sqlx::query_as(
-            "SELECT state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at FROM oauth_states WHERE state_hash = ? FOR UPDATE",
+            "SELECT state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_by FROM oauth_states WHERE state_hash = ? FOR UPDATE",
         )
         .bind(state_hash)
         .fetch_optional(&mut *tx)
@@ -183,6 +186,7 @@ impl ConnectionRepo for MySqlStore {
             verifier_cipher: r.verifier_cipher,
             return_to: r.return_to,
             expires_at: r.expires_at,
+            created_by: r.created_by.map(UserId::from_uuid),
         }))
     }
 }

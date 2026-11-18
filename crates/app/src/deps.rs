@@ -22,6 +22,25 @@ pub struct AppConfig {
     pub default_retention_days: u32,
     /// OAuth apps per connector key.
     pub oauth_clients: HashMap<String, OAuthClient>,
+    /// Where people open Weft (links in emails), e.g. `https://flow.example.com`.
+    pub app_url: String,
+    /// Verified emails that become owners of the default org when they sign in (lower-cased).
+    pub owner_emails: Vec<String>,
+    /// The sign-in settings the web client needs; `None` when sign-in is turned off.
+    pub sign_in: Option<SignInConfig>,
+}
+
+/// What the web client needs to sign in with Logto (public values only).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SignInConfig {
+    /// The Logto tenant, e.g. `https://tenant.logto.app`.
+    pub endpoint: String,
+    /// The single-page app's ID in Logto.
+    pub app_id: String,
+    /// The API resource to request tokens for (JWTs); `None` = opaque tokens, checked by
+    /// introspection.
+    pub resource: Option<String>,
+    pub scopes: Vec<String>,
 }
 
 /// All dependencies of the use cases.
@@ -33,6 +52,8 @@ pub struct Deps {
     pub secrets: Arc<dyn SecretBox>,
     pub http: Arc<dyn HttpSender>,
     pub mailer: Option<Arc<dyn Mailer>>,
+    /// Checks sign-in tokens; `None` turns sign-in off (local development and tests).
+    pub identity: Option<Arc<dyn crate::ports::IdentityVerifier>>,
     /// Runs custom functions off the async threads (`core.script`).
     pub scripts: Option<Arc<dyn ScriptRunner>>,
     pub connectors: Arc<ConnectorRegistry>,

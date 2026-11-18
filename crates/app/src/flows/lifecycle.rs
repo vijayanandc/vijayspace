@@ -3,15 +3,23 @@
 use weft_domain::{
     error_codes,
     flow::{Issue, has_errors, validate},
-    ids::{FlowId, OrgId},
+    ids::FlowId,
     model::{FlowVersion, VersionKind},
 };
 
 use super::manage::{FlowView, get_flow, load};
+use crate::tenancy::Actor;
 use crate::{AppError, Deps, triggers::sync_registration};
+use weft_domain::permissions::Permission;
 
 /// Validates the current draft.
-pub async fn validate_draft(deps: &Deps, org: OrgId, id: FlowId) -> Result<Vec<Issue>, AppError> {
+pub async fn validate_draft(
+    deps: &Deps,
+    actor: &Actor,
+    id: FlowId,
+) -> Result<Vec<Issue>, AppError> {
+    actor.require(Permission::FlowView)?;
+    let org = actor.org;
     let flow = load(deps, org, id).await?;
     Ok(validate(&flow.draft, deps.connectors.as_ref()))
 }
@@ -19,9 +27,11 @@ pub async fn validate_draft(deps: &Deps, org: OrgId, id: FlowId) -> Result<Vec<I
 /// Publishes the draft as a new immutable version; hot-swaps the trigger when enabled.
 pub async fn publish_flow(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: FlowId,
 ) -> Result<(FlowVersion, Vec<Issue>), AppError> {
+    actor.require(Permission::FlowEdit)?;
+    let org = actor.org;
     let flow = load(deps, org, id).await?;
     let issues = validate(&flow.draft, deps.connectors.as_ref());
     if has_errors(&issues) {
@@ -54,10 +64,12 @@ pub async fn publish_flow(
 /// Turns a published flow on or off.
 pub async fn set_enabled(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: FlowId,
     enabled: bool,
 ) -> Result<FlowView, AppError> {
+    actor.require(Permission::FlowEdit)?;
+    let org = actor.org;
     let flow = load(deps, org, id).await?;
     let published = match flow.published_version_id {
         Some(v) => deps.store.get_version(v).await?,
@@ -74,5 +86,5 @@ pub async fn set_enabled(
         .await?;
     let flow = load(deps, org, id).await?;
     sync_registration(deps, &flow, published.as_ref().map(|v| &v.definition)).await?;
-    get_flow(deps, org, id).await
+    get_flow(deps, actor, id).await
 }

@@ -10,19 +10,23 @@ use weft_domain::{
 use weft_expr::render_value;
 
 use super::manage::{load, registration};
+use crate::tenancy::Actor;
 use crate::{
     AppError, Deps,
     executions::start::new_execution,
     runner::{call_action, step_error},
 };
+use weft_domain::permissions::Permission;
 
 /// Runs the current draft once with `payload` as the trigger output.
 pub async fn test_run(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: FlowId,
     payload: Option<Value>,
 ) -> Result<ExecutionId, AppError> {
+    actor.require(Permission::FlowEdit)?;
+    let org = actor.org;
     let flow = load(deps, org, id).await?;
     let issues = validate(&flow.draft, deps.connectors.as_ref());
     if has_errors(&issues) {
@@ -56,10 +60,12 @@ pub async fn test_run(
 /// Runs the published version once with `payload` as the trigger output.
 pub async fn manual_run(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: FlowId,
     payload: Option<Value>,
 ) -> Result<ExecutionId, AppError> {
+    actor.require(Permission::FlowEdit)?;
+    let org = actor.org;
     let flow = load(deps, org, id).await?;
     let version_id = flow.published_version_id.ok_or_else(|| {
         AppError::conflict(error_codes::FLOW_NOT_PUBLISHED, "Publish the flow first")
@@ -110,11 +116,13 @@ async fn start(
 /// Renders one action step against a sample context and calls it once.
 pub async fn test_step(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: FlowId,
     key: &str,
     context: Option<&Value>,
 ) -> Result<Value, AppError> {
+    actor.require(Permission::FlowEdit)?;
+    let org = actor.org;
     let flow = load(deps, org, id).await?;
     let step = flow
         .draft

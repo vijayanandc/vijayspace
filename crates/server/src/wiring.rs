@@ -3,18 +3,24 @@
 use std::sync::Arc;
 
 use tokio::sync::Notify;
-use weft_app::{AppConfig, Deps, connections::handle::RefreshLocks, runner::plan_cache::PlanCache};
+use weft_app::{
+    AppConfig, Deps, SignInConfig, connections::handle::RefreshLocks, ports::IdentityVerifier,
+    runner::plan_cache::PlanCache,
+};
 use weft_connector_sdk::ScriptRunner;
 use weft_connector_sdk::{ConnectorRegistry, Mailer};
 use weft_db::MySqlStore;
 use weft_domain::ids::OrgId;
 use weft_http::{ReqwestSender, SsrfPolicy};
 use weft_infra::{
-    AesGcmSecretBox, LogMailer, PooledScriptRunner, ProcessScriptRunner, SmtpMailer, SystemClock,
-    UuidV7Ids,
+    AesGcmSecretBox, LogMailer, LogtoSettings, LogtoVerifier, PooledScriptRunner,
+    ProcessScriptRunner, SmtpMailer, SystemClock, UuidV7Ids, ZeptoMailer,
 };
 
-use crate::config::Settings;
+use crate::{
+    auth_settings::{MailSettings, split_from},
+    config::Settings,
+};
 
 /// The default org used while authentication is disabled (fixed so restarts keep it).
 pub const DEFAULT_ORG: uuid::Uuid =
@@ -46,15 +52,13 @@ pub fn build(settings: &Settings, store: MySqlStore) -> anyhow::Result<Deps> {
     } else {
         SsrfPolicy::public_only()
     };
-    let mailer: Arc<dyn Mailer> = match &settings.smtp_url {
-        Some(url) => {
-            Arc::new(SmtpMailer::new(url, &settings.mail_from).map_err(anyhow::Error::msg)?)
-        }
-        None => Arc::new(LogMailer),
-    };
+    let mailer = mailer(settings)?;
+    let clock: Arc<dyn weft_app::ports::Clock> = Arc::new(SystemClock);
+    let identity = identity(settings, &clock)?;
     Ok(Deps {
+        identity,
         store: Arc::new(store),
-        clock: Arc::new(SystemClock),
+        clock,
         ids: Arc::new(UuidV7Ids),
         secrets: Arc::new(secrets),
         http: Arc::new(
@@ -69,12 +73,61 @@ pub fn build(settings: &Settings, store: MySqlStore) -> anyhow::Result<Deps> {
             default_retention_days: settings.retention_days,
             default_org_id: OrgId::from_uuid(DEFAULT_ORG),
             oauth_clients: settings.oauth_clients.clone(),
+            app_url: settings.app_url.clone(),
+            owner_emails: settings.owner_emails.clone(),
+            sign_in: settings.sign_in.as_ref().map(|s| SignInConfig {
+                endpoint: s.endpoint.clone(),
+                app_id: s.client_app_id.clone(),
+                resource: s.resource.clone(),
+                scopes: s.scopes.clone(),
+            }),
         }),
         plans: Arc::new(PlanCache::default()),
         wake: Arc::new(Notify::new()),
         limiters: Arc::new(weft_app::limits::ConnectionLimiters::default()),
         refresh_locks: Arc::new(RefreshLocks::default()),
     })
+}
+
+fn mailer(settings: &Settings) -> anyhow::Result<Arc<dyn Mailer>> {
+    Ok(match &settings.mail {
+        MailSettings::ZeptoMail { api_key, url } => {
+            let (name, address) = split_from(&settings.mail_from);
+            Arc::new(ZeptoMailer::new(url, api_key, &address, &name).map_err(anyhow::Error::msg)?)
+        }
+        MailSettings::Smtp { url } => {
+            Arc::new(SmtpMailer::new(url, &settings.mail_from).map_err(anyhow::Error::msg)?)
+        }
+        MailSettings::Log => Arc::new(LogMailer),
+    })
+}
+
+/// Logto sign-in, or `None` (with a warning) when it is turned off.
+fn identity(
+    settings: &Settings,
+    clock: &Arc<dyn weft_app::ports::Clock>,
+) -> anyhow::Result<Option<Arc<dyn IdentityVerifier>>> {
+    let Some(s) = &settings.sign_in else {
+        tracing::warn!(
+            "sign-in is turned off (WEFT_AUTH=off or no WEFT_LOGTO_ENDPOINT): every request acts as              an owner of the default org. Never run like this outside development."
+        );
+        return Ok(None);
+    };
+    let verifier = LogtoVerifier::new(
+        LogtoSettings {
+            endpoint: s.endpoint.clone(),
+            app_id: s.app_id.clone(),
+            app_secret: s.app_secret.clone(),
+            resource: s.resource.clone(),
+            client_ids: vec![s.client_app_id.clone()],
+            required_scopes: s.scopes.clone(),
+            cache_ttl: std::time::Duration::from_secs(s.cache_secs),
+            cache_size: 10_000,
+        },
+        Arc::clone(clock),
+    )
+    .map_err(anyhow::Error::msg)?;
+    Ok(Some(Arc::new(verifier)))
 }
 
 /// Custom functions run in child processes under OS limits unless isolation is turned off.

@@ -50,6 +50,24 @@ impl OrgRepo for MySqlStore {
         Ok(rows.into_iter().map(Org::from).collect())
     }
 
+    async fn update_org_profile(
+        &self,
+        id: OrgId,
+        name: &str,
+        timezone: &str,
+        now: DateTime<Utc>,
+    ) -> Res<()> {
+        sqlx::query("UPDATE orgs SET name = ?, timezone = ?, updated_at = ? WHERE id = ?")
+            .bind(name)
+            .bind(timezone)
+            .bind(now)
+            .bind(id.as_uuid())
+            .execute(&self.pool)
+            .await
+            .map_err(db_err)?;
+        Ok(())
+    }
+
     async fn set_retention_days(
         &self,
         id: OrgId,

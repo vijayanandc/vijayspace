@@ -78,6 +78,7 @@ async fn concurrent_forced_refreshes_call_the_token_endpoint_once() {
         status: weft_domain::model::ConnectionStatus::Active,
         created_at: now,
         updated_at: now,
+        created_by: None,
     };
     let secrets = json!({"access_token": "old-token", "refresh_token": "r1",
         "expires_at": (now + chrono::Duration::hours(1)).to_rfc3339()});

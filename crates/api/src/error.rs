@@ -26,6 +26,7 @@ impl IntoResponse for ApiError {
             ErrorKind::NotFound => StatusCode::NOT_FOUND,
             ErrorKind::Conflict => StatusCode::CONFLICT,
             ErrorKind::Unauthorized => StatusCode::UNAUTHORIZED,
+            ErrorKind::Forbidden => StatusCode::FORBIDDEN,
             ErrorKind::BadGateway => StatusCode::BAD_GATEWAY,
             ErrorKind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         };

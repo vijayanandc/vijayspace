@@ -3,19 +3,16 @@
 use chrono::SecondsFormat;
 use serde_json::{Value, json};
 use weft_connector_sdk::EventItem;
-use weft_domain::{
-    error_codes,
-    flow::TriggerNode,
-    ids::{FlowId, OrgId},
-    model::ExecutionMode,
-};
+use weft_domain::{error_codes, flow::TriggerNode, ids::FlowId, model::ExecutionMode};
 
+use crate::tenancy::Actor;
 use crate::{
     AppError, Deps,
     limits::RequestClass,
     runner::action::{action_ctx_for, load_connection},
     triggers::ingress_items,
 };
+use weft_domain::permissions::Permission;
 
 /// Upper bound for one backfill call.
 pub const MAX_BACKFILL: u32 = 2_000;
@@ -32,11 +29,13 @@ pub struct BackfillPage {
 /// at most [`MAX_BACKFILL`]) and starts a backfill execution for each.
 pub async fn backfill(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     flow_id: FlowId,
     limit: u32,
     cursor: Option<Value>,
 ) -> Result<BackfillPage, AppError> {
+    actor.require(Permission::FlowEdit)?;
+    let org = actor.org;
     // Runs inside the HTTP request: one call is bounded, and `next_cursor` continues it.
     let limit = limit.clamp(1, MAX_BACKFILL);
     let flow = deps

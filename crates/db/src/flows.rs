@@ -22,7 +22,7 @@ use crate::{
 };
 
 const FLOW_COLUMNS: &str = "f.id, f.org_id, f.name, f.description, f.is_enabled, f.draft_definition, f.draft_revision, \
-    f.published_version_id, v.version AS published_version, f.created_at, f.updated_at";
+    f.published_version_id, v.version AS published_version, f.created_at, f.updated_at, f.created_by";
 
 #[derive(Debug, sqlx::FromRow)]
 struct FlowListSql {
@@ -37,7 +37,7 @@ struct FlowListSql {
 impl FlowRepo for MySqlStore {
     async fn insert_flow(&self, flow: &Flow, reg: &TriggerRegistration) -> Res<()> {
         let mut tx = self.pool.begin().await.map_err(db_err)?;
-        sqlx::query("INSERT INTO flows (id, org_id, name, description, is_enabled, draft_definition, draft_revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO flows (id, org_id, name, description, is_enabled, draft_definition, draft_revision, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(flow.id.as_uuid())
             .bind(flow.org_id.as_uuid())
             .bind(&flow.name)
@@ -47,6 +47,7 @@ impl FlowRepo for MySqlStore {
             .bind(flow.draft_revision)
             .bind(flow.created_at)
             .bind(flow.updated_at)
+            .bind(flow.created_by.map(|u| u.as_uuid()))
             .execute(&mut *tx)
             .await
             .map_err(db_err)?;

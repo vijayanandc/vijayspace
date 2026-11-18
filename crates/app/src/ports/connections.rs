@@ -30,6 +30,8 @@ pub struct OAuthState {
     pub verifier_cipher: Option<Vec<u8>>,
     pub return_to: String,
     pub expires_at: DateTime<Utc>,
+    /// Who started the sign-in (becomes the connection's creator).
+    pub created_by: Option<weft_domain::ids::UserId>,
 }
 
 #[async_trait]

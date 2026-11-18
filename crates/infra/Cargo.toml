@@ -1,6 +1,6 @@
 [package]
 name = "weft-infra"
-description = "Non-database adapters: clock, IDs, AES-GCM secret box, SMTP mailer."
+description = "Non-database adapters: clock, IDs, AES-GCM secret box, mailers (SMTP, ZeptoMail), Logto sign-in."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -21,6 +21,13 @@ uuid.workspace = true
 lettre.workspace = true
 tracing.workspace = true
 sha2.workspace = true
+reqwest.workspace = true
+jsonwebtoken.workspace = true
+serde.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+wiremock.workspace = true
 
 [lints]
 workspace = true

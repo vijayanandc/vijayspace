@@ -17,7 +17,7 @@ use weft_connector_sdk::testing::CapturingMailer;
 use weft_domain::ids::OrgId;
 use weft_http::{ReqwestSender, SsrfPolicy};
 use weft_infra::{AesGcmSecretBox, UuidV7Ids};
-use weft_testkit::{ManualClock, MemoryRecordsConnector};
+use weft_testkit::{FakeIdentityProvider, ManualClock, MemoryRecordsConnector};
 
 #[allow(dead_code)] // some fields are used only by some scenarios
 pub struct TestApp {
@@ -27,12 +27,25 @@ pub struct TestApp {
     pub mailer: Arc<CapturingMailer>,
     pub src: MemoryRecordsConnector,
     pub dst: MemoryRecordsConnector,
+    /// Set by [`TestApp::spawn_signed_in`]: sign-in is on and tokens come from here.
+    pub idp: Option<FakeIdentityProvider>,
     base: String,
     db: String,
 }
 
 impl TestApp {
+    /// Sign-in turned off: every request acts as an owner of the default org.
     pub async fn spawn() -> Self {
+        Self::build(None).await
+    }
+
+    /// Sign-in turned on with an in-process identity provider (`owner@weft.test` becomes an owner
+    /// of the default org when it signs in).
+    pub async fn spawn_signed_in() -> Self {
+        Self::build(Some(FakeIdentityProvider::default())).await
+    }
+
+    async fn build(idp: Option<FakeIdentityProvider>) -> Self {
         let base = std::env::var("WEFT_TEST_DATABASE_URL")
             .unwrap_or_else(|_| "mysql://weft:weft@127.0.0.1:3306".into());
         let db = format!("weft_test_{}", uuid::Uuid::new_v4().simple());
@@ -55,7 +68,11 @@ impl TestApp {
         let mut registry = weft_server::wiring::registry();
         registry.register(Arc::new(src.clone()));
         registry.register(Arc::new(dst.clone()));
+        let identity: Option<Arc<dyn weft_app::ports::IdentityVerifier>> = idp
+            .clone()
+            .map(|i| Arc::new(i) as Arc<dyn weft_app::ports::IdentityVerifier>);
         let deps = Deps {
+            identity,
             store: Arc::new(weft_db::MySqlStore::new(pool)),
             clock: Arc::new(clock.clone()),
             ids: Arc::new(UuidV7Ids),
@@ -79,6 +96,14 @@ impl TestApp {
                         redirect_uri: "http://weft.test/oauth/callback".into(),
                     },
                 )]),
+                app_url: "http://app.weft.test".into(),
+                owner_emails: vec!["owner@weft.test".into()],
+                sign_in: idp.as_ref().map(|_| weft_app::SignInConfig {
+                    endpoint: "https://tenant.logto.test".into(),
+                    app_id: "web-app".into(),
+                    resource: None,
+                    scopes: vec!["openid".into(), "profile".into(), "email".into()],
+                }),
             }),
             plans: Arc::new(PlanCache::default()),
             wake: Arc::new(Notify::new()),
@@ -93,13 +118,40 @@ impl TestApp {
             mailer,
             src,
             dst,
+            idp,
             base,
             db,
         }
     }
 
     pub async fn req(&self, method: &str, path: &str, body: Option<Value>) -> (StatusCode, Value) {
-        let mut builder = Request::builder().method(method).uri(path);
+        self.send(Request::builder(), method, path, body).await
+    }
+
+    /// A request as a signed-in user (`token`), acting in `org` when given.
+    pub async fn req_as(
+        &self,
+        token: &str,
+        org: Option<&str>,
+        method: &str,
+        path: &str,
+        body: Option<Value>,
+    ) -> (StatusCode, Value) {
+        let mut builder = Request::builder().header("authorization", format!("Bearer {token}"));
+        if let Some(org) = org {
+            builder = builder.header("x-org-id", org);
+        }
+        self.send(builder, method, path, body).await
+    }
+
+    async fn send(
+        &self,
+        builder: axum::http::request::Builder,
+        method: &str,
+        path: &str,
+        body: Option<Value>,
+    ) -> (StatusCode, Value) {
+        let mut builder = builder.method(method).uri(path);
         let body = match body {
             Some(b) => {
                 builder = builder.header("content-type", "application/json");
@@ -185,6 +237,7 @@ impl TestApp {
             status: weft_domain::model::ConnectionStatus::Active,
             created_at: now,
             updated_at: now,
+            created_by: None,
         };
         let id = connection.id.to_string();
         self.deps

@@ -26,6 +26,13 @@ pub trait OrgRepo: Send + Sync {
     /// `None` = the server default.
     async fn set_retention_days(&self, id: OrgId, days: Option<u32>, now: DateTime<Utc>)
     -> Res<()>;
+    async fn update_org_profile(
+        &self,
+        id: OrgId,
+        name: &str,
+        timezone: &str,
+        now: DateTime<Utc>,
+    ) -> Res<()>;
 }
 
 #[async_trait]

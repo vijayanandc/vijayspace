@@ -12,11 +12,13 @@ use weft_domain::{
 };
 
 use super::handle::{DbConnectionHandle, decrypt, encrypt};
+use crate::tenancy::Actor;
 use crate::{
     AppError, Deps,
     ports::StoredConnection,
     runner::{action::action_ctx, step_error},
 };
+use weft_domain::permissions::Permission;
 
 fn connector(deps: &Deps, key: &str) -> Result<Arc<dyn Connector>, AppError> {
     deps.connectors.get(key).cloned().ok_or_else(|| {
@@ -89,11 +91,13 @@ fn check_option(spec: &FieldSpec, value: &Value) -> Result<(), AppError> {
 /// Creates a connection from form fields (auth kind `fields`) and tests it.
 pub async fn create_connection(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     connector_key: &str,
     name: &str,
     fields: &Map<String, Value>,
 ) -> Result<Connection, AppError> {
+    actor.require(Permission::ConnectionCreate)?;
+    let org = actor.org;
     let c = connector(deps, connector_key)?;
     if c.manifest().auth.kind != AuthKind::Fields {
         return Err(AppError::validation(
@@ -112,6 +116,7 @@ pub async fn create_connection(
         status: ConnectionStatus::Active,
         created_at: now,
         updated_at: now,
+        created_by: actor.user,
     };
     let (ciphertext, key_id) = encrypt(deps, &connection, &secrets)?;
     deps.store
@@ -121,19 +126,23 @@ pub async fn create_connection(
             key_id,
         })
         .await?;
-    let _ = test_connection(deps, org, connection.id).await?;
-    get_connection(deps, org, connection.id).await
+    let _ = test_connection(deps, actor, connection.id).await?;
+    get_connection(deps, actor, connection.id).await
 }
 
-pub async fn list_connections(deps: &Deps, org: OrgId) -> Result<Vec<Connection>, AppError> {
+pub async fn list_connections(deps: &Deps, actor: &Actor) -> Result<Vec<Connection>, AppError> {
+    actor.require(Permission::FlowView)?;
+    let org = actor.org;
     deps.store.list_connections(org).await
 }
 
 pub async fn get_connection(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: ConnectionId,
 ) -> Result<Connection, AppError> {
+    actor.require(Permission::FlowView)?;
+    let org = actor.org;
     Ok(stored(deps, org, id).await?.connection)
 }
 
@@ -146,11 +155,13 @@ async fn stored(deps: &Deps, org: OrgId, id: ConnectionId) -> Result<StoredConne
 /// Renames a connection and/or replaces some of its fields (empty secret fields keep their value).
 pub async fn update_connection(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     id: ConnectionId,
     name: Option<&str>,
     fields: Option<&Map<String, Value>>,
 ) -> Result<Connection, AppError> {
+    actor.require(Permission::ConnectionCreate)?;
+    let org = actor.org;
     let mut s = stored(deps, org, id).await?;
     if let Some(n) = name.map(str::trim).filter(|n| !n.is_empty()) {
         s.connection.name = n.chars().take(200).collect();
@@ -178,8 +189,14 @@ pub async fn update_connection(
     Ok(s.connection)
 }
 
-pub async fn delete_connection(deps: &Deps, org: OrgId, id: ConnectionId) -> Result<(), AppError> {
-    stored(deps, org, id).await?;
+pub async fn delete_connection(
+    deps: &Deps,
+    actor: &Actor,
+    id: ConnectionId,
+) -> Result<(), AppError> {
+    let org = actor.org;
+    let s = stored(deps, org, id).await?;
+    actor.require_on(Permission::ConnectionDelete, s.connection.created_by)?;
     deps.store
         .soft_delete_connection(org, id, deps.clock.now())
         .await
@@ -197,6 +214,17 @@ pub struct ConnectionTest {
 
 /// Calls the connector's credential check and records the connection status.
 pub async fn test_connection(
+    deps: &Deps,
+    actor: &Actor,
+    id: ConnectionId,
+) -> Result<ConnectionTest, AppError> {
+    actor.require(Permission::ConnectionUse)?;
+    check_connection(deps, actor.org, id).await
+}
+
+/// Tests a connection and records the result (also run right after an OAuth sign-in, which has no
+/// actor: the OAuth state carries the org).
+pub(crate) async fn check_connection(
     deps: &Deps,
     org: OrgId,
     id: ConnectionId,
@@ -258,12 +286,14 @@ fn bad_gateway(err: &ConnectorError) -> AppError {
 /// Dynamic dropdown options.
 pub async fn load_options(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     connector_key: &str,
     source: &str,
     connection_id: Option<&str>,
     input: &Value,
 ) -> Result<Vec<OptionItem>, AppError> {
+    actor.require(Permission::ConnectionUse)?;
+    let org = actor.org;
     if connector_key == crate::sync::CONNECTOR_KEY {
         return crate::sync::options(deps, org, source, input)
             .await
@@ -279,12 +309,14 @@ pub async fn load_options(
 /// Dynamic sub-fields (e.g. a module's fields).
 pub async fn load_fields(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     connector_key: &str,
     source: &str,
     connection_id: Option<&str>,
     input: &Value,
 ) -> Result<Vec<FieldSpec>, AppError> {
+    actor.require(Permission::ConnectionUse)?;
+    let org = actor.org;
     if connector_key == crate::sync::CONNECTOR_KEY {
         return crate::sync::fields(deps, org, source, input)
             .await

@@ -14,7 +14,9 @@ use weft_domain::{
     ids::{ConnectionId, FlowId, OrgId},
 };
 
+use crate::tenancy::Actor;
 use crate::{AppError, Deps, flows::create_flow};
+use weft_domain::permissions::Permission;
 
 /// Placeholder prefix in templates: the string `"$slot:crm"` becomes the `crm` connection ID.
 const SLOT_PREFIX: &str = "$slot:";
@@ -60,10 +62,12 @@ pub fn catalog() -> Vec<Recipe> {
 /// Everything is checked before the first flow is created.
 pub async fn install(
     deps: &Deps,
-    org: OrgId,
+    actor: &Actor,
     key: &str,
     connections: &BTreeMap<String, String>,
 ) -> Result<Vec<FlowId>, AppError> {
+    actor.require(Permission::FlowEdit)?;
+    let org = actor.org;
     let recipe = catalog()
         .into_iter()
         .find(|r| r.key == key)
@@ -87,7 +91,7 @@ pub async fn install(
     for (template, definition) in drafts {
         let view = create_flow(
             deps,
-            org,
+            actor,
             template.name,
             Some(template.description),
             Some(definition),

@@ -11,7 +11,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use weft_app::recipes;
 
-use crate::{error::ApiResult, extract::Org, state::ApiState};
+use crate::{error::ApiResult, extract::Acting, state::ApiState};
 
 pub fn router() -> Router<ApiState> {
     Router::new()
@@ -31,10 +31,10 @@ struct InstallBody {
 
 async fn install(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path(key): Path<String>,
     Json(b): Json<InstallBody>,
 ) -> ApiResult<Json<Value>> {
-    let ids = recipes::install(&s.deps, org, &key, &b.connections).await?;
+    let ids = recipes::install(&s.deps, &actor, &key, &b.connections).await?;
     Ok(Json(json!({"flow_ids": ids})))
 }

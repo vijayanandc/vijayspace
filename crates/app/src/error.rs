@@ -9,6 +9,7 @@ pub enum ErrorKind {
     NotFound,
     Conflict,
     Unauthorized,
+    Forbidden,
     BadGateway,
     Internal,
 }
@@ -43,6 +44,20 @@ impl AppError {
 
     pub fn conflict(code: &'static str, message: impl Into<String>) -> Self {
         Self::new(ErrorKind::Conflict, code, message)
+    }
+
+    /// No valid sign-in.
+    pub fn unauthenticated(message: impl Into<String>) -> Self {
+        Self::new(
+            ErrorKind::Unauthorized,
+            error_codes::AUTH_UNAUTHENTICATED,
+            message,
+        )
+    }
+
+    /// Signed in and a member, but the role does not allow this.
+    pub fn forbidden(message: impl Into<String>) -> Self {
+        Self::new(ErrorKind::Forbidden, error_codes::AUTH_FORBIDDEN, message)
     }
 
     /// An infrastructure failure (database, crypto). The message is logged, not shown to clients.

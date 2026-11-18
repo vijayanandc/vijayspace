@@ -9,6 +9,14 @@ use crate::Deps;
 
 impl Deps {
     #[must_use]
+    pub fn new_user_id(&self) -> weft_domain::ids::UserId {
+        weft_domain::ids::UserId::from_uuid(self.ids.uuid())
+    }
+    #[must_use]
+    pub fn new_invitation_id(&self) -> weft_domain::ids::InvitationId {
+        weft_domain::ids::InvitationId::from_uuid(self.ids.uuid())
+    }
+    #[must_use]
     pub fn new_org_id(&self) -> OrgId {
         OrgId::from_uuid(self.ids.uuid())
     }

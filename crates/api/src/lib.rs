@@ -34,6 +34,7 @@ pub fn router(state: ApiState, allowed_origins: &[String]) -> Router {
         ])
         .allow_headers([
             axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
             HeaderName::from_static("x-org-id"),
             axum::http::header::IF_MATCH,
         ]);

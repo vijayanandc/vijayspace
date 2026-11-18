@@ -17,7 +17,7 @@ use weft_domain::{
 use crate::{
     dto::{ExecutionDetailDto, ExecutionSummaryDto},
     error::{ApiResult, bad_id},
-    extract::Org,
+    extract::Acting,
     state::ApiState,
 };
 
@@ -62,7 +62,7 @@ fn encode_cursor(at: chrono::DateTime<chrono::Utc>, id: ExecutionId) -> String {
 
 async fn list(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Query(q): Query<ListQuery>,
 ) -> ApiResult<Json<Value>> {
     let filter = ExecutionFilter {
@@ -79,7 +79,7 @@ async fn list(
         limit: q.limit.unwrap_or(50),
         before: q.cursor.as_deref().and_then(decode_cursor),
     };
-    let page = uc::list_executions(&s.deps, org, filter).await?;
+    let page = uc::list_executions(&s.deps, &actor, filter).await?;
     let items: Vec<ExecutionSummaryDto> = page
         .items
         .into_iter()
@@ -92,18 +92,19 @@ async fn list(
 
 async fn one(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path(raw): Path<String>,
 ) -> ApiResult<Json<ExecutionDetailDto>> {
-    let (exe, steps) = uc::get_execution(&s.deps, org, id(&raw)?).await?;
+    let (exe, steps) = uc::get_execution(&s.deps, &actor, id(&raw)?).await?;
     let flow_name = s
         .deps
         .store
-        .get_flow(org, exe.flow_id)
+        .get_flow(actor.org, exe.flow_id)
         .await?
         .map(|f| f.name)
         .unwrap_or_default();
     Ok(Json(ExecutionDetailDto {
+        payloads_hidden: !actor.sees_payloads(),
         trigger_data: exe.trigger_data.clone(),
         summary: ExecutionSummaryDto::new(&exe, flow_name),
         steps,
@@ -112,14 +113,14 @@ async fn one(
 
 async fn summary(
     s: &ApiState,
-    org: weft_domain::ids::OrgId,
+    actor: &weft_app::tenancy::Actor,
     id: ExecutionId,
 ) -> ApiResult<Json<ExecutionSummaryDto>> {
-    let (exe, _) = uc::get_execution(&s.deps, org, id).await?;
+    let (exe, _) = uc::get_execution(&s.deps, actor, id).await?;
     let flow_name = s
         .deps
         .store
-        .get_flow(org, exe.flow_id)
+        .get_flow(actor.org, exe.flow_id)
         .await?
         .map(|f| f.name)
         .unwrap_or_default();
@@ -128,29 +129,29 @@ async fn summary(
 
 async fn retry(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path(raw): Path<String>,
 ) -> ApiResult<Json<ExecutionSummaryDto>> {
     let id = id(&raw)?;
-    uc::retry_execution(&s.deps, org, id).await?;
-    summary(&s, org, id).await
+    uc::retry_execution(&s.deps, &actor, id).await?;
+    summary(&s, &actor, id).await
 }
 
 async fn rerun(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path(raw): Path<String>,
 ) -> ApiResult<Json<Value>> {
-    let new_id = uc::rerun_execution(&s.deps, org, id(&raw)?).await?;
+    let new_id = uc::rerun_execution(&s.deps, &actor, id(&raw)?).await?;
     Ok(Json(json!({"execution_id": new_id})))
 }
 
 async fn cancel(
     State(s): State<ApiState>,
-    Org(org): Org,
+    Acting(actor): Acting,
     Path(raw): Path<String>,
 ) -> ApiResult<Json<ExecutionSummaryDto>> {
     let id = id(&raw)?;
-    uc::cancel_execution(&s.deps, org, id).await?;
-    summary(&s, org, id).await
+    uc::cancel_execution(&s.deps, &actor, id).await?;
+    summary(&s, &actor, id).await
 }
