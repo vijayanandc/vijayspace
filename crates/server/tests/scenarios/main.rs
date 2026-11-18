@@ -29,3 +29,4 @@ mod schedule;
 mod sync;
 mod team_rules;
 mod tenancy;
+mod zoho_books;

@@ -3,20 +3,18 @@
 //! - **Connection:** a base URL and how requests are signed; credentials are encrypted in the connection, never in
 //!   a flow (see `auth`).
 //! - **Action:** "Make an API call" to a path under the base URL.
-//! - **Trigger:** "New items" polls a list endpoint and starts a run per item not seen before. Apps that push
-//!   events use the Webhook trigger.
+//! - **Triggers:** "New items" polls a list endpoint and starts a run per item not seen before; "New or changed
+//!   items" also starts one when an item changes (see `poll`). Apps that push events use the Webhook trigger.
 
 mod auth;
 mod manifest;
+mod poll;
 
 use std::time::Duration;
 
-use weft_connector_sdk::{EventItem, OAuth2Spec, PollResult, prelude::*};
+use weft_connector_sdk::{OAuth2Spec, PollResult, prelude::*};
 
 use crate::util::{key_values, opt_bool, opt_f64, opt_str, req_str};
-
-/// Item IDs remembered between polls (newest first) to tell new items from old.
-const SEEN_MAX: usize = 1000;
 
 /// The "Any app" connector.
 #[derive(Debug)]
@@ -48,7 +46,6 @@ impl HttpApiConnector {
         }
     }
 
-    /// Sends a signed request; with OAuth client credentials a 401 fetches a new token and retries once.
     /// Sends a signed request. After a 401, an OAuth sign-in is refreshed and a client-credentials token fetched
     /// again, and the request is retried once.
     async fn send(
@@ -56,7 +53,7 @@ impl HttpApiConnector {
         ctx: &ActionCtx,
         build: impl Fn() -> Result<HttpRequest, ConnectorError> + Send + Sync,
     ) -> Result<HttpResponse, ConnectorError> {
-        let signed = auth::sign(ctx, &self.tokens, build()?, self.sign_in).await?;
+        let signed = auth::sign(ctx, &self.tokens, build()?, self.sign_in, None).await?;
         let resp = ctx.http.send(signed).await?;
         if resp.status != 401 {
             return Ok(resp);
@@ -64,11 +61,12 @@ impl HttpApiConnector {
         let conn = ctx.conn()?;
         if self.sign_in {
             let fresh = conn.force_refresh().await?;
-            return ctx.http.send(build()?.bearer(&fresh)).await;
+            let signed = auth::sign(ctx, &self.tokens, build()?, true, Some(&fresh)).await?;
+            return ctx.http.send(signed).await;
         }
         if opt_str(conn.config(), "auth").as_deref() == Some("oauth2_client_credentials") {
             self.tokens.forget(conn.id());
-            let signed = auth::sign(ctx, &self.tokens, build()?, false).await?;
+            let signed = auth::sign(ctx, &self.tokens, build()?, false, None).await?;
             return ctx.http.send(signed).await;
         }
         Ok(resp)
@@ -81,6 +79,10 @@ impl HttpApiConnector {
         let timeout = opt_f64(input, "timeout_secs")
             .unwrap_or(30.0)
             .clamp(1.0, 120.0);
+        let headers = key_values(input, "headers");
+        for (k, v) in &headers {
+            auth::check_header(k, v)?;
+        }
         let resp = self
             .send(ctx, || {
                 let query = key_values(input, "query");
@@ -91,8 +93,8 @@ impl HttpApiConnector {
                 let mut req = HttpRequest::new(method, url.clone())
                     .query(&refs)
                     .timeout(Duration::from_secs_f64(timeout));
-                for (k, v) in key_values(input, "headers") {
-                    req = req.header(&k, v);
+                for (k, v) in &headers {
+                    req = req.header(k, v.clone());
                 }
                 if opt_bool(input, "send_idempotency_key").unwrap_or(false) {
                     req = req.header("Idempotency-Key", ctx.idempotency_key.clone());
@@ -153,23 +155,6 @@ fn response_json(resp: &HttpResponse) -> Value {
         .collect();
     let body = resp.json().unwrap_or_else(|_| Value::String(resp.text()));
     json!({"status": resp.status, "headers": headers, "body": body})
-}
-
-/// The list in `body` at a dotted path (`data.items`; empty = the body itself).
-fn items_at<'a>(body: &'a Value, path: &str) -> Option<&'a Vec<Value>> {
-    path.split('.')
-        .filter(|p| !p.is_empty())
-        .try_fold(body, |v, key| v.get(key))?
-        .as_array()
-}
-
-fn item_id(item: &Value, field: &str) -> Option<String> {
-    let value = item.get(field)?;
-    value
-        .as_str()
-        .filter(|s| !s.is_empty())
-        .map(str::to_owned)
-        .or_else(|| value.as_number().map(ToString::to_string))
 }
 
 #[async_trait]
@@ -235,69 +220,13 @@ impl Connector for HttpApiConnector {
         input: &Value,
         cursor: Option<&Value>,
     ) -> Result<PollResult, ConnectorError> {
-        if trigger != "new_items" {
-            return Err(ConnectorError::unsupported(format!(
-                "polling for `{trigger}`"
-            )));
+        match trigger {
+            "new_items" => poll::new_items(self, ctx, input, cursor).await,
+            "changed_items" => poll::changed_items(self, ctx, input, cursor).await,
+            other => Err(ConnectorError::unsupported(format!(
+                "polling for `{other}`"
+            ))),
         }
-        let url = auth::url_for(&base_url(ctx)?, &req_str(input, "path")?)?;
-        let resp = self
-            .send(ctx, || {
-                let query = key_values(input, "query");
-                let refs: Vec<(&str, &str)> = query
-                    .iter()
-                    .map(|(k, v)| (k.as_str(), v.as_str()))
-                    .collect();
-                Ok(HttpRequest::new(Method::Get, url.clone())
-                    .query(&refs)
-                    .timeout(ctx.timeout))
-            })
-            .await?;
-        if !resp.is_success() {
-            return Err(ConnectorError::from_http(&resp));
-        }
-        let body = resp.json()?;
-        let items = items_at(&body, &opt_str(input, "items_path").unwrap_or_default()).ok_or_else(
-            || ConnectorError::invalid_field("items_path", "The answer has no list at this path"),
-        )?;
-        let id_field = opt_str(input, "id_field").unwrap_or_else(|| "id".into());
-        let seen: Vec<String> = cursor
-            .and_then(|c| c.get("seen"))
-            .and_then(Value::as_array)
-            .map(|ids| {
-                ids.iter()
-                    .filter_map(|v| v.as_str().map(str::to_owned))
-                    .collect()
-            })
-            .unwrap_or_default();
-        let ids: Vec<(String, &Value)> = items
-            .iter()
-            .filter_map(|i| item_id(i, &id_field).map(|id| (id, i)))
-            .collect();
-        // The first poll only remembers what is there: items created after the flow is switched on start runs.
-        let new: Vec<EventItem> = if cursor.is_none() {
-            Vec::new()
-        } else {
-            ids.iter()
-                .filter(|(id, _)| !seen.contains(id))
-                .map(|(id, item)| EventItem {
-                    dedupe_key: format!("item:{id}"),
-                    record_id: Some(id.clone()),
-                    data: json!({"id": id, "item": item}),
-                })
-                .collect()
-        };
-        let mut remembered: Vec<String> = ids.into_iter().map(|(id, _)| id).collect();
-        let older: Vec<String> = seen
-            .into_iter()
-            .filter(|s| !remembered.contains(s))
-            .collect();
-        remembered.extend(older);
-        remembered.truncate(SEEN_MAX);
-        Ok(PollResult {
-            items: new,
-            cursor: Some(json!({"seen": remembered})),
-        })
     }
 }
 
@@ -337,13 +266,16 @@ mod tests {
         }
         assert!(auth::url_for("ftp://api.example.com", "/x").is_err());
         assert_eq!(
-            items_at(&json!({"data": {"items": [1]}}), "data.items"),
+            poll::items_at(&json!({"data": {"items": [1]}}), "data.items"),
             Some(&vec![json!(1)])
         );
         assert_eq!(
-            items_at(&json!([1, 2]), ""),
+            poll::items_at(&json!([1, 2]), ""),
             Some(&vec![json!(1), json!(2)])
         );
-        assert_eq!(item_id(&json!({"id": 42}), "id").as_deref(), Some("42"));
+        assert_eq!(
+            poll::item_id(&json!({"id": 42}), "id").as_deref(),
+            Some("42")
+        );
     }
 }

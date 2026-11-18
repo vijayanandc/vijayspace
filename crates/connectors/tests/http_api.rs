@@ -1,5 +1,6 @@
-//! `http_api` ("Any app") against a mock API: every way of signing requests, the client-credentials token cache,
-//! the connection test, paths that try to leave the base URL, and the "New items" polling trigger.
+//! `http_api` ("Any app") against a mock API: every way of signing requests (any token header and prefix), the
+//! connection's own headers, secret headers and query parameters, the client-credentials token cache, the
+//! connection test, paths that try to leave the base URL, and the "New items" and "New or changed items" triggers.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::sync::Arc;
@@ -255,7 +256,21 @@ fn only_the_fields_of_the_chosen_sign_in_apply() {
     };
     assert_eq!(
         shown("bearer"),
-        ["base_url", "auth", "token", "test_path", "default_headers"]
+        [
+            "base_url",
+            "auth",
+            "token",
+            "test_path",
+            "token_prefix",
+            "token_header",
+            "default_headers",
+            "secret_headers",
+            "default_query"
+        ]
+    );
+    assert!(
+        !shown("basic").contains(&"token_prefix".to_owned()),
+        "Basic sends no token"
     );
     assert!(shown("basic").contains(&"password".to_owned()));
     assert!(!shown("basic").contains(&"api_key".to_owned()));
@@ -266,4 +281,155 @@ fn only_the_fields_of_the_chosen_sign_in_apply() {
             .iter()
             .any(|f| f.key == "header_name" && f.applies(&none, fields))
     );
+}
+
+#[tokio::test]
+async fn a_token_goes_in_the_header_and_with_the_prefix_the_app_wants() {
+    let server = MockServer::start().await;
+    let base = format!("{}/v1", server.uri());
+    // Zoho's APIs: `Authorization: Zoho-oauthtoken <token>`.
+    ok_on(&server, header("authorization", "Zoho-oauthtoken t1")).await;
+    let cx = app_ctx(
+        json!({"base_url": base, "auth": "bearer", "token_prefix": "Zoho-oauthtoken"}),
+        json!({"token": "t1"}),
+    );
+    assert_eq!(call(&cx).await.unwrap()["status"], 200);
+    server.reset().await;
+    ok_on(&server, header("x-auth-token", "t2")).await;
+    let cx = app_ctx(
+        json!({"base_url": base, "auth": "bearer", "token_prefix": "none", "token_header": "X-Auth-Token"}),
+        json!({"token": "t2"}),
+    );
+    assert_eq!(call(&cx).await.unwrap()["status"], 200);
+    server.verify().await;
+    let bad = app_ctx(
+        json!({"base_url": base, "auth": "bearer", "token_header": "Host"}),
+        json!({"token": "t3"}),
+    );
+    assert!(matches!(
+        call(&bad).await.unwrap_err(),
+        ConnectorError::InvalidInput { .. }
+    ));
+}
+
+#[tokio::test]
+async fn every_call_carries_the_connections_headers_secret_headers_and_query() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/orders/7"))
+        .and(header("x-org", "7"))
+        .and(header("x-api-secret", "s3"))
+        .and(header("x-trace", "abc"))
+        .and(query_param("organization_id", "777"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": 7})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let cx = app_ctx(
+        json!({"base_url": format!("{}/v1", server.uri()), "auth": "bearer",
+            "default_headers": {"X-Org": "7"}, "default_query": {"organization_id": "777"}}),
+        json!({"token": "t", "secret_headers": {"X-Api-Secret": "s3"}}),
+    );
+    // A step adds its own headers, but cannot replace the connection's credentials.
+    let input = json!({"path": "/orders/7", "headers": {"X-Trace": "abc", "Authorization": "Bearer stolen", "x-api-secret": "nope"}});
+    HttpApiConnector::new()
+        .execute(&cx, "api_call", input)
+        .await
+        .unwrap();
+    server.verify().await;
+    let sent = &server.received_requests().await.unwrap()[0];
+    let values = |name: &str| sent.headers.get_all(name).iter().count();
+    assert_eq!(
+        (values("authorization"), values("x-api-secret")),
+        (1, 1),
+        "one value each"
+    );
+    assert_eq!(sent.headers.get("authorization").unwrap(), "Bearer t");
+    for (name, value) in [("Host", "evil.example"), ("X-Ok", "a\r\nX-Injected: 1")] {
+        let input = json!({"path": "/orders/7", "headers": {name: value}});
+        assert!(
+            matches!(
+                HttpApiConnector::new()
+                    .execute(&cx, "api_call", input)
+                    .await
+                    .unwrap_err(),
+                ConnectorError::InvalidInput { .. }
+            ),
+            "{name}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn changed_items_start_runs_for_new_items_and_for_items_whose_version_changed() {
+    let server = MockServer::start().await;
+    let list =
+        |invoices: Value| ResponseTemplate::new(200).set_body_json(json!({"invoices": invoices}));
+    Mock::given(method("GET"))
+        .and(path("/v3/invoices"))
+        .respond_with(list(json!([
+            {"invoice_id": "1", "status": "sent", "last_modified_time": "2026-11-18T09:00:00+0530"},
+            {"invoice_id": "2", "status": "sent", "last_modified_time": "2026-11-18T09:00:00+0530"}
+        ])))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/invoices"))
+        .respond_with(list(json!([
+            {"invoice_id": "3", "status": "draft", "last_modified_time": "2026-11-18T10:05:00+0530"},
+            {"invoice_id": "1", "status": "paid", "last_modified_time": "2026-11-18T10:00:00+0530"},
+            {"invoice_id": "2", "status": "sent", "last_modified_time": "2026-11-18T09:00:00+0530"}
+        ])))
+        .mount(&server)
+        .await;
+    let cx = app_ctx(
+        json!({"base_url": format!("{}/v3", server.uri()), "auth": "none"}),
+        json!({}),
+    );
+    let app = HttpApiConnector::new();
+    let input = json!({"path": "/invoices", "items_path": "invoices", "id_field": "invoice_id", "version_field": "last_modified_time"});
+    let baseline = app.poll(&cx, "changed_items", &input, None).await.unwrap();
+    assert!(baseline.items.is_empty(), "the first poll only remembers");
+    let next = app
+        .poll(&cx, "changed_items", &input, baseline.cursor.as_ref())
+        .await
+        .unwrap();
+    let got: Vec<(String, String)> = next
+        .items
+        .iter()
+        .map(|i| {
+            (
+                i.data["id"].as_str().unwrap().to_owned(),
+                i.data["change"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        got,
+        [("3".into(), "new".into()), ("1".into(), "changed".into())]
+    );
+    assert_eq!(next.items[1].data["item"]["status"], "paid");
+    assert_ne!(
+        next.items[0].dedupe_key, next.items[1].dedupe_key,
+        "each change is its own event"
+    );
+    let again = app
+        .poll(&cx, "changed_items", &input, next.cursor.as_ref())
+        .await
+        .unwrap();
+    assert!(again.items.is_empty(), "nothing changed since");
+    // Without a version field, any change to the item's content counts.
+    let by_content =
+        json!({"path": "/invoices", "items_path": "invoices", "id_field": "invoice_id"});
+    let first = app
+        .poll(
+            &cx,
+            "changed_items",
+            &by_content,
+            Some(&json!({"versions": []})),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first.items.len(), 3, "all new against an empty memory");
 }

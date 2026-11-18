@@ -177,12 +177,16 @@ pub async fn update_connection(
     }
     if let Some(fields) = fields {
         let c = connector(deps, &s.connection.connector)?;
-        let (config, new_secrets) = split_fields(c.as_ref(), fields, true)?;
+        // Which fields apply (e.g. the token with `auth = bearer`) depends on the stored settings too: an edit that
+        // sends only what changed is judged with the stored settings under it.
+        let mut merged = s.connection.config.as_object().cloned().unwrap_or_default();
+        merged.extend(fields.clone());
+        let (config, new_secrets) = split_fields(c.as_ref(), &merged, true)?;
         let changed = config
             .iter()
             .any(|(k, v)| s.connection.config.get(k) != Some(v));
         if changed {
-            credentials_resent(c.as_ref(), &new_secrets)?;
+            credentials_resent(c.as_ref(), &new_secrets, &merged)?;
         }
         if let Some(cfg) = s.connection.config.as_object_mut() {
             cfg.extend(config);
@@ -221,20 +225,25 @@ pub async fn delete_connection(
         .await
 }
 
-/// A settings change must come with every credential again (OAuth: a new sign-in).
-fn credentials_resent(c: &dyn Connector, secrets: &Map<String, Value>) -> Result<(), AppError> {
+/// A settings change must come with every credential again (OAuth: a new sign-in): the required secret fields that
+/// apply to the new settings. Optional secrets not entered again (secret headers) are dropped with the old ones.
+fn credentials_resent(
+    c: &dyn Connector,
+    secrets: &Map<String, Value>,
+    values: &Map<String, Value>,
+) -> Result<(), AppError> {
     if c.manifest().auth.kind == AuthKind::Oauth2 {
         return Err(AppError::validation(
             error_codes::VALIDATION_FAILED,
             "Reconnect (sign in again) to change this connection's settings",
         ));
     }
-    let missing: Vec<&str> = c
-        .manifest()
-        .auth
-        .fields
+    let all = &c.manifest().auth.fields;
+    let missing: Vec<&str> = all
         .iter()
-        .filter(|f| f.secret && !secrets.contains_key(&f.key))
+        .filter(|f| {
+            f.secret && f.required && f.applies(values, all) && !secrets.contains_key(&f.key)
+        })
         .map(|f| f.label.as_str())
         .collect();
     if missing.is_empty() {

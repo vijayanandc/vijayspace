@@ -14,9 +14,48 @@ pub(super) const AUTH_TYPES: [(&str, &str); 6] = [
     ("oauth2_client_credentials", "OAuth 2.0 client credentials"),
 ];
 
+/// Where a token goes: header name and prefix. `types`: the sign-in types that send a token (`None`: always).
+fn token_fields(types: Option<&[&str]>) -> [FieldSpec; 2] {
+    let only = |f: FieldSpec| match types {
+        Some(t) => f.show_when("auth", t),
+        None => f,
+    };
+    [
+        only(FieldSpec::string("token_prefix", "Token prefix"))
+            .default_value(json!("Bearer"))
+            .help("The word before the token: Bearer for most apps, Zoho-oauthtoken for Zoho apps (Invoice, Books, CRM…), none for the token alone")
+            .not_mappable(),
+        only(FieldSpec::string("token_header", "Token header"))
+            .default_value(json!("Authorization"))
+            .help("The header that carries the token")
+            .advanced()
+            .not_mappable(),
+    ]
+}
+
+/// Headers and query parameters on every call of a connection (plain, or secret and stored encrypted).
+fn every_call_fields() -> [FieldSpec; 3] {
+    [
+        FieldSpec::new("default_headers", "Headers on every call", FieldKind::KeyValue)
+            .help("e.g. Accept, an API version, or Zoho Invoice's X-com-zoho-invoice-organizationid. Not for credentials: use Secret headers")
+            .advanced()
+            .not_mappable(),
+        FieldSpec::new("secret_headers", "Secret headers on every call", FieldKind::KeyValue)
+            .secret()
+            .help("Credential headers (e.g. X-Api-Secret): stored encrypted, never shown again, never logged")
+            .advanced()
+            .not_mappable(),
+        FieldSpec::new("default_query", "Query parameters on every call", FieldKind::KeyValue)
+            .help("e.g. Zoho Books' organization_id")
+            .advanced()
+            .not_mappable(),
+    ]
+}
+
 fn auth_fields() -> Vec<FieldSpec> {
     let key_types = ["api_key_header", "api_key_query"];
-    vec![
+    let token_types = ["bearer", "oauth2_client_credentials"];
+    let mut fields = vec![
         FieldSpec::string("base_url", "Base URL")
             .required()
             .placeholder("https://api.example.com/v1")
@@ -77,15 +116,10 @@ fn auth_fields() -> Vec<FieldSpec> {
             .help("A GET that needs valid credentials; empty = the base URL")
             .advanced()
             .not_mappable(),
-        FieldSpec::new(
-            "default_headers",
-            "Headers on every call",
-            FieldKind::KeyValue,
-        )
-        .help("e.g. Accept or an API version header (no credentials here)")
-        .advanced()
-        .not_mappable(),
-    ]
+    ];
+    fields.extend(token_fields(Some(&token_types)));
+    fields.extend(every_call_fields());
+    fields
 }
 
 fn call_action() -> ActionSpec {
@@ -160,8 +194,32 @@ fn new_items_trigger() -> TriggerSpec {
     .output(json!({"id": "1001", "item": {"id": "1001", "status": "new"}}))
 }
 
+fn changed_items_trigger() -> TriggerSpec {
+    TriggerSpec::new(
+        "changed_items",
+        "New or changed items (polling)",
+        "Checks a list endpoint on an interval and starts a run for each new item and each item that changed (e.g. an invoice marked paid).",
+        TriggerKind::Polling,
+    )
+    .field(FieldSpec::string("path", "List path").required().placeholder("/invoices").not_mappable())
+    .field(
+        FieldSpec::new("query", "Query parameters", FieldKind::KeyValue)
+            .help("Sort or filter so recent changes come first: only the items this answer holds are compared")
+            .not_mappable(),
+    )
+    .field(FieldSpec::string("items_path", "Where the items are").placeholder("invoices").not_mappable())
+    .field(FieldSpec::string("id_field", "ID field").default_value(json!("id")).not_mappable())
+    .field(
+        FieldSpec::string("version_field", "Changes with the item")
+            .placeholder("last_modified_time")
+            .help("A field that changes whenever the item does; empty = any change to the item's content")
+            .not_mappable(),
+    )
+    .output(json!({"id": "1001", "change": "changed", "item": {"id": "1001", "status": "paid"}}))
+}
+
 fn oauth_fields() -> Vec<FieldSpec> {
-    vec![
+    let mut fields = vec![
         FieldSpec::string("base_url", "Base URL")
             .required()
             .placeholder("https://api.example.com/v1")
@@ -202,10 +260,11 @@ fn oauth_fields() -> Vec<FieldSpec> {
             .placeholder("/me")
             .advanced()
             .not_mappable(),
-        FieldSpec::new("default_headers", "Headers on every call", FieldKind::KeyValue)
-            .advanced()
-            .not_mappable(),
-    ]
+    ];
+    // The sign-in is always a token, so its prefix and header always apply.
+    fields.extend(token_fields(None));
+    fields.extend(every_call_fields());
+    fields
 }
 
 /// "Any app (OAuth 2.0 sign-in)": the same action and trigger, signed with the token of a sign-in at the app,
@@ -223,7 +282,7 @@ pub(super) fn oauth_manifest() -> ConnectorManifest {
             oauth2: None,
         },
         actions: vec![call_action()],
-        triggers: vec![new_items_trigger()],
+        triggers: vec![new_items_trigger(), changed_items_trigger()],
         docs_url: None,
     }
 }
@@ -237,7 +296,7 @@ pub(super) fn manifest() -> ConnectorManifest {
         category: "Custom apps".into(),
         auth: AuthSpec::fields(auth_fields()),
         actions: vec![call_action()],
-        triggers: vec![new_items_trigger()],
+        triggers: vec![new_items_trigger(), changed_items_trigger()],
         docs_url: None,
     }
 }

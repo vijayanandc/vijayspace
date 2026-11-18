@@ -45,9 +45,12 @@ What is built on the `backend` and `client` branches, how it deviates from the p
 ### Integrations (doc 13)
 - Connectors: core HTTP, Formatter (11 actions), Email, **Zoho CRM**, **Appblocks** (FSM, HMS and any Appblocks app) and **Autodesk Forma**.
 - **Any app** (`http_api`, like Zoho Flow's custom apps): a connection to any REST API, with credentials encrypted in the connection.
-  - Sign-in types: API key in a header or the query string, Bearer, Basic, or OAuth 2.0 client credentials (tokens cached, fetched again after a 401). Connection forms show only the fields of the chosen type (`show_when`).
+  - Sign-in types: API key in a header or the query string, a token (any header name and prefix: `Bearer`, Zoho's `Zoho-oauthtoken`, or none), Basic, or OAuth 2.0 client credentials (tokens cached, fetched again after a 401). Connection forms show only the fields of the chosen type (`show_when`).
+  - Every call can carry the connection's own headers, **secret headers** (encrypted, never shown or logged) and query parameters. A step's headers cannot replace the connection's; headers that frame the request (`Host`, `Content-Length`, `Transfer-Encoding`, `Proxy-*`, …) and multi-line values are refused.
   - "Make an API call" stays under the base URL.
-  - "New items" polls a list endpoint.
+  - "New items" polls a list endpoint; "New or changed items" also starts a run when an item's version field (e.g. `last_modified_time`) or its content changes.
+  - Editing a connection judges which fields apply against its stored settings, and a settings change asks again only for the required secrets of its sign-in type.
+  - **Zoho Invoice and Zoho Books:** settings and every flow (FSM → Zoho and Zoho → FSM) are in [`guides/zoho-invoice-and-books.md`](guides/zoho-invoice-and-books.md). Tested against a mock of their API, not a live Zoho account.
   - Checked against the live FSM with a bearer token (2026-11-18).
   - **OAuth 2.0 sign-in for any app** (`http_oauth`): the org's own OAuth client at the app (authorization code with PKCE). The client secret is kept encrypted with the sign-in state (`oauth_states.client_cipher`) and then with the tokens, so refreshes use it. A connector supplies its OAuth settings per connection (`Connector::oauth_spec`, `own_oauth_client`).
 - **Sync layer** (`core.sync`): `upsert_linked_record` (lease, lookups through links, hash-skip of unchanged data, RecoverCreate by match field), `resolve_link`, `find_linked_record`, `save_link`, backfill, plus pickers for the builder. If a sync step is re-pointed at a different target connection or module, its existing links are ignored, so without a match field the records are created again.
