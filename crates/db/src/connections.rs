@@ -31,6 +31,7 @@ struct StateRow {
     created_by: Option<uuid::Uuid>,
     callback_cipher: Option<Vec<u8>>,
     finish_hash: Option<Vec<u8>>,
+    client_cipher: Option<Vec<u8>>,
 }
 
 impl StateRow {
@@ -48,6 +49,7 @@ impl StateRow {
             created_by: self.created_by.map(UserId::from_uuid),
             callback_cipher: self.callback_cipher,
             finish_hash: self.finish_hash,
+            client_cipher: self.client_cipher,
         }
     }
 }
@@ -158,8 +160,8 @@ impl ConnectionRepo for MySqlStore {
             .await
             .map_err(db_err)?;
         sqlx::query(
-            "INSERT INTO oauth_states (state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_at, created_by) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO oauth_states (state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_at, created_by, client_cipher) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&s.state_hash)
         .bind(s.org_id.as_uuid())
@@ -172,6 +174,7 @@ impl ConnectionRepo for MySqlStore {
         .bind(s.expires_at)
         .bind(now)
         .bind(s.created_by.map(|u| u.as_uuid()))
+        .bind(&s.client_cipher)
         .execute(&self.pool)
         .await
         .map_err(db_err)?;
@@ -185,7 +188,7 @@ impl ConnectionRepo for MySqlStore {
     ) -> Res<Option<OAuthState>> {
         let mut tx = self.pool.begin().await.map_err(db_err)?;
         let row: Option<StateRow> = sqlx::query_as(
-            "SELECT state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_by, callback_cipher, finish_hash FROM oauth_states WHERE state_hash = ? FOR UPDATE",
+            "SELECT state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_by, callback_cipher, finish_hash, client_cipher FROM oauth_states WHERE state_hash = ? FOR UPDATE",
         )
         .bind(state_hash)
         .fetch_optional(&mut *tx)
@@ -210,7 +213,7 @@ impl ConnectionRepo for MySqlStore {
     ) -> Res<Option<OAuthState>> {
         let mut tx = self.pool.begin().await.map_err(db_err)?;
         let row: Option<StateRow> = sqlx::query_as(
-            "SELECT state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_by, callback_cipher, finish_hash FROM oauth_states WHERE state_hash = ? FOR UPDATE",
+            "SELECT state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_by, callback_cipher, finish_hash, client_cipher FROM oauth_states WHERE state_hash = ? FOR UPDATE",
         )
         .bind(state_hash)
         .fetch_optional(&mut *tx)
@@ -244,7 +247,7 @@ impl ConnectionRepo for MySqlStore {
     ) -> Res<Option<OAuthState>> {
         let mut tx = self.pool.begin().await.map_err(db_err)?;
         let row: Option<StateRow> = sqlx::query_as(
-            "SELECT state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_by, callback_cipher, finish_hash FROM oauth_states WHERE state_hash = ? FOR UPDATE",
+            "SELECT state_hash, org_id, connector_key, connection_id, connection_name, config, verifier_cipher, return_to, expires_at, created_by, callback_cipher, finish_hash, client_cipher FROM oauth_states WHERE state_hash = ? FOR UPDATE",
         )
         .bind(state_hash)
         .fetch_optional(&mut *tx)

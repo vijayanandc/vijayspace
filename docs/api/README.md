@@ -131,6 +131,11 @@ Clients switch on `code` (see `crates/domain/src/error_codes.rs`). A step that f
 - **Apps that push events:** use the Webhook trigger.
 - **Run log:** an API key sent in the query string is shown as `***` whatever the parameter is called.
 
+**Any app with OAuth sign-in (`http_oauth`).** The same action and trigger, signed with an OAuth 2.0 sign-in at the app, through an OAuth client the org registers at the app. Its redirect URI is `<public url>/oauth/callback`.
+- **`POST /connections/oauth/start` fields:** `base_url`, `authorize_url`, `token_url` (https, or http on this machine), `client_id`, `client_secret`, `scopes` (space-separated), and the advanced `client_auth` (`body`|`basic`), `pkce` (default on), `authorize_params`, `test_path` and `default_headers`.
+- **The client secret:** kept encrypted with the sign-in, then with the connection's tokens, because refreshing needs it. It is never returned.
+- **After a 401:** the token is refreshed once and the call retried.
+
 ---
 
 ## Connections

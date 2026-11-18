@@ -36,6 +36,8 @@ pub struct OAuthState {
     pub callback_cipher: Option<Vec<u8>>,
     /// SHA-256 of the one-time token that finishes this sign-in.
     pub finish_hash: Option<Vec<u8>>,
+    /// The connection's own OAuth client secret (apps where each connection brings its client), encrypted.
+    pub client_cipher: Option<Vec<u8>>,
 }
 
 #[async_trait]

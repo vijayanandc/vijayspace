@@ -11,7 +11,7 @@ mod manifest;
 
 use std::time::Duration;
 
-use weft_connector_sdk::{EventItem, PollResult, prelude::*};
+use weft_connector_sdk::{EventItem, OAuth2Spec, PollResult, prelude::*};
 
 use crate::util::{key_values, opt_bool, opt_f64, opt_str, req_str};
 
@@ -23,6 +23,8 @@ const SEEN_MAX: usize = 1000;
 pub struct HttpApiConnector {
     manifest: ConnectorManifest,
     tokens: auth::TokenCache,
+    /// "Any app (OAuth 2.0 sign-in)": connections are OAuth sign-ins with the app's own client.
+    sign_in: bool,
 }
 
 impl HttpApiConnector {
@@ -31,27 +33,43 @@ impl HttpApiConnector {
         Self {
             manifest: manifest::manifest(),
             tokens: auth::TokenCache::default(),
+            sign_in: false,
+        }
+    }
+
+    /// "Any app (OAuth 2.0 sign-in)" (`http_oauth`): the same action and trigger, signed with an OAuth 2.0
+    /// sign-in at the app through the app's own OAuth client.
+    #[must_use]
+    pub fn oauth() -> Self {
+        Self {
+            manifest: manifest::oauth_manifest(),
+            tokens: auth::TokenCache::default(),
+            sign_in: true,
         }
     }
 
     /// Sends a signed request; with OAuth client credentials a 401 fetches a new token and retries once.
+    /// Sends a signed request. After a 401, an OAuth sign-in is refreshed and a client-credentials token fetched
+    /// again, and the request is retried once.
     async fn send(
         &self,
         ctx: &ActionCtx,
         build: impl Fn() -> Result<HttpRequest, ConnectorError> + Send + Sync,
     ) -> Result<HttpResponse, ConnectorError> {
-        let resp = ctx
-            .http
-            .send(auth::sign(ctx, &self.tokens, build()?).await?)
-            .await?;
-        let client_credentials =
-            opt_str(ctx.conn()?.config(), "auth").as_deref() == Some("oauth2_client_credentials");
-        if resp.status == 401 && client_credentials {
-            self.tokens.forget(ctx.conn()?.id());
-            return ctx
-                .http
-                .send(auth::sign(ctx, &self.tokens, build()?).await?)
-                .await;
+        let signed = auth::sign(ctx, &self.tokens, build()?, self.sign_in).await?;
+        let resp = ctx.http.send(signed).await?;
+        if resp.status != 401 {
+            return Ok(resp);
+        }
+        let conn = ctx.conn()?;
+        if self.sign_in {
+            let fresh = conn.force_refresh().await?;
+            return ctx.http.send(build()?.bearer(&fresh)).await;
+        }
+        if opt_str(conn.config(), "auth").as_deref() == Some("oauth2_client_credentials") {
+            self.tokens.forget(conn.id());
+            let signed = auth::sign(ctx, &self.tokens, build()?, false).await?;
+            return ctx.http.send(signed).await;
         }
         Ok(resp)
     }
@@ -158,6 +176,18 @@ fn item_id(item: &Value, field: &str) -> Option<String> {
 impl Connector for HttpApiConnector {
     fn manifest(&self) -> &ConnectorManifest {
         &self.manifest
+    }
+
+    fn own_oauth_client(&self) -> bool {
+        self.sign_in
+    }
+
+    /// The sign-in settings are the connection's own (the app's authorize and token URLs, scopes).
+    fn oauth_spec(&self, config: &Value) -> Result<Option<OAuth2Spec>, ConnectorError> {
+        if !self.sign_in {
+            return Ok(None);
+        }
+        auth::sign_in_spec(config).map(Some)
     }
 
     /// GET, HEAD, PUT and DELETE are idempotent by HTTP's own rules; POST and PATCH are not.

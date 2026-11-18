@@ -192,7 +192,7 @@ impl DbConnectionHandle {
         if refreshed_meanwhile || (!force && !oauth::needs_refresh(&secrets, now)) {
             return token_of(&secrets);
         }
-        let (connector, spec, client) = oauth_setup(&self.deps, &stored.connection.connector)?;
+        let (connector, spec, client) = oauth_setup(&self.deps, &stored.connection, &secrets)?;
         let refresh_token = secrets
             .get("refresh_token")
             .and_then(Value::as_str)
@@ -226,7 +226,12 @@ impl DbConnectionHandle {
                 return Err(err);
             }
         };
-        let new_secrets = tokens.to_secrets(Some(&refresh_token));
+        let mut new_secrets = tokens.to_secrets(Some(&refresh_token));
+        // A connection with its own OAuth client keeps its secret next to the tokens.
+        if let (Some(secret), Value::Object(map)) = (secrets.get("client_secret"), &mut new_secrets)
+        {
+            map.insert("client_secret".into(), secret.clone());
+        }
         let patch = connector.oauth_token_config(&tokens.raw);
         if let (Some(cfg), Value::Object(p)) = (stored.connection.config.as_object_mut(), patch) {
             cfg.extend(p.into_iter().filter(|(_, v)| !v.is_null()));
@@ -250,32 +255,30 @@ impl DbConnectionHandle {
     }
 }
 
-/// The connector, its OAuth settings and this server's OAuth app for it.
+/// The connector, its OAuth settings for this connection, and the OAuth client to refresh with (the server's
+/// app for the connector, or the connection's own client).
 fn oauth_setup(
     deps: &Deps,
-    connector_key: &str,
+    connection: &weft_domain::model::Connection,
+    secrets: &Value,
 ) -> Result<(Arc<dyn Connector>, OAuth2Spec, OAuthClient), ConnectorError> {
     let connector = deps
         .connectors
-        .get(connector_key)
+        .get(&connection.connector)
         .cloned()
         .ok_or_else(|| ConnectorError::permanent("unknown connector"))?;
     let spec = connector
-        .manifest()
-        .auth
-        .oauth2
-        .clone()
+        .oauth_spec(&connection.config)?
         .ok_or_else(|| ConnectorError::permanent("connector has no OAuth settings"))?;
-    let client = deps
-        .config
-        .oauth_clients
-        .get(connector_key)
-        .cloned()
-        .ok_or_else(|| {
-            ConnectorError::permanent(format!(
-                "OAuth app for `{connector_key}` is not configured on this server"
-            ))
-        })?;
+    let own = secrets.get("client_secret").and_then(Value::as_str);
+    let client = super::oauth::client_for(
+        deps,
+        connector.as_ref(),
+        &connection.connector,
+        &connection.config,
+        own,
+    )
+    .map_err(ConnectorError::permanent)?;
     Ok((connector, spec, client))
 }
 

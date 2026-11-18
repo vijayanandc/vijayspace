@@ -49,7 +49,7 @@ What is built on the `backend` and `client` branches, how it deviates from the p
   - "Make an API call" stays under the base URL.
   - "New items" polls a list endpoint.
   - Checked against the live FSM with a bearer token (2026-11-18).
-  - Still to add: OAuth 2.0 sign-in with the app's own OAuth client (authorization code). Today that kind of sign-in exists only for Zoho CRM and Autodesk Forma.
+  - **OAuth 2.0 sign-in for any app** (`http_oauth`): the org's own OAuth client at the app (authorization code with PKCE). The client secret is kept encrypted with the sign-in state (`oauth_states.client_cipher`) and then with the tokens, so refreshes use it. A connector supplies its OAuth settings per connection (`Connector::oauth_spec`, `own_oauth_client`).
 - **Sync layer** (`core.sync`): `upsert_linked_record` (lease, lookups through links, hash-skip of unchanged data, RecoverCreate by match field), `resolve_link`, `find_linked_record`, `save_link`, backfill, plus pickers for the builder. If a sync step is re-pointed at a different target connection or module, its existing links are ignored, so without a match field the records are created again.
 - **Recipes R1–R9**, installed as drafts once every connection slot has been checked:
   - R1–R5: Zoho CRM ↔ FSM;

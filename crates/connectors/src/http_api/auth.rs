@@ -6,7 +6,7 @@ use std::{collections::HashMap, sync::Mutex};
 
 use base64::Engine as _;
 use chrono::{DateTime, Duration, Utc};
-use weft_connector_sdk::prelude::*;
+use weft_connector_sdk::{ClientAuth, OAuth2Spec, prelude::*};
 
 use crate::util::{key_values, opt_str};
 
@@ -80,11 +80,13 @@ pub(super) fn url_for(base: &str, path: &str) -> Result<String, ConnectorError> 
     Ok(joined.trim_end_matches('/').to_owned())
 }
 
-/// Adds the connection's credentials and default headers to `req`.
+/// Adds the connection's credentials and default headers to `req`. `sign_in`: the connection is an OAuth 2.0
+/// sign-in at the app, whose token the platform keeps fresh.
 pub(super) async fn sign(
     ctx: &ActionCtx,
     cache: &TokenCache,
     mut req: HttpRequest,
+    sign_in: bool,
 ) -> Result<HttpRequest, ConnectorError> {
     let conn = ctx.conn()?;
     let config = conn.config().clone();
@@ -92,6 +94,9 @@ pub(super) async fn sign(
         if !k.eq_ignore_ascii_case("authorization") {
             req = req.header(&k, v);
         }
+    }
+    if sign_in {
+        return Ok(req.bearer(&conn.access_token().await?));
     }
     let secrets = conn.secrets().await?;
     let secret = |key: &str| {
@@ -183,4 +188,43 @@ async fn client_token(
         ctx.now + Duration::seconds((lifetime - EARLY_SECS).max(0)),
     );
     Ok(token)
+}
+
+/// The OAuth 2.0 settings of an "Any app (OAuth 2.0 sign-in)" connection, from its config. The authorize and
+/// token URLs must be https (or http on this machine, for a local test double of the app).
+pub(super) fn sign_in_spec(config: &Value) -> Result<OAuth2Spec, ConnectorError> {
+    let url = |key: &str, label: &str| {
+        let raw = opt_str(config, key)
+            .ok_or_else(|| ConnectorError::invalid_field(key, format!("Enter the {label}")))?;
+        let parsed = url::Url::parse(&raw).map_err(|_| {
+            ConnectorError::invalid_field(key, format!("The {label} is not a valid URL"))
+        })?;
+        let local = matches!(parsed.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"));
+        if parsed.scheme() == "https" || (parsed.scheme() == "http" && local) {
+            Ok(raw)
+        } else {
+            Err(ConnectorError::invalid_field(
+                key,
+                format!("The {label} must start with https://"),
+            ))
+        }
+    };
+    let scopes = opt_str(config, "scopes")
+        .unwrap_or_default()
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect();
+    Ok(OAuth2Spec {
+        authorize_url: url("authorize_url", "authorization URL")?,
+        token_url: url("token_url", "token URL")?,
+        scopes,
+        scope_separator: " ".into(),
+        extra_authorize_params: key_values(config, "authorize_params"),
+        pkce: crate::util::opt_bool(config, "pkce").unwrap_or(true),
+        client_auth: if opt_str(config, "client_auth").as_deref() == Some("basic") {
+            ClientAuth::Basic
+        } else {
+            ClientAuth::Body
+        },
+    })
 }

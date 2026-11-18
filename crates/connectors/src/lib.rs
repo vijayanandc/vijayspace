@@ -44,6 +44,7 @@ pub fn builtin_connectors_with(options: &ConnectorOptions) -> Vec<Arc<dyn Connec
         Arc::new(core::email::EmailConnector::new()),
         Arc::new(core::script::ScriptConnector::new()),
         Arc::new(http_api::HttpApiConnector::new()),
+        Arc::new(http_api::HttpApiConnector::oauth()),
         Arc::new(zoho),
         Arc::new(appblocks::AppblocksConnector::new()),
         Arc::new(autodesk_forma::FormaConnector::new()),

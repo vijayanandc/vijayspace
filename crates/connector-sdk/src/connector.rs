@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::{
     context::ActionCtx,
     error::ConnectorError,
-    manifest::{ConnectorManifest, FieldSpec, OptionItem},
+    manifest::{ConnectorManifest, FieldSpec, OAuth2Spec, OptionItem},
     records::RecordObjects,
 };
 
@@ -88,6 +88,18 @@ pub struct EventBatch {
 #[async_trait]
 pub trait Connector: Send + Sync {
     fn manifest(&self) -> &ConnectorManifest;
+
+    /// The OAuth settings for a connection with this (non-secret) config. Defaults to the manifest's; an "any app"
+    /// connector builds them from the connection's own settings (its authorize and token URLs, scopes).
+    fn oauth_spec(&self, _config: &Value) -> Result<Option<OAuth2Spec>, ConnectorError> {
+        Ok(self.manifest().auth.oauth2.clone())
+    }
+
+    /// True when each connection brings its own OAuth client (`client_id` in its config and `client_secret`
+    /// among its secrets) instead of using the server's OAuth app for this connector.
+    fn own_oauth_client(&self) -> bool {
+        false
+    }
 
     /// Whether running `action` with `input` twice has the same effect as once, so it may be repeated after
     /// a timeout. Defaults to the action's manifest flag (`ActionSpec::idempotent`).

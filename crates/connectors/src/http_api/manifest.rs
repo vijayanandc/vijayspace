@@ -2,7 +2,7 @@
 //! "Make an API call" action and a "New items" polling trigger. Like Zoho Flow's custom apps: credentials live in
 //! the connection (encrypted), never in a flow.
 
-use weft_connector_sdk::prelude::*;
+use weft_connector_sdk::{AuthKind, prelude::*};
 
 /// Every way a request can carry the connection's credentials.
 pub(super) const AUTH_TYPES: [(&str, &str); 6] = [
@@ -158,6 +158,74 @@ fn new_items_trigger() -> TriggerSpec {
             .not_mappable(),
     )
     .output(json!({"id": "1001", "item": {"id": "1001", "status": "new"}}))
+}
+
+fn oauth_fields() -> Vec<FieldSpec> {
+    vec![
+        FieldSpec::string("base_url", "Base URL")
+            .required()
+            .placeholder("https://api.example.com/v1")
+            .help("Every call of this connection goes to a path under this address")
+            .not_mappable(),
+        FieldSpec::string("authorize_url", "Authorization URL")
+            .required()
+            .placeholder("https://app.example.com/oauth/authorize")
+            .help("From the app's developer settings, as are the token URL and the client")
+            .not_mappable(),
+        FieldSpec::string("token_url", "Token URL")
+            .required()
+            .placeholder("https://app.example.com/oauth/token")
+            .not_mappable(),
+        FieldSpec::string("client_id", "Client ID").required().not_mappable(),
+        FieldSpec::new("client_secret", "Client secret", FieldKind::Password)
+            .required()
+            .secret()
+            .not_mappable(),
+        FieldSpec::string("scopes", "Scopes")
+            .placeholder("read write offline_access")
+            .help("Space-separated. Ask for offline access (if the app has it) so Weft can refresh the sign-in")
+            .not_mappable(),
+        FieldSpec::select("client_auth", "Send the client secret")
+            .options(&[("body", "In the request body"), ("basic", "As Basic authentication")])
+            .default_value(json!("body"))
+            .advanced()
+            .not_mappable(),
+        FieldSpec::new("pkce", "Use PKCE", FieldKind::Boolean)
+            .default_value(json!(true))
+            .advanced()
+            .not_mappable(),
+        FieldSpec::new("authorize_params", "Extra sign-in parameters", FieldKind::KeyValue)
+            .help("e.g. access_type = offline, prompt = consent")
+            .advanced()
+            .not_mappable(),
+        FieldSpec::string("test_path", "Path to test the connection")
+            .placeholder("/me")
+            .advanced()
+            .not_mappable(),
+        FieldSpec::new("default_headers", "Headers on every call", FieldKind::KeyValue)
+            .advanced()
+            .not_mappable(),
+    ]
+}
+
+/// "Any app (OAuth 2.0 sign-in)": the same action and trigger, signed with the token of a sign-in at the app,
+/// through the app's own OAuth client (its settings are the connection's).
+pub(super) fn oauth_manifest() -> ConnectorManifest {
+    ConnectorManifest {
+        key: "http_oauth".into(),
+        name: "Any app (OAuth 2.0 sign-in)".into(),
+        description: "Connect any app that signs in with OAuth 2.0, using an OAuth client you register at the app (redirect URI: this server's /oauth/callback).".into(),
+        icon: "🔐".into(),
+        category: "Custom apps".into(),
+        auth: AuthSpec {
+            kind: AuthKind::Oauth2,
+            fields: oauth_fields(),
+            oauth2: None,
+        },
+        actions: vec![call_action()],
+        triggers: vec![new_items_trigger()],
+        docs_url: None,
+    }
 }
 
 pub(super) fn manifest() -> ConnectorManifest {
