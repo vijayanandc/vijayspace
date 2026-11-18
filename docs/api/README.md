@@ -159,7 +159,7 @@ Secrets are never returned.
 | GET | `/api/v1/flows/{id}` | — | `Flow` |
 | PATCH | `/api/v1/flows/{id}` | `{name?, description?}` | `Flow` |
 | DELETE | `/api/v1/flows/{id}` | — | 204 |
-| PUT | `/api/v1/flows/{id}/draft` | `{definition, revision}` | `{revision, issues}`; 409 `flow.revision_conflict` when `revision` is stale |
+| PUT | `/api/v1/flows/{id}/draft` | `{definition, revision}` | `{revision, issues, has_unpublished_changes}`; 409 `flow.revision_conflict` when `revision` is stale |
 | POST | `/api/v1/flows/{id}/validate` | — | `{issues}` |
 | POST | `/api/v1/flows/{id}/publish` | — | `{version: {id, version, created_at}, issues}`; 422 `flow.invalid` with `issues` |
 | POST | `/api/v1/flows/{id}/enable` | — | `Flow` (409 `flow.not_published` if never published) |

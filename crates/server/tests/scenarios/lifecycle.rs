@@ -7,6 +7,38 @@ use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 use crate::harness::TestApp;
 
 #[tokio::test]
+async fn saving_a_draft_says_whether_it_differs_from_the_published_version() {
+    let app = TestApp::spawn().await;
+    let def = json!({"schema_version": 1, "trigger": {"type": "manual"}, "steps": [{"key": "s", "type": "stop"}]});
+    let flow = app.live_flow("F", def.clone()).await;
+    let id = flow["id"].as_str().unwrap();
+    let path = format!("/api/v1/flows/{id}/draft");
+    let revision = flow["draft_revision"].as_u64().unwrap();
+    let mut changed = def.clone();
+    changed["steps"][0]["name"] = json!("Done");
+    let saved = app
+        .ok(
+            "PUT",
+            &path,
+            Some(json!({"definition": changed, "revision": revision})),
+        )
+        .await;
+    assert_eq!(saved["has_unpublished_changes"], true);
+    let back = app
+        .ok(
+            "PUT",
+            &path,
+            Some(json!({"definition": def, "revision": saved["revision"]})),
+        )
+        .await;
+    assert_eq!(
+        back["has_unpublished_changes"], false,
+        "back to the published definition"
+    );
+    app.cleanup().await;
+}
+
+#[tokio::test]
 async fn drafts_validation_and_publish_rules() {
     let app = TestApp::spawn().await;
     let flow = app
@@ -23,6 +55,7 @@ async fn drafts_validation_and_publish_rules() {
         .await;
     assert_eq!(saved["revision"], 2);
     assert_eq!(saved["issues"][0]["code"], "field.required");
+    assert_eq!(saved["has_unpublished_changes"], true, "never published");
     let (status, conflict) = app
         .req(
             "PUT",

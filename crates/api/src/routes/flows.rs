@@ -152,9 +152,12 @@ async fn save_draft(
     Path(raw): Path<String>,
     Json(b): Json<DraftBody>,
 ) -> ApiResult<Json<Value>> {
-    let (revision, issues) =
-        uc::save_draft(&s.deps, &actor, id(&raw)?, &b.definition, b.revision).await?;
-    Ok(Json(json!({"revision": revision, "issues": issues})))
+    let saved = uc::save_draft(&s.deps, &actor, id(&raw)?, &b.definition, b.revision).await?;
+    Ok(Json(json!({
+        "revision": saved.revision,
+        "issues": saved.issues,
+        "has_unpublished_changes": saved.has_unpublished_changes,
+    })))
 }
 
 async fn validate(

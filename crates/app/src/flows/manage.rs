@@ -126,6 +126,15 @@ pub async fn update_flow(
     get_flow(deps, actor, id).await
 }
 
+/// What saving a draft returns: the new revision, its validation issues and whether it differs from the published
+/// version (so the builder need not download the flow again).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SavedDraft {
+    pub revision: u32,
+    pub issues: Vec<Issue>,
+    pub has_unpublished_changes: bool,
+}
+
 /// Saves the draft (optimistic concurrency on `revision`) and returns validation issues.
 pub async fn save_draft(
     deps: &Deps,
@@ -133,15 +142,20 @@ pub async fn save_draft(
     id: FlowId,
     definition: &FlowDefinition,
     revision: u32,
-) -> Result<(u32, Vec<Issue>), AppError> {
+) -> Result<SavedDraft, AppError> {
     actor.require(Permission::FlowEdit)?;
     let org = actor.org;
-    load(deps, org, id).await?;
+    let mut flow = load(deps, org, id).await?;
     let new_revision = deps
         .store
         .save_draft(org, id, definition, revision, deps.clock.now())
         .await?;
-    Ok((new_revision, validate(definition, deps.connectors.as_ref())))
+    flow.draft = definition.clone();
+    Ok(SavedDraft {
+        revision: new_revision,
+        issues: validate(definition, deps.connectors.as_ref()),
+        has_unpublished_changes: has_unpublished_changes(deps, &flow).await?,
+    })
 }
 
 /// Soft-deletes a flow and deactivates its trigger.
