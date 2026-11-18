@@ -127,6 +127,11 @@ function ExecutionView({ e }: { e: ExecutionDetail }) {
           {e.error_message}
         </MessageBar>
       )}
+      {e.payloads_hidden && (
+        <MessageBar intent="info" role="status">
+          Run data is hidden for viewers: you see each step&apos;s status and timing, not its input, output or error text.
+        </MessageBar>
+      )}
       <div className="exec-grid">
         <section className="card">
           <h2 className="card-title">Steps · {new Set(e.steps.map((s) => s.step_key)).size}</h2>
@@ -134,7 +139,7 @@ function ExecutionView({ e }: { e: ExecutionDetail }) {
         </section>
         <section className="card">
           <h2 className="card-title">Trigger data</h2>
-          <JsonView label="Payload" value={e.trigger_data} />
+          {e.payloads_hidden ? <p className="muted">Hidden for viewers.</p> : <JsonView label="Payload" value={e.trigger_data} />}
           <p className="field-help">Queued {formatTime(e.queued_at)}</p>
         </section>
       </div>

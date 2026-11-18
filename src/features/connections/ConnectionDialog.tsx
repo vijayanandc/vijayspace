@@ -15,7 +15,7 @@ import { ErrorBox } from '../../components/Empty';
 import { Field } from '../../components/Field';
 import { MessageBar } from '../../components/MessageBar';
 import { DynamicForm } from '../../forms/DynamicForm';
-import { oauthReturnUrl } from './oauth';
+import { leaveForSignIn, oauthReturnUrl } from './oauth';
 
 interface Props {
   open: boolean;
@@ -36,13 +36,6 @@ export function ConnectionDialog({ open, onClose, connector, onCreated, returnTo
   const [name, setName] = useState('');
   const [fields, setFields] = useState<JsonObject>({});
   const qc = useQueryClient();
-  useEffect(() => {
-    if (open) {
-      setKey(connector ?? '');
-      setFields({});
-      setName('');
-    }
-  }, [open, connector]);
   const manifest = manifests.find((m) => m.key === key);
   const isOauth = manifest?.auth.kind === 'oauth2';
   const formFields = (manifest?.auth.fields ?? []).filter((f) => !(isOauth && f.secret));
@@ -54,7 +47,7 @@ export function ConnectionDialog({ open, onClose, connector, onCreated, returnTo
       if (isOauth) {
         if (beforeRedirect && !(await beforeRedirect())) throw new Error('Your latest flow changes could not be saved, so sign-in was not started. Fix the save error first.');
         const res = await endpoints.oauthStart({ connector: manifest.key, name: label, fields, return_to: oauthReturnUrl(window.location.origin, returnTo, getCurrentOrg()) });
-        window.location.assign(res.authorize_url);
+        leaveForSignIn(res.authorize_url);
         return undefined;
       }
       return endpoints.createConnection({ connector: manifest.key, name: label, fields });
@@ -66,6 +59,14 @@ export function ConnectionDialog({ open, onClose, connector, onCreated, returnTo
       onClose();
     },
   });
+  const { reset } = create;
+  useEffect(() => {
+    // Typed secrets do not outlive the dialog (closed, saved or cancelled), and reopening starts clean.
+    setKey(connector ?? '');
+    setFields({});
+    setName('');
+    reset();
+  }, [open, connector, reset]);
 
   return (
     <Dialog

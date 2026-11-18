@@ -95,7 +95,7 @@ export function ConnectionsPage() {
           </div>
         )}
         {connections.data?.length === 0 && (
-          <EmptyState title="No connections yet" action={<Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>Add a connection</Button>}>
+          <EmptyState title="No connections yet" action={canCreate ? <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>Add a connection</Button> : undefined}>
             Connect Zoho CRM, Appblocks or Autodesk Forma to use them in flows.
           </EmptyState>
         )}

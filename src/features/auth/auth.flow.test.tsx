@@ -60,6 +60,7 @@ describe('sign-in', () => {
     logto.isLoading = false;
     logto.error = undefined;
     window.localStorage.clear();
+    window.sessionStorage.clear();
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -107,6 +108,17 @@ describe('sign-in', () => {
     expect(within(group).getByRole('button', { name: /Beta/ })).toHaveAttribute('aria-current', 'true');
     fireEvent.click(within(group).getByRole('button', { name: /Alpha/ }));
     await waitFor(() => expect(window.localStorage.getItem('weft.org')).toBe('org_a'));
+    expect(window.sessionStorage.getItem('weft.org')).toBe('org_a');
+    await waitFor(() => expect(calls.list.at(-1)?.headers['X-Org-ID']).toBe('org_a'));
+  });
+
+  it('keeps each tab in its own org: a tab returning from a sign-in uses its org, not the last one chosen elsewhere', async () => {
+    logto.isAuthenticated = true;
+    window.localStorage.setItem('weft.org', 'org_b');
+    window.sessionStorage.setItem('weft.org', 'org_a');
+    const calls = stubApi(true, { user, orgs: [org('org_a', 'Alpha'), org('org_b', 'Beta')], invitations: [] });
+    renderWithProviders(<AuthRoot><OrgSwitcher /></AuthRoot>);
+    expect(await screen.findByRole('button', { name: /Alpha/ })).toBeInTheDocument();
     await waitFor(() => expect(calls.list.at(-1)?.headers['X-Org-ID']).toBe('org_a'));
   });
 

@@ -238,6 +238,8 @@ export interface StepRun {
 export interface ExecutionDetail extends ExecutionSummary {
   trigger_data: JsonValue;
   steps: StepRun[];
+  /** Viewers: trigger data, step inputs and outputs and error text are left out. */
+  payloads_hidden: boolean;
 }
 
 export interface ExecutionPage {

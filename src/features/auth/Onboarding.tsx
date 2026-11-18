@@ -7,14 +7,14 @@ import { qk } from '../../api/hooks';
 import type { Me, Membership } from '../../api/tenancy';
 import { Button } from '../../components/Button';
 import { WeftLogo } from '../../components/WeftLogo';
-import { write } from '../../lib/storage';
+import { rememberOrg } from './session';
 import { CreateOrgForm } from './CreateOrgForm';
 import { InvitationList } from './InvitationList';
 
 export function Onboarding({ me, signOut }: { me: Me; signOut: () => void }) {
   const qc = useQueryClient();
   const joined = (org: Membership) => {
-    write('weft.org', org.id);
+    rememberOrg(org.id);
     void qc.invalidateQueries({ queryKey: qk.me });
   };
   const name = me.user?.name ?? me.user?.email ?? 'there';

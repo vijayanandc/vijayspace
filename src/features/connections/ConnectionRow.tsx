@@ -13,7 +13,7 @@ import { Button } from '../../components/Button';
 import { OverflowMenu } from '../../components/Popover';
 import { useToast } from '../../components/Toast';
 import { formatTime, relativeTime } from '../../lib/format';
-import { oauthReturnUrl } from './oauth';
+import { leaveForSignIn, oauthReturnUrl } from './oauth';
 import { usageSummary } from './limits';
 import { UsageMeter } from './UsageMeter';
 import { can, useRole, useUserId } from '../auth';
@@ -54,7 +54,7 @@ export function ConnectionRow({ connection, manifest, usage, onLimits }: RowProp
         fields: oauthSettings(connection, manifest),
         return_to: oauthReturnUrl(window.location.origin, undefined, getCurrentOrg()),
       });
-      window.location.assign(res.authorize_url);
+      leaveForSignIn(res.authorize_url);
     },
     onError: (e) => toast.show('error', errorMessage(e)),
   });

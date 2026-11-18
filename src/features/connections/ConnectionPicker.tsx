@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import { useConnections } from '../../api/hooks';
 import { Field } from '../../components/Field';
+import { can, useRole } from '../auth';
 import { ConnectionDialog } from './ConnectionDialog';
 
 interface Props {
@@ -20,6 +21,7 @@ interface Props {
 export function ConnectionPicker({ connector, value, onChange, returnTo, beforeRedirect }: Props) {
   const { data: connections = [], isLoading } = useConnections();
   const [creating, setCreating] = useState(false);
+  const canCreate = can(useRole(), 'connection.create');
   const mine = connections.filter((c) => c.connector === connector);
   const current = mine.find((c) => c.id === value);
   return (
@@ -28,9 +30,11 @@ export function ConnectionPicker({ connector, value, onChange, returnTo, beforeR
         label="Connection"
         required
         actions={
-          <button type="button" className="link-btn" onClick={() => setCreating(true)}>
-            + New connection
-          </button>
+          canCreate ? (
+            <button type="button" className="link-btn" onClick={() => setCreating(true)}>
+              + New connection
+            </button>
+          ) : undefined
         }
         help={current && current.status !== 'active' ? `This connection is ${current.status.replace('_', ' ')}.` : undefined}
       >

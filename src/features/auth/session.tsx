@@ -13,6 +13,20 @@ import { Splash } from './Splash';
 
 const ORG_KEY = 'weft.org';
 
+/**
+ * The org this tab acts in: the tab's own choice (kept across the sign-in and OAuth round trips of this tab), else
+ * the last choice in any tab (the default for a new tab).
+ */
+function rememberedOrg(orgs: Membership[]): string | null {
+  const candidates = [read(ORG_KEY, 'session'), read(ORG_KEY)];
+  return candidates.find((id) => id !== null && orgs.some((o) => o.id === id)) ?? null;
+}
+
+export function rememberOrg(orgId: string): void {
+  write(ORG_KEY, orgId, 'session');
+  write(ORG_KEY, orgId);
+}
+
 export interface Session {
   me: Me;
   org: Membership;
@@ -86,7 +100,7 @@ export function SessionProvider({ me, signedIn, signOut, children }: Props) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   // Read once: another tab switching orgs must not change this one.
-  const [chosen, setChosen] = useState(() => read(ORG_KEY));
+  const [chosen, setChosen] = useState(() => rememberedOrg(me.orgs));
   const [pending, setPending] = useState<string | null>(null);
   const org = pickOrg(me.orgs, chosen);
   // Set while rendering (an idempotent module variable), so the children's first queries already carry the org.
@@ -107,7 +121,7 @@ export function SessionProvider({ me, signedIn, signOut, children }: Props) {
     let cancelled = false;
     void mutationsSettled(queryClient).then(() => {
       if (cancelled) return;
-      write(ORG_KEY, pending);
+      rememberOrg(pending);
       setCurrentOrg(pending);
       queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== qk.me[0] && q.queryKey[0] !== qk.authConfig[0] });
       setChosen(pending);

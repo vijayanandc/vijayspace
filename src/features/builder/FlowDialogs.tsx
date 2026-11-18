@@ -19,7 +19,14 @@ import { JsonInput } from '../../forms/JsonInput';
 export function TestFlowDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { flowId, flow, flush } = useBuilder();
   const navigate = useNavigate();
-  const [payload, setPayload] = useState<JsonValue>(flow.trigger?.sample ?? { body: {} });
+  const sample = flow.trigger?.sample;
+  const [payload, setPayload] = useState<JsonValue>(sample ?? { body: {} });
+  // Each opening starts from the latest captured sample (e.g. one just captured with "Listen for sample").
+  const [opened, setOpened] = useState(open);
+  if (open !== opened) {
+    setOpened(open);
+    if (open) setPayload(sample ?? { body: {} });
+  }
   const run = useMutation({
     mutationFn: async () => {
       if (!(await flush())) throw new Error('The draft could not be saved; fix the save error first.');

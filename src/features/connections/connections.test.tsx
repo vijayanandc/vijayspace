@@ -71,22 +71,28 @@ describe('OAuth connections', () => {
     expect(starts).toHaveLength(0);
   });
 
-  it('returns to the flow after a successful sign-in', async () => {
+  it('never claims a connection, or shows text, from the address alone', async () => {
     stubApi();
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <ToastProvider>
-          <MemoryRouter initialEntries={['/connections/callback?next=%2Fflows%2Fflw_1&status=connected&connection_id=cxn_9']}>
-            <Routes>
-              <Route path="/connections/callback" element={<ConnectionCallbackPage />} />
-              <Route path="/flows/:flowId" element={<p>Builder</p>} />
-            </Routes>
-          </MemoryRouter>
-        </ToastProvider>
-      </QueryClientProvider>,
-    );
-    expect(await screen.findByText('Builder')).toBeInTheDocument();
-    expect(screen.getByText(/Connected\. Choose the new connection/)).toBeInTheDocument();
+    const at = (entry: string) =>
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <ToastProvider>
+            <MemoryRouter initialEntries={[entry]}>
+              <Routes>
+                <Route path="/connections/callback" element={<ConnectionCallbackPage />} />
+                <Route path="/flows/:flowId" element={<p>Builder</p>} />
+              </Routes>
+            </MemoryRouter>
+          </ToastProvider>
+        </QueryClientProvider>,
+      );
+    const forged = at('/connections/callback?next=%2Fflows%2Fflw_1&status=connected&connection_id=cxn_9');
+    expect(await screen.findByRole('heading', { name: 'Nothing to finish here' })).toBeInTheDocument();
+    expect(screen.queryByText('Builder')).not.toBeInTheDocument();
+    forged.unmount();
+    at('/connections/callback?status=error&message=Your+account+was+suspended.+Call+us');
+    expect(await screen.findByRole('alert')).toHaveTextContent('The app did not grant access.');
+    expect(screen.queryByText(/suspended/)).not.toBeInTheDocument();
   });
 
   it('re-authorises a connection that needs it, keeping its settings but no secrets', async () => {

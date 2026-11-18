@@ -38,14 +38,23 @@ export function Toolbar(props: Props) {
   const { flowId, flow, flush, refetchFlow } = useBuilder();
   const qc = useQueryClient();
   const toast = useToast();
-  const [name, setName] = useState(flow.name);
+  // The field follows the flow's name (renamed elsewhere, reloaded) until the user edits it.
+  const [draftName, setName] = useState<string | null>(null);
+  const name = draftName ?? flow.name;
   const [testing, setTesting] = useState(false);
   const [versions, setVersions] = useState(false);
   const refresh = () => {
     refetchFlow();
     void qc.invalidateQueries({ queryKey: qk.flows });
   };
-  const rename = useMutation({ mutationFn: () => endpoints.updateFlow(flowId, { name: name.trim() }), onSuccess: refresh, onError: (e) => toast.show('error', errorMessage(e)) });
+  const rename = useMutation({
+    mutationFn: () => endpoints.updateFlow(flowId, { name: name.trim() }),
+    onSuccess: () => {
+      setName(null);
+      refresh();
+    },
+    onError: (e) => toast.show('error', errorMessage(e)),
+  });
   const publish = useMutation({
     mutationFn: async () => {
       if (!(await flush())) throw new Error('Save the draft first (see the save status).');
@@ -82,7 +91,11 @@ export function Toolbar(props: Props) {
         value={name}
         readOnly={props.readOnly}
         onChange={(e) => setName(e.target.value)}
-        onBlur={() => !props.readOnly && name.trim() && name.trim() !== flow.name && rename.mutate()}
+        onBlur={() => {
+          if (draftName === null || props.readOnly) return;
+          if (name.trim() && name.trim() !== flow.name) rename.mutate();
+          else setName(null);
+        }}
         onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
       />
       {flow.published_version ? (
