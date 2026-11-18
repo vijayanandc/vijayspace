@@ -76,7 +76,7 @@ describe('OAuth connections', () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         <ToastProvider>
-          <MemoryRouter initialEntries={['/connections/callback?next=%2Fflows%2Fflw_1&status=connected&connection_id=cxn_9']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <MemoryRouter initialEntries={['/connections/callback?next=%2Fflows%2Fflw_1&status=connected&connection_id=cxn_9']}>
             <Routes>
               <Route path="/connections/callback" element={<ConnectionCallbackPage />} />
               <Route path="/flows/:flowId" element={<p>Builder</p>} />
@@ -107,7 +107,7 @@ describe('OAuth connections', () => {
           <QueryClientProvider client={new QueryClient()}>
             <ToastProvider>
               <TestSession role="member">
-                <MemoryRouter initialEntries={[entry]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                <MemoryRouter initialEntries={[entry]}>
                   <Routes>
                     <Route path="/connections/callback" element={<><ConnectionCallbackPage /><Address /></>} />
                     <Route path="/flows/:flowId" element={<p>Builder</p>} />

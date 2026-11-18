@@ -12,7 +12,7 @@ export function renderWithProviders(ui: ReactElement) {
   return render(
     <QueryClientProvider client={client}>
       <ToastProvider>
-        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>{ui}</MemoryRouter>
+        <MemoryRouter>{ui}</MemoryRouter>
       </ToastProvider>
     </QueryClientProvider>,
   );

@@ -52,7 +52,7 @@ function renderBuilder(role?: Role) {
   const view = render(
     <QueryClientProvider client={client}>
       <ToastProvider>
-        <MemoryRouter initialEntries={['/flows/flw_1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <MemoryRouter initialEntries={['/flows/flw_1']}>
           <Routes>
             <Route path="/flows" element={<Link to="/flows/flw_1">Open demo</Link>} />
             <Route path="/flows/:flowId" element={role ? <TestSession role={role}><BuilderPage /></TestSession> : <BuilderPage />} />

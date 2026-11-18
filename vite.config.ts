@@ -1,4 +1,4 @@
-/// <reference types="vitest" />
+/// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
@@ -13,6 +13,8 @@ export default defineConfig({
     host,
     port,
     strictPort: true,
+    // The app is same-origin with this server: no other site may read its responses (including the /api proxy).
+    cors: false,
     proxy: {
       '/api': backend,
       '/hooks': backend,
