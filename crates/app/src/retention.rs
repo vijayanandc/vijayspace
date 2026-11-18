@@ -32,6 +32,7 @@ pub struct SweepReport {
     pub oauth_states: u64,
     pub sync_leases: u64,
     pub usage_days: u64,
+    pub invitations: u64,
 }
 
 impl SweepReport {
@@ -79,6 +80,7 @@ pub async fn sweep(deps: &Deps) -> Result<SweepReport, AppError> {
     report.oauth_states = h.oauth_states;
     report.sync_leases = h.sync_leases;
     report.usage_days = h.usage_days;
+    report.invitations = h.invitations;
     Ok(report)
 }
 

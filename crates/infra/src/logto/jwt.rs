@@ -58,6 +58,11 @@ impl LogtoVerifier {
         if recent {
             return Ok(None);
         }
+        // Claimed before fetching, so concurrent or failing lookups of unknown keys cost at most
+        // one request a minute.
+        if let Ok(mut t) = self.jwks.fetched_at.write() {
+            *t = Some(now);
+        }
         let set: JwkSet = self
             .http
             .get(format!("{}/jwks", self.issuer))
@@ -73,9 +78,6 @@ impl LogtoVerifier {
             .and_then(|jwk| DecodingKey::from_jwk(jwk).ok());
         if let Ok(mut k) = self.jwks.keys.write() {
             *k = Some(set);
-        }
-        if let Ok(mut t) = self.jwks.fetched_at.write() {
-            *t = Some(now);
         }
         Ok(key)
     }

@@ -10,7 +10,12 @@ use weft_app::AppError;
 use weft_connector_sdk::ConnectorManifest;
 use weft_domain::error_codes;
 
-use crate::{dto::DynamicRequest, error::ApiResult, extract::Acting, state::ApiState};
+use crate::{
+    dto::DynamicRequest,
+    error::ApiResult,
+    extract::{Acting, SignedIn},
+    state::ApiState,
+};
 
 pub fn router() -> Router<ApiState> {
     Router::new()
@@ -20,12 +25,13 @@ pub fn router() -> Router<ApiState> {
         .route("/api/v1/connectors/{key}/fields/{source}", post(fields))
 }
 
-async fn list(State(s): State<ApiState>) -> Json<Vec<ConnectorManifest>> {
+async fn list(State(s): State<ApiState>, _: SignedIn) -> Json<Vec<ConnectorManifest>> {
     Json(s.deps.connectors.manifests().cloned().collect())
 }
 
 async fn one(
     State(s): State<ApiState>,
+    _: SignedIn,
     Path(key): Path<String>,
 ) -> ApiResult<Json<ConnectorManifest>> {
     let c = s

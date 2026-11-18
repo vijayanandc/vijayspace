@@ -11,7 +11,11 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use weft_app::recipes;
 
-use crate::{error::ApiResult, extract::Acting, state::ApiState};
+use crate::{
+    error::ApiResult,
+    extract::{Acting, SignedIn},
+    state::ApiState,
+};
 
 pub fn router() -> Router<ApiState> {
     Router::new()
@@ -19,7 +23,7 @@ pub fn router() -> Router<ApiState> {
         .route("/api/v1/recipes/{key}/install", post(install))
 }
 
-async fn list() -> Json<Value> {
+async fn list(_: SignedIn) -> Json<Value> {
     Json(json!(recipes::catalog()))
 }
 

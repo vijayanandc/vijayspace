@@ -66,14 +66,9 @@ pub trait TenancyRepo: Send + Sync {
     async fn is_member_email(&self, org: OrgId, email: &str) -> Res<bool>;
     /// Creates an org with its first owner, in one transaction.
     async fn create_org_with_owner(&self, org: &Org, owner: UserId, now: DateTime<Utc>) -> Res<()>;
-    /// Adds a membership unless the user already has one (their role is kept).
-    async fn ensure_member(
-        &self,
-        org: OrgId,
-        user: UserId,
-        role: Role,
-        now: DateTime<Utc>,
-    ) -> Res<()>;
+    /// Makes `user` an owner of `org` if the org has no owner yet (under a lock on its members).
+    /// Returns whether it did.
+    async fn claim_ownerless_org(&self, org: OrgId, user: UserId, now: DateTime<Utc>) -> Res<bool>;
     /// Changes a role if it is still `from`, unless that leaves the org without an owner.
     async fn set_member_role(
         &self,
@@ -93,6 +88,15 @@ pub trait TenancyRepo: Send + Sync {
     /// Open invitations for an email, across orgs.
     async fn invitations_for_email(&self, email: &str, now: DateTime<Utc>) -> Res<Vec<Invitation>>;
     async fn delete_invitation(&self, org: OrgId, id: InvitationId) -> Res<bool>;
+    /// Closes an invitation without deleting it (it still counts toward the day's emails).
+    async fn expire_invitation(
+        &self,
+        org: OrgId,
+        id: InvitationId,
+        now: DateTime<Utc>,
+    ) -> Res<bool>;
+    /// Invitations of an org created or renewed since `since` (each sends an email).
+    async fn count_invitations_since(&self, org: OrgId, since: DateTime<Utc>) -> Res<u32>;
     /// Accepts an open invitation for `email`: adds the membership (an existing one keeps its
     /// role) and deletes the invitation, in one transaction. `None` if there is no such invitation.
     async fn accept_invitation(

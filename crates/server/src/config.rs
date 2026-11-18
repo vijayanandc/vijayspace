@@ -88,6 +88,7 @@ impl Settings {
                 );
             }
         }
+        let bind = var("WEFT_BIND").unwrap_or_else(|| "0.0.0.0:8080".into());
         let master_keys = match (var("WEFT_MASTER_KEYS"), var("WEFT_ACTIVE_KEY_ID")) {
             (Some(keys), Some(active)) => Some((keys, active)),
             (None, None) => None,
@@ -97,7 +98,7 @@ impl Settings {
             database_url: var("WEFT_DATABASE_URL")
                 .or_else(|| var("DATABASE_URL"))
                 .unwrap_or_else(|| "mysql://weft:weft@127.0.0.1:3306/weft".into()),
-            bind: var("WEFT_BIND").unwrap_or_else(|| "0.0.0.0:8080".into()),
+            bind: bind.clone(),
             client_origins: var("WEFT_CLIENT_ORIGINS")
                 .unwrap_or_else(|| "http://127.0.0.1:3000,http://localhost:5173".into())
                 .split(',')
@@ -111,7 +112,7 @@ impl Settings {
             http_proxy: var("WEFT_HTTP_PROXY"),
             allow_private_networks: var("WEFT_ALLOW_PRIVATE_NETWORKS")
                 .is_some_and(|v| v == "true" || v == "1"),
-            sign_in: crate::auth_settings::sign_in(&var)?,
+            sign_in: crate::auth_settings::sign_in(&var, &bind)?,
             app_url: var("WEFT_APP_URL").unwrap_or_else(|| "http://127.0.0.1:3000".into()),
             owner_emails: crate::auth_settings::owner_emails(var("WEFT_OWNER_EMAILS")),
             mail: crate::auth_settings::mail(&var),

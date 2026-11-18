@@ -97,6 +97,10 @@ impl TestApp {
                     },
                 )]),
                 app_url: "http://app.weft.test".into(),
+                client_origins: vec![
+                    "http://localhost:5173".into(),
+                    "http://app.weft.test".into(),
+                ],
                 owner_emails: vec!["owner@weft.test".into()],
                 sign_in: idp.as_ref().map(|_| weft_app::SignInConfig {
                     endpoint: "https://tenant.logto.test".into(),

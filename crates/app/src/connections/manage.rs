@@ -153,6 +153,10 @@ async fn stored(deps: &Deps, org: OrgId, id: ConnectionId) -> Result<StoredConne
 }
 
 /// Renames a connection and/or replaces some of its fields (empty secret fields keep their value).
+/// Changing a connection is managing it: members may do it only to connections they created (the
+/// same access as deleting). Changing a setting while keeping the stored credentials would let
+/// anyone redirect them (e.g. a new base URL), so any settings change needs the credentials again,
+/// and OAuth connections must sign in again instead.
 pub async fn update_connection(
     deps: &Deps,
     actor: &Actor,
@@ -160,19 +164,29 @@ pub async fn update_connection(
     name: Option<&str>,
     fields: Option<&Map<String, Value>>,
 ) -> Result<Connection, AppError> {
-    actor.require(Permission::ConnectionCreate)?;
     let org = actor.org;
     let mut s = stored(deps, org, id).await?;
+    actor.require_on(Permission::ConnectionDelete, s.connection.created_by)?;
     if let Some(n) = name.map(str::trim).filter(|n| !n.is_empty()) {
         s.connection.name = n.chars().take(200).collect();
     }
     if let Some(fields) = fields {
         let c = connector(deps, &s.connection.connector)?;
         let (config, new_secrets) = split_fields(c.as_ref(), fields, true)?;
+        let changed = config
+            .iter()
+            .any(|(k, v)| s.connection.config.get(k) != Some(v));
+        if changed {
+            credentials_resent(c.as_ref(), &new_secrets)?;
+        }
         if let Some(cfg) = s.connection.config.as_object_mut() {
             cfg.extend(config);
         }
-        if !new_secrets.is_empty() {
+        if changed {
+            let (ciphertext, key_id) = encrypt(deps, &s.connection, &new_secrets)?;
+            s.ciphertext = ciphertext;
+            s.key_id = key_id;
+        } else if !new_secrets.is_empty() {
             let mut secrets = decrypt(deps, &s)
                 .map_err(|e| AppError::internal(e.to_string()))?
                 .as_object()
@@ -200,6 +214,34 @@ pub async fn delete_connection(
     deps.store
         .soft_delete_connection(org, id, deps.clock.now())
         .await
+}
+
+/// A settings change must come with every credential again (OAuth: a new sign-in).
+fn credentials_resent(c: &dyn Connector, secrets: &Map<String, Value>) -> Result<(), AppError> {
+    if c.manifest().auth.kind == AuthKind::Oauth2 {
+        return Err(AppError::validation(
+            error_codes::VALIDATION_FAILED,
+            "Reconnect (sign in again) to change this connection's settings",
+        ));
+    }
+    let missing: Vec<&str> = c
+        .manifest()
+        .auth
+        .fields
+        .iter()
+        .filter(|f| f.secret && !secrets.contains_key(&f.key))
+        .map(|f| f.label.as_str())
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    Err(AppError::validation(
+        error_codes::VALIDATION_FAILED,
+        format!(
+            "Enter {} again: changing the settings sends the credentials to a new place",
+            missing.join(", ")
+        ),
+    ))
 }
 
 /// Result of testing a connection.

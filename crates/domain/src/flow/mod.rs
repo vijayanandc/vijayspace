@@ -1,6 +1,7 @@
 //! Flow definitions and their validation.
 
 pub mod definition;
+mod redact;
 pub mod validate;
 
 pub use definition::*;

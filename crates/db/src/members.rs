@@ -49,6 +49,38 @@ async fn check(
 }
 
 impl MySqlStore {
+    pub(crate) async fn claim_owner(
+        &self,
+        org: OrgId,
+        user: UserId,
+        now: DateTime<Utc>,
+    ) -> Res<bool> {
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        let roles: Vec<String> =
+            sqlx::query_scalar("SELECT role FROM org_members WHERE org_id = ? FOR UPDATE")
+                .bind(org.as_uuid())
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(db_err)?;
+        if roles.iter().any(|r| r == Role::Owner.as_str()) {
+            return Ok(false);
+        }
+        sqlx::query(
+            "INSERT INTO org_members (org_id, user_id, role, created_at, updated_at) VALUES (?, ?, 'owner', ?, ?) \
+             ON DUPLICATE KEY UPDATE role = 'owner', updated_at = ?",
+        )
+        .bind(org.as_uuid())
+        .bind(user.as_uuid())
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        tx.commit().await.map_err(db_err)?;
+        Ok(true)
+    }
+
     pub(crate) async fn change_role(
         &self,
         org: OrgId,

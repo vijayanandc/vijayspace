@@ -1,6 +1,6 @@
 //! Use cases: who is signed in (a user created on first sign-in), and the actor of a request.
 
-use weft_domain::{error_codes, ids::OrgId, model::User, permissions::Role};
+use weft_domain::{error_codes, ids::OrgId, model::User};
 
 use super::Actor;
 use crate::{AppError, Deps, ports::VerifiedIdentity};
@@ -32,11 +32,22 @@ pub async fn signed_in(deps: &Deps, bearer: Option<&str>) -> Result<Option<User>
 /// The user for a verified identity: created on first sign-in, refreshed when the email or name
 /// changed (the common case is one read).
 async fn user_for(deps: &Deps, identity: &VerifiedIdentity) -> Result<User, AppError> {
-    let identity = VerifiedIdentity {
+    let mut identity = VerifiedIdentity {
         email: identity.email.as_deref().and_then(normalize_email),
         ..identity.clone()
     };
-    if let Some(user) = deps.store.user_by_subject(&identity.subject).await?
+    let stored = deps.store.user_by_subject(&identity.subject).await?;
+    // A token without profile claims (a JWT without custom claims) keeps what is known.
+    if let Some(user) = &stored {
+        if identity.email.is_none() {
+            identity.email.clone_from(&user.email);
+            identity.email_verified = user.email_verified;
+        }
+        if identity.name.is_none() {
+            identity.name.clone_from(&user.name);
+        }
+    }
+    if let Some(user) = stored
         && user.email == identity.email
         && user.email_verified == identity.email_verified
         && user.name == identity.name
@@ -52,8 +63,9 @@ async fn user_for(deps: &Deps, identity: &VerifiedIdentity) -> Result<User, AppE
     Ok(user)
 }
 
-/// A user whose verified email is in `WEFT_OWNER_EMAILS` owns the default org (so existing flows
-/// have an owner once sign-in is turned on). Runs when a user is created or their email changes.
+/// A user whose verified email is in `WEFT_OWNER_EMAILS` claims the default org while it has no
+/// owner (so existing flows get an owner once sign-in is turned on). Once it has one, owners
+/// manage its members like any other org's: removing a listed owner sticks.
 pub(crate) async fn bootstrap_owner(deps: &Deps, user: &User) -> Result<(), AppError> {
     let Some(email) = user.email.as_deref().filter(|_| user.email_verified) else {
         return Ok(());
@@ -67,8 +79,9 @@ pub(crate) async fn bootstrap_owner(deps: &Deps, user: &User) -> Result<(), AppE
         .ensure_default_org(deps.config.default_org_id, now)
         .await?;
     deps.store
-        .ensure_member(org.id, user.id, Role::Owner, now)
+        .claim_ownerless_org(org.id, user.id, now)
         .await
+        .map(|_| ())
 }
 
 /// The actor of a tenant-scoped request: the member acting in the org named by `X-Org-ID`. An org

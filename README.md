@@ -33,7 +33,7 @@ The run appears under **History** with each step's input and output.
 | `WEFT_BIND` | `0.0.0.0:8080` | Listen address |
 | `WEFT_PUBLIC_URL` | `http://localhost:8080` | Base of webhook and OAuth callback URLs |
 | `WEFT_CLIENT_ORIGINS` | `http://127.0.0.1:3000,http://localhost:5173` | CORS origins (comma-separated) |
-| `WEFT_AUTH` | `logto` when `WEFT_LOGTO_ENDPOINT` is set, else `off` | `off` turns sign-in off: every request acts as an owner of the default org (**development only**) |
+| `WEFT_AUTH` | `logto` when `WEFT_LOGTO_ENDPOINT` is set; required otherwise | `off` turns sign-in off: every request acts as an owner (**development only**; refused unless `WEFT_BIND` is a loopback address). `just serve` uses `off` on `127.0.0.1:8080`. |
 | `WEFT_LOGTO_ENDPOINT` | — | The Logto tenant, e.g. `https://<tenant>.logto.app` (the one the Appblocks apps use) |
 | `WEFT_LOGTO_APP_ID`, `WEFT_LOGTO_APP_SECRET` | — | This server's confidential (traditional web) Logto app, used to introspect opaque tokens. **The secret only in the environment.** |
 | `WEFT_LOGTO_CLIENT_APP_ID` | — | The web client's single-page Logto app (only its tokens are accepted). Its redirect URI is `<client origin>/callback`, e.g. `http://127.0.0.1:3000/callback` |

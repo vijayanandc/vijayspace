@@ -22,6 +22,8 @@ pub struct Housekeeping {
     pub oauth_states: u64,
     pub sync_leases: u64,
     pub usage_days: u64,
+    /// Invitations that expired (or were revoked) more than a day ago.
+    pub invitations: u64,
 }
 
 #[async_trait]

@@ -145,7 +145,16 @@ impl RetentionRepo for MySqlStore {
             .await
             .map_err(db_err)?
             .rows_affected();
+        // Kept a day after expiring or being revoked: they count toward the org's daily emails.
+        let invitations = run("DELETE FROM org_invitations WHERE expires_at < ? LIMIT ?")
+            .bind(now - chrono::Duration::days(1))
+            .bind(limit)
+            .execute(&self.pool)
+            .await
+            .map_err(db_err)?
+            .rows_affected();
         Ok(Housekeeping {
+            invitations,
             dead_jobs,
             oauth_states,
             sync_leases,

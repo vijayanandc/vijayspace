@@ -16,6 +16,14 @@ use crate::{AppError, Deps, ports::NewInvitation};
 
 /// How long an invitation stays open.
 const VALID_DAYS: i64 = 14;
+/// Invitation emails an org may send per day (each invitation or resend sends one).
+const DAILY_EMAILS: u32 = 100;
+/// The shortest time between two emails for the same invitation.
+const RESEND_COOLDOWN_MINUTES: i64 = 5;
+
+fn rate_limited(message: &str) -> AppError {
+    AppError::conflict(error_codes::INVITATION_RATE_LIMITED, message)
+}
 
 /// An invitation and whether its email went out.
 #[derive(Debug, Clone, Serialize)]
@@ -76,6 +84,17 @@ pub async fn invite(
             format!("{email} is already a member"),
         ));
     }
+    // Re-inviting renews the open invitation: the actor must be allowed to handle its role too
+    // (an admin cannot turn an owner's invitation into something else).
+    let open = deps
+        .store
+        .org_invitations(actor.org, deps.clock.now())
+        .await?
+        .into_iter()
+        .find(|i| i.email == email);
+    if let Some(open) = open {
+        may_handle(actor, open.role)?;
+    }
     issue(deps, actor, &email, role).await
 }
 
@@ -87,6 +106,11 @@ pub async fn resend(deps: &Deps, actor: &Actor, id: InvitationId) -> Result<Invi
         .await?
         .ok_or_else(not_found)?;
     may_handle(actor, invitation.role)?;
+    if deps.clock.now() - invitation.created_at < Duration::minutes(RESEND_COOLDOWN_MINUTES) {
+        return Err(rate_limited(
+            "This invitation was just sent. Wait a few minutes before sending it again.",
+        ));
+    }
     issue(deps, actor, &invitation.email, invitation.role).await
 }
 
@@ -97,12 +121,24 @@ pub async fn revoke(deps: &Deps, actor: &Actor, id: InvitationId) -> Result<(), 
         .await?
         .ok_or_else(not_found)?;
     may_handle(actor, invitation.role)?;
-    deps.store.delete_invitation(actor.org, id).await?;
+    // Expired, not deleted: it keeps counting toward today's invitation emails.
+    deps.store
+        .expire_invitation(actor.org, id, deps.clock.now())
+        .await?;
     Ok(())
 }
 
 async fn issue(deps: &Deps, actor: &Actor, email: &str, role: Role) -> Result<Invited, AppError> {
     let now = deps.clock.now();
+    let sent = deps
+        .store
+        .count_invitations_since(actor.org, now - Duration::days(1))
+        .await?;
+    if sent >= DAILY_EMAILS {
+        return Err(rate_limited(&format!(
+            "This organisation sent {DAILY_EMAILS} invitations today. Try again tomorrow."
+        )));
+    }
     deps.store
         .upsert_invitation(
             &NewInvitation {

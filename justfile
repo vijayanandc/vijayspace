@@ -20,7 +20,7 @@ db-down:
 
 # Migrate, then run the API and the worker on :8080 (local networks allowed for testing)
 serve:
-    WEFT_ALLOW_PRIVATE_NETWORKS=${WEFT_ALLOW_PRIVATE_NETWORKS:-true} cargo run -p weft-server -- serve
+    WEFT_AUTH=${WEFT_AUTH:-off} WEFT_BIND=${WEFT_BIND:-127.0.0.1:8080} WEFT_ALLOW_PRIVATE_NETWORKS=${WEFT_ALLOW_PRIVATE_NETWORKS:-true} cargo run -p weft-server -- serve
 
 # Apply migrations only
 migrate:

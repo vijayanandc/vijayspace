@@ -26,7 +26,12 @@ pub async fn list_executions(
     actor.require(Permission::ExecutionView)?;
     let org = actor.org;
     filter.limit = filter.limit.clamp(1, 200);
-    let items = deps.store.list_executions(org, &filter).await?;
+    let mut items = deps.store.list_executions(org, &filter).await?;
+    if !actor.sees_payloads() {
+        for (exe, _) in &mut items {
+            exe.error_message = None;
+        }
+    }
     let next = if items.len() == filter.limit as usize {
         items.last().map(|(e, _)| (e.queued_at, e.id))
     } else {
@@ -56,9 +61,12 @@ pub async fn get_execution(
 fn redacted(mut exe: Execution, mut steps: Vec<StepRun>) -> (Execution, Vec<StepRun>) {
     exe.trigger_data = serde_json::Value::Null;
     exe.run_state = serde_json::Value::Null;
+    // App errors often quote the app's response: viewers get the code only.
+    exe.error_message = None;
     for step in &mut steps {
         step.input = None;
         step.output = None;
+        step.warnings.clear();
         step.error = step
             .error
             .as_ref()

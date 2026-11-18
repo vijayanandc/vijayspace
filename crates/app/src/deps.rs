@@ -24,6 +24,8 @@ pub struct AppConfig {
     pub oauth_clients: HashMap<String, OAuthClient>,
     /// Where people open Weft (links in emails), e.g. `https://flow.example.com`.
     pub app_url: String,
+    /// The web client's origins: the only places an OAuth sign-in may return to.
+    pub client_origins: Vec<String>,
     /// Verified emails that become owners of the default org when they sign in (lower-cased).
     pub owner_emails: Vec<String>,
     /// The sign-in settings the web client needs; `None` when sign-in is turned off.

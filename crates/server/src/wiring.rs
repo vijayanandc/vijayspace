@@ -74,6 +74,7 @@ pub fn build(settings: &Settings, store: MySqlStore) -> anyhow::Result<Deps> {
             default_org_id: OrgId::from_uuid(DEFAULT_ORG),
             oauth_clients: settings.oauth_clients.clone(),
             app_url: settings.app_url.clone(),
+            client_origins: settings.client_origins.clone(),
             owner_emails: settings.owner_emails.clone(),
             sign_in: settings.sign_in.as_ref().map(|s| SignInConfig {
                 endpoint: s.endpoint.clone(),
@@ -108,8 +109,8 @@ fn identity(
     clock: &Arc<dyn weft_app::ports::Clock>,
 ) -> anyhow::Result<Option<Arc<dyn IdentityVerifier>>> {
     let Some(s) = &settings.sign_in else {
-        tracing::warn!(
-            "sign-in is turned off (WEFT_AUTH=off or no WEFT_LOGTO_ENDPOINT): every request acts as              an owner of the default org. Never run like this outside development."
+        tracing::error!(
+            "sign-in is turned off (WEFT_AUTH=off): every request acts as an owner. Development only; the server accepts connections from this machine only."
         );
         return Ok(None);
     };

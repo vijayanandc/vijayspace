@@ -134,7 +134,6 @@ pub async fn set_connection_limits(
     id: ConnectionId,
     overrides: ConnectionLimits,
 ) -> Result<LimitsView, AppError> {
-    actor.require(Permission::ConnectionCreate)?;
     let org = actor.org;
     let too_big = [
         overrides.requests_per_minute,
@@ -150,10 +149,13 @@ pub async fn set_connection_limits(
             format!("Limits can be at most {MAX_LIMIT}"),
         ));
     }
-    deps.store
+    let existing = deps
+        .store
         .get_connection(org, id)
         .await?
         .ok_or_else(not_found)?;
+    // Managing a connection (members: only their own).
+    actor.require_on(Permission::ConnectionDelete, existing.connection.created_by)?;
     deps.store
         .set_connection_limits(org, id, &overrides, deps.clock.now())
         .await?;

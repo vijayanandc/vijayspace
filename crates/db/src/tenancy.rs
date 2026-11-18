@@ -132,26 +132,8 @@ impl TenancyRepo for MySqlStore {
         tx.commit().await.map_err(db_err)
     }
 
-    async fn ensure_member(
-        &self,
-        org: OrgId,
-        user: UserId,
-        r: Role,
-        now: DateTime<Utc>,
-    ) -> Res<()> {
-        sqlx::query(
-            "INSERT INTO org_members (org_id, user_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?) \
-             ON DUPLICATE KEY UPDATE org_id = org_id",
-        )
-        .bind(org.as_uuid())
-        .bind(user.as_uuid())
-        .bind(r.as_str())
-        .bind(now)
-        .bind(now)
-        .execute(&self.pool)
-        .await
-        .map_err(db_err)?;
-        Ok(())
+    async fn claim_ownerless_org(&self, org: OrgId, user: UserId, now: DateTime<Utc>) -> Res<bool> {
+        self.claim_owner(org, user, now).await
     }
 
     async fn set_member_role(
@@ -233,6 +215,35 @@ impl TenancyRepo for MySqlStore {
             .await
             .map_err(db_err)?;
         Ok(done.rows_affected() > 0)
+    }
+
+    async fn expire_invitation(
+        &self,
+        org: OrgId,
+        id: InvitationId,
+        now: DateTime<Utc>,
+    ) -> Res<bool> {
+        let done = sqlx::query("UPDATE org_invitations SET expires_at = ? WHERE org_id = ? AND id = ? AND expires_at > ?")
+            .bind(now)
+            .bind(org.as_uuid())
+            .bind(id.as_uuid())
+            .bind(now)
+            .execute(&self.pool)
+            .await
+            .map_err(db_err)?;
+        Ok(done.rows_affected() > 0)
+    }
+
+    async fn count_invitations_since(&self, org: OrgId, since: DateTime<Utc>) -> Res<u32> {
+        let n: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM org_invitations WHERE org_id = ? AND created_at >= ?",
+        )
+        .bind(org.as_uuid())
+        .bind(since)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(u32::try_from(n).unwrap_or(u32::MAX))
     }
 
     async fn accept_invitation(

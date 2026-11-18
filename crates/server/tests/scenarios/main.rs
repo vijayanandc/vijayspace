@@ -10,6 +10,7 @@
 mod app_events;
 mod connections;
 mod custom_functions;
+mod hardening;
 mod harness;
 mod lifecycle;
 mod limits;

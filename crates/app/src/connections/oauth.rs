@@ -24,6 +24,18 @@ fn state_aad(hash: &[u8]) -> Vec<u8> {
     format!("oauth|{}", hex::encode(hash)).into_bytes()
 }
 
+/// Where the browser may be sent after an OAuth sign-in: a page of one of the web client's origins
+/// (never an arbitrary site, which would receive the connection ID).
+fn return_allowed(origins: &[String], return_to: &str) -> bool {
+    if !(return_to.starts_with("http://") || return_to.starts_with("https://")) {
+        return false;
+    }
+    origins.iter().any(|o| {
+        let o = o.trim_end_matches('/');
+        return_to == o || return_to.starts_with(&format!("{o}/"))
+    })
+}
+
 /// Returns the provider authorization URL. `config` holds non-secret auth fields (e.g. region).
 pub async fn oauth_start(
     deps: &Deps,
@@ -56,16 +68,18 @@ pub async fn oauth_start(
             format!("The OAuth app for `{connector_key}` is not configured on this server (set WEFT_OAUTH_{}_CLIENT_ID and _CLIENT_SECRET)", connector_key.to_uppercase()),
         )
     })?;
-    if !(return_to.starts_with("http://") || return_to.starts_with("https://")) {
+    if !return_allowed(&deps.config.client_origins, return_to) {
         return Err(AppError::validation(
             error_codes::VALIDATION_FAILED,
-            "return_to must be an http(s) URL",
+            "return_to must be a page of this Weft web app",
         ));
     }
     if let Some(id) = connection_id {
-        deps.store.get_connection(org, id).await?.ok_or_else(|| {
+        let existing = deps.store.get_connection(org, id).await?.ok_or_else(|| {
             AppError::not_found(error_codes::CONNECTION_NOT_FOUND, "Connection not found")
         })?;
+        // Signing a connection in again replaces its account: managing it, like deleting it.
+        actor.require_on(Permission::ConnectionDelete, existing.connection.created_by)?;
     }
     let state = oauth::random_token();
     let hash = Sha256::digest(state.as_bytes()).to_vec();

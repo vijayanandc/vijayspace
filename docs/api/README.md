@@ -4,7 +4,7 @@ The contract between the Rust server (`backend` branch) and the React client (`c
 JSON is snake_case. Timestamps are RFC 3339 UTC. IDs are prefixed strings (`flw_…`, `cxn_…`, `exe_…`).
 
 **Sign-in and tenancy** (plan doc 13 §6, doc 08 §1–3):
-- Every `/api/v1` request except `GET /api/v1/auth/config` sends `Authorization: Bearer <Logto access token>`. Without a valid token: **401** `auth.unauthenticated` (the client gets a fresh token once, then shows sign-in). Logto unreachable: **502** `auth.unavailable`.
+- Every `/api/v1` request except `GET /api/v1/auth/config` (including the catalog and recipes) sends `Authorization: Bearer <Logto access token>`. Without a valid token: **401** `auth.unauthenticated` (the client gets a fresh token once, then shows sign-in). Logto unreachable: **502** `auth.unavailable`.
 - Tenant requests also send `X-Org-ID: org_…` (missing: **422** `validation.failed`). An org the user does not belong to, and anything in another org, is **404** (never 403). A role that does not allow the action is **403** `auth.forbidden`. Never send an org ID in a body.
 - With sign-in turned off on the server (`WEFT_AUTH=off`, development), no token is needed and requests act as an owner of the org in `X-Org-ID` or the default org.
 - Webhooks (`/hooks/…`) and the OAuth callback stay public: their token or state is the credential.
@@ -126,7 +126,7 @@ Clients switch on `code` (see `crates/domain/src/error_codes.rs`).
 | GET | `/api/v1/connections/{id}/limits` | — | `Limits` |
 | PUT | `/api/v1/connections/{id}/limits` | `{requests_per_minute?, max_concurrent?, daily_requests?}` (absent/`null` = the app's default, `0` = no limit, at most 10,000,000) | `Limits` |
 | GET | `/api/v1/connections/usage` | — | `Usage[]` (today, every connection) |
-| PATCH | `/api/v1/connections/{id}` | `{name?, fields?}` | `Connection` |
+| PATCH | `/api/v1/connections/{id}` | `{name?, fields?}` | `Connection`. Members only on connections they created (403). Changing a setting needs every secret field again (422), and an OAuth connection's settings change only by reconnecting. |
 | DELETE | `/api/v1/connections/{id}` | — | 204 |
 | POST | `/api/v1/connections/{id}/test` | — | `{ok: true, info: {}}` or `{ok: false, error: {code, message}}` |
 | POST | `/api/v1/connections/oauth/start` | `{connector, name, connection_id?, fields?: {…non-secret config, e.g. region}, return_to}` | `{authorize_url}` |
@@ -250,9 +250,9 @@ Roles: `owner | admin | member | viewer`. The matrix (doc 08 §2): owners do eve
 | PATCH | `/api/v1/members/{user_id}` | `{role}` | the member. `members.manage`; only owners make or change owners (403); the last owner cannot step down (409 `member.last_owner`). |
 | DELETE | `/api/v1/members/{user_id}` | — | 204. Anyone may remove themselves (leave); others need `members.manage`; owners only by owners; never the last owner (409). |
 | GET | `/api/v1/invitations` | — | open invitations `[{id, org_id, org_name, email, role, invited_by, created_at, expires_at}]` (`members.manage`) |
-| POST | `/api/v1/invitations` | `{email, role}` | 201 `{invitation, email_sent}`. Renews an open invitation for the same email; 409 `member.exists` if already a member. Emails a link to `WEFT_APP_URL`; valid 14 days. |
-| POST | `/api/v1/invitations/{id}/resend` | — | `{invitation, email_sent}` (new expiry) |
-| DELETE | `/api/v1/invitations/{id}` | — | 204 |
+| POST | `/api/v1/invitations` | `{email, role}` | 201 `{invitation, email_sent}`. Renews an open invitation for the same email (403 if the caller may not give that invitation's current role); 409 `member.exists` if already a member; 409 `invitation.rate_limited` after 100 invitation emails in a day. Emails a link to `WEFT_APP_URL`; valid 14 days. |
+| POST | `/api/v1/invitations/{id}/resend` | — | `{invitation, email_sent}` (new expiry). 409 `invitation.rate_limited` within 5 minutes of the last email. |
+| DELETE | `/api/v1/invitations/{id}` | — | 204 (it can no longer be accepted) |
 
 ## Misc
 | Method | Path | Response |

@@ -110,6 +110,7 @@ async fn opaque_tokens_logto_does_not_vouch_for_are_refused() {
         json!({"scope": "openid profile"}),
         json!({"exp": NOW - 1}),
         json!({"sub": ""}),
+        json!({"iss": null}),
     ];
     for overrides in cases {
         let server = MockServer::start().await;

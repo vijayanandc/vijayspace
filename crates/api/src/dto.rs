@@ -137,7 +137,7 @@ impl FlowDto {
             draft: if trigger_secrets {
                 f.draft.clone()
             } else {
-                f.draft.without_samples()
+                f.draft.for_viewers()
             },
             created_at: f.created_at,
             updated_at: f.updated_at,

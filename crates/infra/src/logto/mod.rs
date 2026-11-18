@@ -198,7 +198,7 @@ impl LogtoVerifier {
             return Ok(None);
         }
         let i = self.introspect(token).await?;
-        let issuer_ok = i.iss.as_deref().is_none_or(|iss| iss == self.issuer);
+        let issuer_ok = i.iss.as_deref() == Some(self.issuer.as_str());
         let now = self.clock.now();
         let expires = i.exp.and_then(|exp| DateTime::from_timestamp(exp, 0));
         let Some(subject) = i.sub.filter(|s| !s.trim().is_empty()) else {

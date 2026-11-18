@@ -61,14 +61,39 @@ fn list(value: Option<String>) -> Vec<String> {
         .collect()
 }
 
-/// `WEFT_AUTH` (`logto` or `off`; unset = `logto` when `WEFT_LOGTO_ENDPOINT` is set) and the
-/// `WEFT_LOGTO_*` settings it needs.
-pub fn sign_in(var: &dyn Fn(&str) -> Option<String>) -> Result<Option<SignInSettings>, String> {
+/// Whether a bind address only accepts connections from this machine.
+fn is_loopback(bind: &str) -> bool {
+    let host = bind.rsplit_once(':').map_or(bind, |(h, _)| h);
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    host == "localhost"
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
+/// `WEFT_AUTH` and the `WEFT_LOGTO_*` settings it needs. Fails closed: with neither `WEFT_AUTH`
+/// nor `WEFT_LOGTO_ENDPOINT` set the server does not start, and `WEFT_AUTH=off` (every request is
+/// an owner) is accepted only on a loopback bind address (`WEFT_BIND=127.0.0.1:8080`).
+pub fn sign_in(
+    var: &dyn Fn(&str) -> Option<String>,
+    bind: &str,
+) -> Result<Option<SignInSettings>, String> {
     let mode = var("WEFT_AUTH").map(|m| m.to_lowercase());
     let wanted = match mode.as_deref() {
-        Some("off") => false,
+        Some("off") if is_loopback(bind) => false,
+        Some("off") => {
+            return Err(format!(
+                "WEFT_AUTH=off lets anyone act as an owner, so it needs a loopback WEFT_BIND (e.g. 127.0.0.1:8080), not `{bind}`"
+            ));
+        }
         Some("logto") => true,
-        None => var("WEFT_LOGTO_ENDPOINT").is_some(),
+        None if var("WEFT_LOGTO_ENDPOINT").is_some() => true,
+        None => {
+            return Err(
+                "set WEFT_AUTH=logto with the WEFT_LOGTO_* settings, or WEFT_AUTH=off for local development"
+                    .into(),
+            );
+        }
         Some(other) => return Err(format!("WEFT_AUTH must be `logto` or `off`, not `{other}`")),
     };
     if !wanted {
@@ -158,10 +183,28 @@ mod tests {
         ("WEFT_LOGTO_CLIENT_APP_ID", "web"),
     ];
 
+    const BIND: &str = "0.0.0.0:8080";
+
+    #[test]
+    fn sign_in_fails_closed_and_is_off_only_on_loopback() {
+        assert!(sign_in(&env(&[]), BIND).is_err(), "no silent default");
+        assert!(
+            sign_in(&env(&[("WEFT_AUTH", "off")]), BIND).is_err(),
+            "not on a public bind"
+        );
+        for bind in ["127.0.0.1:8080", "localhost:8080", "[::1]:8080"] {
+            assert_eq!(
+                sign_in(&env(&[("WEFT_AUTH", "off")]), bind).unwrap(),
+                None,
+                "{bind}"
+            );
+        }
+        assert!(sign_in(&env(&[("WEFT_AUTH", "OFF")]), "10.0.0.5:8080").is_err());
+    }
+
     #[test]
     fn sign_in_is_on_when_logto_is_configured_and_needs_every_setting() {
-        assert_eq!(sign_in(&env(&[])).unwrap(), None);
-        let on = sign_in(&env(&LOGTO)).unwrap().unwrap();
+        let on = sign_in(&env(&LOGTO), BIND).unwrap().unwrap();
         assert_eq!(on.endpoint, "https://tenant.logto.app");
         assert_eq!(on.scopes, ["openid", "profile", "email"]);
         assert_eq!(on.cache_secs, 300);
@@ -171,16 +214,16 @@ mod tests {
         );
         let mut off = LOGTO.to_vec();
         off.push(("WEFT_AUTH", "off"));
-        assert_eq!(sign_in(&env(&off)).unwrap(), None);
-        assert!(sign_in(&env(&[("WEFT_AUTH", "logto")])).is_err());
+        assert_eq!(sign_in(&env(&off), "127.0.0.1:8080").unwrap(), None);
+        assert!(sign_in(&env(&[("WEFT_AUTH", "logto")]), BIND).is_err());
         assert!(
-            sign_in(&env(&LOGTO[..3])).is_err(),
+            sign_in(&env(&LOGTO[..3]), BIND).is_err(),
             "the client app ID is required"
         );
         let mut plain = LOGTO.to_vec();
         plain[0] = ("WEFT_LOGTO_ENDPOINT", "http://tenant.logto.app");
-        assert!(sign_in(&env(&plain)).is_err(), "https only");
-        assert!(sign_in(&env(&[("WEFT_AUTH", "maybe")])).is_err());
+        assert!(sign_in(&env(&plain), BIND).is_err(), "https only");
+        assert!(sign_in(&env(&[("WEFT_AUTH", "maybe")]), BIND).is_err());
     }
 
     #[test]

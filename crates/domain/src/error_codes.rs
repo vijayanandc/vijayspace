@@ -35,6 +35,8 @@ pub const MEMBER_EXISTS: &str = "member.exists";
 pub const INVITATION_NOT_FOUND: &str = "invitation.not_found";
 /// The signed-in user's verified email is not the invited address.
 pub const INVITATION_EMAIL_MISMATCH: &str = "invitation.email_mismatch";
+/// Too many invitation emails from one org (or a resend too soon).
+pub const INVITATION_RATE_LIMITED: &str = "invitation.rate_limited";
 
 pub const EXECUTION_NOT_FOUND: &str = "execution.not_found";
 pub const EXECUTION_NOT_RETRYABLE: &str = "execution.not_retryable";
