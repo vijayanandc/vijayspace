@@ -15,7 +15,9 @@ use weft_engine::{
 
 use super::{
     action::{call_action, idempotency_key, step_error},
-    persist::{checkpoint, finish, record_trace, to_value},
+    calls::{self, CallLog},
+    journal,
+    persist::{checkpoint, finish, leak, record_trace, to_value},
 };
 use crate::{
     AppError, Deps,
@@ -86,6 +88,7 @@ pub async fn run_execution(deps: &Deps, id: ExecutionId) -> Result<JobOutcome, A
     if deps.store.mark_unknown_outcomes(exe.id, now).await? > 0 {
         // A previous worker crashed after calling an action but before recording its result.
         deps.store.mark_possible_duplicate(exe.id).await?;
+        journal::save(deps, &exe, vec![journal::unknown_outcome(deps, now)]).await;
     }
     deps.store.mark_started(exe.id, now).await?;
     let meta = json!({
@@ -188,8 +191,10 @@ async fn run_action(
     };
     deps.store.insert_step_run(exe.org_id, &run).await?;
     ctx.seq += 1;
-    let result = run_step(deps, exe, plan, &step, input).await;
+    let calls = std::sync::Arc::new(CallLog::default());
+    let result = calls::recording(calls.clone(), run_step(deps, exe, plan, &step, input)).await;
     let done_at = deps.clock.now();
+    let mut lines = calls.records(deps, &step, attempt);
     if let StepResult::Failed(err) = &result
         && err.code == error_codes::CONNECTION_THROTTLED
     {
@@ -199,11 +204,19 @@ async fn run_action(
         let mut parked = state;
         parked.executed = parked.executed.saturating_sub(1);
         let at = done_at + crate::limits::park_delay(exe.id, err.retry_after_secs.unwrap_or(30));
+        lines.push(journal::held_back(deps, &step, err, at, done_at));
+        journal::save(deps, exe, lines).await;
         let job = throttled(deps, exe, &parked, step_run_id, at, done_at).await?;
         return Ok((parked, Some(job)));
     }
     let (next, after) = record_result(plan, state, &step, &result, done_at)
         .map_err(|e| AppError::internal(format!("engine: {e}")))?;
+    if let (AfterResult::RetryAt(at), StepResult::Failed(err)) = (&after, &result) {
+        lines.push(journal::retry_scheduled(
+            deps, &step, attempt, err, *at, done_at,
+        ));
+    }
+    journal::save(deps, exe, lines).await;
     let outcome = complete(
         deps,
         exe,
@@ -217,25 +230,6 @@ async fn run_action(
     )
     .await?;
     Ok((next, outcome))
-}
-
-/// Error codes are `&'static str` in `AppError`; engine codes are owned strings. Map known codes.
-fn leak(code: &str) -> &'static str {
-    match code {
-        c if c == error_codes::MAPPING_ERROR => error_codes::MAPPING_ERROR,
-        c if c == error_codes::DELAY_INVALID_DATETIME => error_codes::DELAY_INVALID_DATETIME,
-        c if c == error_codes::ENGINE_BUDGET_EXCEEDED => error_codes::ENGINE_BUDGET_EXCEEDED,
-        c if c == error_codes::STOPPED_BY_FLOW => error_codes::STOPPED_BY_FLOW,
-        c if c == error_codes::APP_UNAVAILABLE => error_codes::APP_UNAVAILABLE,
-        c if c == error_codes::APP_RATE_LIMITED => error_codes::APP_RATE_LIMITED,
-        c if c == error_codes::APP_INVALID_INPUT => error_codes::APP_INVALID_INPUT,
-        c if c == error_codes::APP_NOT_FOUND => error_codes::APP_NOT_FOUND,
-        c if c == error_codes::CONNECTION_NEEDS_REAUTH => error_codes::CONNECTION_NEEDS_REAUTH,
-        c if c == error_codes::SCRIPT_ERROR => error_codes::SCRIPT_ERROR,
-        c if c == error_codes::CONNECTION_THROTTLED => error_codes::CONNECTION_THROTTLED,
-        c if c == error_codes::SCRIPT_LIMIT_EXCEEDED => error_codes::SCRIPT_LIMIT_EXCEEDED,
-        _ => error_codes::APP_ERROR,
-    }
 }
 
 async fn run_step(

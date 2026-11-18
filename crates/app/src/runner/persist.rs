@@ -2,7 +2,10 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
-use weft_domain::model::{Execution, ExecutionStatus, StepRun, StepStatus};
+use weft_domain::{
+    error_codes,
+    model::{Execution, ExecutionStatus, StepRun, StepStatus},
+};
 use weft_engine::{RunState, TraceEntry};
 
 use crate::{
@@ -163,4 +166,23 @@ pub(super) async fn finish(
 /// The run state as stored JSON.
 pub(super) fn to_value(state: &RunState) -> Value {
     serde_json::to_value(state).unwrap_or(Value::Null)
+}
+
+/// Error codes are `&'static str` in `AppError`; engine codes are owned strings. Map known codes.
+pub(super) fn leak(code: &str) -> &'static str {
+    match code {
+        c if c == error_codes::MAPPING_ERROR => error_codes::MAPPING_ERROR,
+        c if c == error_codes::DELAY_INVALID_DATETIME => error_codes::DELAY_INVALID_DATETIME,
+        c if c == error_codes::ENGINE_BUDGET_EXCEEDED => error_codes::ENGINE_BUDGET_EXCEEDED,
+        c if c == error_codes::STOPPED_BY_FLOW => error_codes::STOPPED_BY_FLOW,
+        c if c == error_codes::APP_UNAVAILABLE => error_codes::APP_UNAVAILABLE,
+        c if c == error_codes::APP_RATE_LIMITED => error_codes::APP_RATE_LIMITED,
+        c if c == error_codes::APP_INVALID_INPUT => error_codes::APP_INVALID_INPUT,
+        c if c == error_codes::APP_NOT_FOUND => error_codes::APP_NOT_FOUND,
+        c if c == error_codes::CONNECTION_NEEDS_REAUTH => error_codes::CONNECTION_NEEDS_REAUTH,
+        c if c == error_codes::SCRIPT_ERROR => error_codes::SCRIPT_ERROR,
+        c if c == error_codes::CONNECTION_THROTTLED => error_codes::CONNECTION_THROTTLED,
+        c if c == error_codes::SCRIPT_LIMIT_EXCEEDED => error_codes::SCRIPT_LIMIT_EXCEEDED,
+        _ => error_codes::APP_ERROR,
+    }
 }

@@ -22,7 +22,7 @@ fn id_list<'a>(qb: &mut QueryBuilder<'a, sqlx::MySql>, ids: &'a [Uuid]) {
 }
 
 impl MySqlStore {
-    /// Finished executions (and their step runs) that finished before `before`. Each statement
+    /// Finished executions (and their step runs and log lines) that finished before `before`. Each statement
     /// is short on its own: step runs go in bounded chunks first, then the executions. A crash in
     /// between leaves executions without steps, which the next sweep removes.
     async fn purge_executions(
@@ -50,6 +50,26 @@ impl MySqlStore {
             qb.push_bind(org.as_uuid()).push(" AND execution_id IN");
             id_list(&mut qb, &ids);
             qb.push(" AND EXISTS (SELECT 1 FROM executions e WHERE e.id = step_runs.execution_id AND e.org_id = ")
+                .push_bind(org.as_uuid())
+                .push(" AND e.status IN ('succeeded', 'failed', 'cancelled'))");
+            qb.push(" LIMIT ").push_bind(STEP_CHUNK);
+            let n = qb
+                .build()
+                .execute(&self.pool)
+                .await
+                .map_err(db_err)?
+                .rows_affected();
+            step_runs += n;
+            if n < u64::from(STEP_CHUNK) {
+                break;
+            }
+        }
+        // Their log lines (counted with the step runs), in chunks the same way.
+        loop {
+            let mut qb = QueryBuilder::new("DELETE FROM execution_logs WHERE org_id = ");
+            qb.push_bind(org.as_uuid()).push(" AND execution_id IN");
+            id_list(&mut qb, &ids);
+            qb.push(" AND EXISTS (SELECT 1 FROM executions e WHERE e.id = execution_logs.execution_id AND e.org_id = ")
                 .push_bind(org.as_uuid())
                 .push(" AND e.status IN ('succeeded', 'failed', 'cancelled'))");
             qb.push(" LIMIT ").push_bind(STEP_CHUNK);

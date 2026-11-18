@@ -25,6 +25,7 @@ pub fn router() -> Router<ApiState> {
     Router::new()
         .route("/api/v1/executions", get(list))
         .route("/api/v1/executions/{id}", get(one))
+        .route("/api/v1/executions/{id}/log", get(log))
         .route("/api/v1/executions/{id}/retry", post(retry))
         .route("/api/v1/executions/{id}/rerun", post(rerun))
         .route("/api/v1/executions/{id}/cancel", post(cancel))
@@ -88,6 +89,14 @@ async fn list(
     Ok(Json(
         json!({"items": items, "next_cursor": page.next.map(|(at, id)| encode_cursor(at, id))}),
     ))
+}
+
+async fn log(
+    State(s): State<ApiState>,
+    Acting(actor): Acting,
+    Path(raw): Path<String>,
+) -> ApiResult<Json<uc::ExecutionLog>> {
+    Ok(Json(uc::execution_log(&s.deps, &actor, id(&raw)?).await?))
 }
 
 async fn one(

@@ -159,6 +159,22 @@ async fn viewers_see_runs_without_their_data() {
     assert_eq!(seen["payloads_hidden"], true);
     assert!(!seen.to_string().contains("4242"), "{seen}");
     assert_eq!(seen["status"], "succeeded");
+    // The detailed log: statuses for viewers too, never data.
+    let (status, log) = call(
+        &app,
+        VIEWER,
+        &org,
+        "GET",
+        &format!("/api/v1/executions/{exe}/log"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert!(!log.to_string().contains("4242"), "{log}");
+    assert_eq!(
+        log["entries"].as_array().unwrap().last().unwrap()["message"],
+        "Run succeeded in 0 ms"
+    );
     app.cleanup().await;
 }
 

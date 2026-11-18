@@ -121,6 +121,7 @@ pub fn action_ctx_for(
         }),
         None => deps.http.clone(),
     };
+    let http = super::calls::wrap(deps, http);
     ActionCtx {
         org_id: org.to_string(),
         http,

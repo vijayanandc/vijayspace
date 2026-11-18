@@ -2,6 +2,8 @@
 //! See `docs/plan/04-workflow-engine.md` §6.
 
 pub mod action;
+pub mod calls;
+mod journal;
 mod persist;
 pub mod plan_cache;
 mod run;

@@ -31,6 +31,7 @@ mod flows;
 mod jobs;
 mod limits;
 mod links;
+mod logs;
 mod ops;
 mod retention;
 mod tenancy;
@@ -42,6 +43,7 @@ pub use flows::*;
 pub use jobs::*;
 pub use limits::*;
 pub use links::*;
+pub use logs::*;
 pub use ops::*;
 pub use retention::*;
 pub use tenancy::*;
@@ -57,6 +59,7 @@ pub trait Store:
     + ConnectionRepo
     + LinkRepo
     + LimitRepo
+    + LogRepo
     + OpsRepo
     + RetentionRepo
     + TenancyRepo
@@ -74,6 +77,7 @@ impl<T> Store for T where
         + ConnectionRepo
         + LinkRepo
         + LimitRepo
+        + LogRepo
         + OpsRepo
         + RetentionRepo
         + TenancyRepo

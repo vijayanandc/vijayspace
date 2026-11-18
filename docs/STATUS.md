@@ -16,6 +16,12 @@ What is built on the `backend` and `client` branches, how it deviates from the p
 - MySQL is the job queue: `FOR UPDATE SKIP LOCKED` claims, one queue per statement in priority order (each claim takes a job of every non-empty queue first, so none starves), leases with heartbeat, and a reaper for expired leases. A worker that loses a job's lease stops running it. SIGTERM and Ctrl+C stop the API gracefully and let running jobs finish (30 s). A job that keeps failing, or whose worker keeps dying, becomes dead after `max_attempts` and releases its dedupe key. Only the current lease holder can complete, reschedule or fail a job. Trigger event, execution and job are written in one transaction.
 - Polls: one poll job per registration at a time. A failed poll is not retried (the next interval polls again).
 - Subscription renewals run on their own loop and are claimed per worker, so slow provider APIs never delay schedules or lease recovery.
+- **Detailed run logs** (`GET /executions/{id}/log`): one chronological list per run, covering:
+  - the run's start and end, and every step attempt;
+  - every HTTP call (method, URL with secrets removed, status, time, sizes, and the start of the answer on errors);
+  - requests held back by limits, scheduled retries, and workers that stopped mid-step.
+
+  Calls are recorded by wrapping each action context's HTTP sender while a step runs (a task-local scope, `crates/app/src/runner/calls.rs`). Lines are stored in `execution_logs`, partitioned by day with the run. Viewers see statuses and timings only.
 - **Several servers on one database** (`docs/operations.md`): start more `weft worker` processes when runs wait. Each process heartbeats into `instances`; staff (owners and admins of the default org) see live servers and per-queue lag at `GET /api/v1/ops/status`. Each server warns at startup when its connection pool would not fit in MySQL's free connections. Measured: with a 250 ms app, 1, 2 and 4 workers drained 1,200 runs at 29, 56 and 105 runs/s (worst queue wait 40, 19 and 10 s).
 - Webhook ingress: an array body can start one execution per element, plus idempotency-key dedupe, an optional shared secret header and a 6 MB limit.
 - App events: subscribe, renew and unsubscribe hooks; reconciliation polling; a 30 s debounce per record. Every event version is recorded, so the reconciliation poll never re-runs a version already delivered. Within a debounce window the queued run takes the newest event (an edit followed by a delete runs once, as a delete).

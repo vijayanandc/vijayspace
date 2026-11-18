@@ -196,6 +196,7 @@ Secrets are never returned.
 |---|---|---|---|
 | GET | `/api/v1/executions?flow_id=&status=&limit=50&cursor=` | — | `{items: ExecutionSummary[], next_cursor}` |
 | GET | `/api/v1/executions/{id}` | — | `ExecutionDetail` |
+| GET | `/api/v1/executions/{id}/log` | — | `ExecutionLog`: the run's detailed log, oldest first |
 | POST | `/api/v1/executions/{id}/retry` | — | `ExecutionSummary` (from the failed step, same version). 409 `execution.not_retryable` if the run is not failed, or finished within an hour of the org's retention cutoff (its history is being removed; re-run it instead). |
 | POST | `/api/v1/executions/{id}/rerun` | — | `{execution_id}` (new execution, latest published version) |
 | POST | `/api/v1/executions/{id}/cancel` | — | `ExecutionSummary` |
@@ -219,6 +220,34 @@ Secrets are never returned.
   "started_at": "…", "finished_at": "…" }
 ```
 For a `decision` step run, `output` is `{"branch": "big"}`; when no branch matched it is `{"branch": null}`, meaning "otherwise" ran.
+
+**ExecutionLog:** `{entries: LogEntry[], truncated}`. One chronological list built by the server:
+- the run: queued, started and its end (`Run succeeded in 2.4 s`, `Run failed: code: message`, `Run cancelled`, `Waiting` with `details.until`);
+- every step run: an action attempt's start and end, decisions taken, variables set, delays, stops and warnings;
+- every HTTP call each attempt made (at most 50 per attempt, plus a line counting the rest);
+- requests held back by the connection's limits (not attempts);
+- scheduled retries;
+- a worker that stopped mid-step.
+
+`truncated` is true when the run has more than 2,000 stored lines.
+```json
+{ "at": "2026-11-18T09:00:00.050Z", "level": "info|warn|error", "kind": "run|step|http|limit|retry|event",
+  "step_key": "crm"|null, "attempt": 1|null, "message": "POST https://crm.example.com/v2/Leads → 201 in 182 ms",
+  "details": null|{…} }
+```
+`details` depends on `kind`:
+- `http`: `{method, url, status|null, error|null, duration_ms, request_bytes, response_bytes, response_excerpt|null}`.
+  - `url` has no user info, and secret query values are replaced by `…` (`token`, `access_token`, `key`, `secret`, `password`, `signature`, `code`, …).
+  - `response_excerpt` is the first 2 KB of the answer, only when the status is 400 or above.
+  - Headers and request bodies are never logged.
+- `limit`: `{reason, until}`.
+- `retry`: `{code, retry_at, next_attempt}`.
+
+Viewers get statuses, codes and timings only:
+- no error messages, warnings or variable names;
+- HTTP lines show the app's address (`https://host`) without path or query, and their `details` hold only `{method, url, status, duration_ms}`.
+
+Log lines live in the run's day partition and go with it (30 days at most).
 
 ---
 

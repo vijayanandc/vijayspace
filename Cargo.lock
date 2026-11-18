@@ -3260,6 +3260,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "url",
  "urlencoding",
  "uuid",
  "weft-connector-sdk",

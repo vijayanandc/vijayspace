@@ -11,6 +11,7 @@ mod flows;
 mod jobs;
 mod limits;
 mod links;
+mod logs;
 mod members;
 mod ops;
 mod orgs;

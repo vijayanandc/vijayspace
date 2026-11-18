@@ -1,4 +1,5 @@
-//! Day partitions of run history (`executions`, `step_runs`, `trigger_events`; migration 20261119000004), kept
+//! Day partitions of run history (`executions`, `step_runs`, `trigger_events`, `execution_logs`; migrations
+//! 20261119000004 and 20261119000006), kept
 //! the way the Appblocks servers keep `request_log`: day partitions are created a week ahead by reorganising
 //! the `pmax` catch-all (rows already in it move to their day), and partitions older than the history cap are
 //! dropped, which returns their space to the operating system. `pmax` is never dropped (excluded by name).
@@ -15,13 +16,19 @@ use weft_domain::ids::ExecutionId;
 
 use crate::{MySqlStore, codec::db_err};
 
-/// The partitioned tables (a run's partition holds its steps; trigger events have their own days).
-const TABLES: [&str; 3] = ["executions", "step_runs", "trigger_events"];
+/// The partitioned tables (a run's partition holds its steps and log lines; trigger events have their own days).
+const TABLES: [&str; 4] = [
+    "executions",
+    "step_runs",
+    "trigger_events",
+    "execution_logs",
+];
 /// Rows that landed in `pmax` (maintenance lapsed): counted per table for the report.
-const PMAX_ROWS: [&str; 3] = [
+const PMAX_ROWS: [&str; 4] = [
     "SELECT COUNT(*) FROM executions PARTITION (pmax)",
     "SELECT COUNT(*) FROM step_runs PARTITION (pmax)",
     "SELECT COUNT(*) FROM trigger_events PARTITION (pmax)",
+    "SELECT COUNT(*) FROM execution_logs PARTITION (pmax)",
 ];
 /// The catch-all partition: never dropped.
 const CATCH_ALL: &str = "pmax";

@@ -21,6 +21,7 @@ mod order_alert;
 mod recipes;
 mod retention;
 mod roles;
+mod run_log;
 mod scaling;
 mod schedule;
 mod sync;
