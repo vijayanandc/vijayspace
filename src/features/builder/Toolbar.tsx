@@ -30,6 +30,8 @@ interface Props {
   issuesOpen: boolean;
   onToggleIssues: () => void;
   onIssues: (issues: Issue[]) => void;
+  /** Viewers: no test, publish or on/off. */
+  readOnly?: boolean;
 }
 
 export function Toolbar(props: Props) {
@@ -110,21 +112,25 @@ export function Toolbar(props: Props) {
       <Button variant="ghost" icon={History} onClick={() => setVersions(true)} title="Published versions">
         Versions
       </Button>
-      <span className="bar-divider" aria-hidden="true" />
-      <Button icon={FlaskConical} onClick={() => setTesting(true)} title="Run the draft once with a test payload">
-        Test
-      </Button>
-      <Button variant="primary" icon={Rocket} disabled={publish.isPending} onClick={() => publish.mutate()}>
-        {publish.isPending ? 'Publishing…' : 'Publish'}
-      </Button>
-      <span className="bar-divider" aria-hidden="true" />
-      <Switch
-        checked={flow.is_enabled}
-        disabled={toggle.isPending || !flow.published_version}
-        onChange={() => toggle.mutate()}
-        label="Flow enabled"
-        title={flow.published_version ? (flow.is_enabled ? 'Switch the flow off' : 'Switch the flow on') : 'Publish before enabling'}
-      />
+      {!props.readOnly && (
+        <>
+          <span className="bar-divider" aria-hidden="true" />
+          <Button icon={FlaskConical} onClick={() => setTesting(true)} title="Run the draft once with a test payload">
+            Test
+          </Button>
+          <Button variant="primary" icon={Rocket} disabled={publish.isPending} onClick={() => publish.mutate()}>
+            {publish.isPending ? 'Publishing…' : 'Publish'}
+          </Button>
+          <span className="bar-divider" aria-hidden="true" />
+          <Switch
+            checked={flow.is_enabled}
+            disabled={toggle.isPending || !flow.published_version}
+            onChange={() => toggle.mutate()}
+            label="Flow enabled"
+            title={flow.published_version ? (flow.is_enabled ? 'Switch the flow off' : 'Switch the flow on') : 'Publish before enabling'}
+          />
+        </>
+      )}
       <TestFlowDialog open={testing} onClose={() => setTesting(false)} />
       <VersionsDialog open={versions} onClose={() => setVersions(false)} />
     </div>

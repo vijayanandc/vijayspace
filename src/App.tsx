@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
+import { AuthRoot } from './features/auth/AuthRoot';
 import { BuilderPage } from './features/builder/BuilderPage';
 import { ConnectionCallbackPage } from './features/connections/ConnectionCallbackPage';
 import { ConnectionsPage } from './features/connections/ConnectionsPage';
@@ -12,7 +13,8 @@ import { Layout } from './features/shell/Layout';
 
 export function App() {
   return (
-    <Routes>
+    <AuthRoot>
+      <Routes>
       <Route element={<Layout />}>
         <Route index element={<Navigate to="/flows" replace />} />
         <Route path="/flows" element={<FlowsPage />} />
@@ -25,6 +27,7 @@ export function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/flows" replace />} />
       </Route>
-    </Routes>
+      </Routes>
+    </AuthRoot>
   );
 }

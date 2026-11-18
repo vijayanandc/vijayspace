@@ -89,6 +89,8 @@ export interface Connection {
   status: ConnectionStatus;
   created_at: string;
   updated_at: string;
+  /** Who created it (members may delete only their own); null for older connections. */
+  created_by?: string | null;
 }
 
 /** Request limits of a connection. `null` means no limit (in `defaults`/`effective`) or the app default (in `overrides`). */
@@ -150,6 +152,8 @@ export interface FlowSummary {
   last_execution?: { id: string; status: ExecutionStatus; queued_at: string } | null;
   /** Connector keys the draft uses: an app trigger's connector first, then actions in order, each once. */
   apps: string[];
+  /** Who created it (members may delete only their own); null for older flows. */
+  created_by?: string | null;
 }
 
 export interface TriggerInfo {

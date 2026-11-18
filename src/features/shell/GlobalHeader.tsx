@@ -1,13 +1,13 @@
-// Global header: app launcher, wordmark, global search, help, settings, org and avatar.
+// Global header: app launcher, wordmark, global search, help, settings, organisation switcher and profile menu.
 
 import { CircleHelp, Grip, Settings } from 'lucide-react';
 import { Link, NavLink } from 'react-router-dom';
 
-import { useOrg } from '../../api/hooks';
 import { Popover } from '../../components/Popover';
 import { WeftLogo } from '../../components/WeftLogo';
+import { OrgSwitcher, ProfileMenu } from './AccountMenus';
 import { GlobalSearch } from './GlobalSearch';
-import { LAUNCHER, initials } from './nav';
+import { LAUNCHER } from './nav';
 
 function AppLauncher() {
   return (
@@ -88,8 +88,6 @@ function SettingsLink() {
 }
 
 export function GlobalHeader() {
-  const { data: org } = useOrg();
-  const orgName = org?.name ?? 'Workspace';
   return (
     <header className="app-header" role="banner">
       <div className="header-left">
@@ -103,12 +101,8 @@ export function GlobalHeader() {
       <div className="header-right">
         <HelpMenu />
         <SettingsLink />
-        <span className="header-org" title={org?.timezone ? `${orgName} · ${org.timezone}` : orgName}>
-          {orgName}
-        </span>
-        <span className="avatar" aria-hidden="true">
-          {initials(orgName)}
-        </span>
+        <OrgSwitcher />
+        <ProfileMenu />
       </div>
     </header>
   );

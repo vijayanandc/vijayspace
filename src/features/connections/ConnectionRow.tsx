@@ -16,6 +16,8 @@ import { formatTime, relativeTime } from '../../lib/format';
 import { oauthReturnUrl } from './oauth';
 import { usageSummary } from './limits';
 import { UsageMeter } from './UsageMeter';
+import { can } from '../auth/permissions';
+import { useRole, useUserId } from '../auth/session';
 
 /** The connection's non-secret auth settings (e.g. region), resent when signing in again. */
 function oauthSettings(connection: Connection, manifest: ConnectorManifest | undefined): JsonObject {
@@ -35,6 +37,10 @@ interface RowProps {
 }
 
 export function ConnectionRow({ connection, manifest, usage, onLimits }: RowProps) {
+  const role = useRole();
+  const canUse = can(role, 'connection.use');
+  const canManage = can(role, 'connection.create');
+  const canDelete = can(role, 'connection.delete', connection.created_by, useUserId());
   const qc = useQueryClient();
   const toast = useToast();
   const isOauth = manifest?.auth.kind === 'oauth2';
@@ -94,21 +100,23 @@ export function ConnectionRow({ connection, manifest, usage, onLimits }: RowProp
       <td title={formatTime(connection.created_at)}>{relativeTime(connection.created_at)}</td>
       <td className="col-actions">
         <span className="row-actions">
-          {isOauth && connection.status === 'needs_reauth' && (
+          {canManage && isOauth && connection.status === 'needs_reauth' && (
             <Button size="sm" variant="ghost" icon={KeyRound} disabled={reconnect.isPending} onClick={() => reconnect.mutate()}>
               Reconnect
             </Button>
           )}
-          <Button size="sm" variant="ghost" icon={PlugZap} disabled={test.isPending} onClick={() => test.mutate()}>
-            {test.isPending ? 'Testing…' : 'Test'}
-          </Button>
+          {canUse && (
+            <Button size="sm" variant="ghost" icon={PlugZap} disabled={test.isPending} onClick={() => test.mutate()}>
+              {test.isPending ? 'Testing…' : 'Test'}
+            </Button>
+          )}
           <OverflowMenu
             label={`More actions for ${connection.name}`}
             items={[
-              { label: 'Test connection', icon: PlugZap, onSelect: () => test.mutate(), disabled: test.isPending },
+              ...(canUse ? [{ label: 'Test connection', icon: PlugZap, onSelect: () => test.mutate(), disabled: test.isPending }] : []),
               { label: 'Limits & usage', icon: Gauge, onSelect: onLimits },
-              ...(isOauth ? [{ label: 'Reconnect (sign in again)', icon: KeyRound, onSelect: () => reconnect.mutate(), disabled: reconnect.isPending }] : []),
-              { label: 'Delete', icon: Trash2, danger: true, onSelect: confirmDelete },
+              ...(canManage && isOauth ? [{ label: 'Reconnect (sign in again)', icon: KeyRound, onSelect: () => reconnect.mutate(), disabled: reconnect.isPending }] : []),
+              ...(canDelete ? [{ label: 'Delete', icon: Trash2, danger: true, onSelect: confirmDelete }] : []),
             ]}
           />
         </span>

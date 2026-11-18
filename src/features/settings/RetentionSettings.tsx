@@ -14,7 +14,7 @@ import { MessageBar } from '../../components/MessageBar';
 import { useToast } from '../../components/Toast';
 import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, retentionBody, retentionChanged, retentionError, retentionForm, retentionNote, retentionShrink } from './retention';
 
-export function RetentionSettings({ org }: { org: Org }) {
+export function RetentionSettings({ org, editable = true }: { org: Org; editable?: boolean }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [form, setForm] = useState(() => retentionForm(org));
@@ -63,7 +63,7 @@ export function RetentionSettings({ org }: { org: Org }) {
           <p className="muted small">How long Weft keeps finished runs (succeeded, failed or cancelled) with their step-by-step history.</p>
         </div>
       </header>
-      <fieldset className="retention-choices">
+      <fieldset className="retention-choices" disabled={!editable}>
         <legend className="sr-only">Keep finished runs</legend>
         <label className={`retention-choice${form.useDefault ? ' choice-on' : ''}`}>
           <input type="radio" name="retention" checked={form.useDefault} onChange={() => setForm({ ...form, useDefault: true })} />
@@ -100,7 +100,8 @@ export function RetentionSettings({ org }: { org: Org }) {
         A cleanup runs every 15 minutes and deletes finished runs older than this, with their step history. Queued, running and waiting runs are never deleted.
       </MessageBar>
       {save.error && <ErrorBox message={errorMessage(save.error)} />}
-      <div className="settings-actions">
+      {!editable && <p className="muted small">Only owners change how long runs are kept.</p>}
+      <div className="settings-actions" hidden={!editable}>
         <Button variant="primary" onClick={onSave} disabled={!changed || save.isPending}>
           {save.isPending ? 'Saving…' : 'Save'}
         </Button>

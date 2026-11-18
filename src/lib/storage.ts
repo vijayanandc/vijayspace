@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 
-function read(key: string): string | null {
+export function read(key: string): string | null {
   try {
     return window.localStorage.getItem(key);
   } catch {
@@ -10,7 +10,7 @@ function read(key: string): string | null {
   }
 }
 
-function write(key: string, value: string): void {
+export function write(key: string, value: string): void {
   try {
     window.localStorage.setItem(key, value);
   } catch {

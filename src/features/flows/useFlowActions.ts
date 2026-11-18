@@ -10,6 +10,8 @@ import { qk } from '../../api/hooks';
 import type { FlowSummary } from '../../api/types';
 import type { MenuItem } from '../../components/Popover';
 import { useToast } from '../../components/Toast';
+import { can } from '../auth/permissions';
+import { useRole, useUserId } from '../auth/session';
 
 export function useFlowActions(flow: FlowSummary) {
   const qc = useQueryClient();
@@ -38,19 +40,26 @@ export function useFlowActions(flow: FlowSummary) {
     onError: (e) => toast.show('error', errorMessage(e)),
   });
 
-  const canRun = flow.trigger_type === 'manual' && flow.published_version !== null;
+  const role = useRole();
+  const me = useUserId();
+  const editable = can(role, 'flow.edit');
+  const canRun = editable && flow.trigger_type === 'manual' && flow.published_version !== null;
   const items: MenuItem[] = [
-    { label: 'Edit', icon: Pencil, onSelect: () => navigate(`/flows/${flow.id}`) },
+    { label: editable ? 'Edit' : 'View', icon: Pencil, onSelect: () => navigate(`/flows/${flow.id}`) },
     ...(canRun ? [{ label: 'Run now', icon: Play, onSelect: () => run.mutate(), disabled: run.isPending }] : []),
     { label: 'View history', icon: History, onSelect: () => navigate(`/history?flow_id=${encodeURIComponent(flow.id)}`) },
-    {
-      label: 'Delete',
-      icon: Trash2,
-      danger: true,
-      onSelect: () => {
-        if (window.confirm(`Delete “${flow.name}”? Its history is kept until retention expires.`)) remove.mutate();
-      },
-    },
+    ...(can(role, 'flow.delete', flow.created_by, me)
+      ? [
+          {
+            label: 'Delete',
+            icon: Trash2,
+            danger: true,
+            onSelect: () => {
+              if (window.confirm(`Delete “${flow.name}”? Its history is kept until retention expires.`)) remove.mutate();
+            },
+          },
+        ]
+      : []),
   ];
   return { toggle, items };
 }

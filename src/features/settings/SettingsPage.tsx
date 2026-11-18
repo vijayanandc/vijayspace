@@ -1,15 +1,20 @@
-// Settings: the organization (read-only for now) and run history retention.
+// Settings: the organisation (name, time zone), its users and invitations, and run history retention.
 
-import { Building2, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 
 import { errorMessage } from '../../api/client';
 import { useOrg } from '../../api/hooks';
 import { ErrorBox, Loading } from '../../components/Empty';
 import { PageHeader } from '../../components/PageHeader';
+import { can } from '../auth/permissions';
+import { useRole } from '../auth/session';
+import { OrgSettings } from './OrgSettings';
 import { RetentionSettings } from './RetentionSettings';
+import { UsersSettings } from './UsersSettings';
 
 export function SettingsPage() {
   const org = useOrg();
+  const owner = can(useRole(), 'org.manage');
   return (
     <div className="page settings-page">
       <section className="list-card">
@@ -19,32 +24,9 @@ export function SettingsPage() {
       {org.error && <ErrorBox message={errorMessage(org.error)} />}
       {org.data && (
         <div className="settings-grid">
-          <RetentionSettings org={org.data} />
-          <section className="card settings-card" aria-labelledby="org-title">
-            <header className="settings-card-head">
-              <span className="settings-icon" style={{ background: '#0f6cbd' }} aria-hidden="true">
-                <Building2 size={18} />
-              </span>
-              <div>
-                <h2 id="org-title">Organization</h2>
-                <p className="muted small">Read-only for now.</p>
-              </div>
-            </header>
-            <dl className="settings-facts">
-              <div>
-                <dt>Name</dt>
-                <dd>{org.data.name}</dd>
-              </div>
-              <div>
-                <dt>Time zone</dt>
-                <dd>{org.data.timezone}</dd>
-              </div>
-              <div>
-                <dt>Organization ID</dt>
-                <dd className="mono">{org.data.id}</dd>
-              </div>
-            </dl>
-          </section>
+          <OrgSettings key={`${org.data.id}:${org.data.name}:${org.data.timezone}`} org={org.data} editable={owner} />
+          <RetentionSettings org={org.data} editable={owner} />
+          <UsersSettings />
         </div>
       )}
     </div>

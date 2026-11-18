@@ -16,6 +16,8 @@ import { updatedAgo } from '../../lib/format';
 import { useStoredChoice } from '../../lib/storage';
 import { FlowGrid, FlowTable } from './FlowTable';
 import { NewFlowDialog } from './NewFlowDialog';
+import { can } from '../auth/permissions';
+import { useRole } from '../auth/session';
 
 type Filter = 'all' | 'on' | 'off' | 'draft';
 const FILTERS: { key: Filter; label: string }[] = [
@@ -34,6 +36,7 @@ function matches(f: FlowSummary, q: string, filter: Filter): boolean {
 }
 
 export function FlowsPage() {
+  const canEdit = can(useRole(), 'flow.edit');
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
@@ -56,9 +59,11 @@ export function FlowsPage() {
           actions={
             <>
               <LinkButton to="/recipes">Browse gallery</LinkButton>
-              <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>
-                New flow
-              </Button>
+              {canEdit && (
+                <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>
+                  New flow
+                </Button>
+              )}
             </>
           }
         />

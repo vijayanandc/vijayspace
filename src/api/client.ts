@@ -1,4 +1,5 @@
-// The single fetch wrapper. Every API call goes through `request`; failures become `ApiError`.
+// The single fetch wrapper. Every API call goes through `request`: it signs requests in (bearer token, X-Org-ID),
+// retries once with a fresh token on 401, and turns failures into `ApiError`.
 
 import type { Issue } from './types';
 
@@ -18,6 +19,32 @@ export class ApiError extends Error {
 
 const BASE: string = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
 const ORG: string | undefined = import.meta.env.VITE_ORG_ID as string | undefined;
+
+/** How requests are signed in (registered by the auth gate; absent when sign-in is turned off). */
+export interface AuthHooks {
+  /** The current access token (refreshed by the SDK when it expires). */
+  token: () => Promise<string | undefined>;
+  /** Drops the cached token and gets a fresh one (after a 401). */
+  refresh: () => Promise<string | undefined>;
+  /** The sign-in is gone for good: show the sign-in page. */
+  onSignedOut: () => void;
+}
+
+let auth: AuthHooks | null = null;
+let currentOrg: string | null = null;
+
+export function configureAuth(hooks: AuthHooks | null): void {
+  auth = hooks;
+}
+
+/** The org every tenant request acts in (`X-Org-ID`). */
+export function setCurrentOrg(orgId: string | null): void {
+  currentOrg = orgId;
+}
+
+export function getCurrentOrg(): string | null {
+  return currentOrg;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -45,19 +72,31 @@ export function toApiError(status: number, body: unknown, fallbackText = ''): Ap
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-export async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
+async function send(method: HttpMethod, path: string, body: unknown, token: string | undefined): Promise<Response> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (ORG) headers['X-Org-ID'] = ORG;
-  let response: Response;
+  const org = currentOrg ?? ORG;
+  if (org) headers['X-Org-ID'] = org;
+  if (token) headers.Authorization = `Bearer ${token}`;
   try {
-    response = await fetch(`${BASE}${path}`, {
+    return await fetch(`${BASE}${path}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (err) {
     throw new ApiError(0, 'network.error', err instanceof Error ? err.message : 'Network error');
+  }
+}
+
+export async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
+  const token = auth ? await auth.token() : undefined;
+  let response = await send(method, path, body, token);
+  // A token that expired or was revoked while the tab was idle: one retry with a fresh token.
+  if (response.status === 401 && auth) {
+    const fresh = await auth.refresh().catch(() => undefined);
+    if (fresh && fresh !== token) response = await send(method, path, body, fresh);
+    if (response.status === 401) auth.onSignedOut();
   }
   const text = await response.text();
   let parsed: unknown = undefined;

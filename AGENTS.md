@@ -11,7 +11,8 @@ React 18 + TypeScript (strict, `noUncheckedIndexedAccess`), Vite, React Router 6
 
 ## Commands
 ```
-npm run dev        # Vite dev server on :5173, proxies /api, /hooks, /oauth to http://localhost:8080 (WEFT_BACKEND overrides)
+npm run dev        # Vite on http://127.0.0.1:3000 (the Logto redirect URI), proxies /api, /hooks, /oauth to http://localhost:8080
+                   # (WEFT_BACKEND, WEFT_CLIENT_HOST and WEFT_CLIENT_PORT override)
 npm test           # unit + component tests
 npm run check      # typecheck + lint + tests + build — MUST pass before you finish
 ```
@@ -22,15 +23,17 @@ npm run check      # typecheck + lint + tests + build — MUST pass before you f
 | Call an endpoint | `src/api/endpoints.ts` (one function per contract row), `src/api/client.ts` (fetch wrapper, `ApiError`) |
 | Shared queries | `src/api/hooks.ts` (`qk` query keys, connectors, connections, org) |
 | Contract types | `src/api/types.ts` — change only when the backend contract changes |
+| Sign-in, session, orgs | `src/features/auth/` (`AuthRoot` reads `/api/v1/auth/config`: Logto on, or sign-in off for local development; `LogtoGate`, `MeGate`, onboarding, `session.tsx` with the current org, `permissions.ts` mirroring the server's role matrix, `webCrypto.ts` SHA-256 fallback for plain-HTTP origins). The API client adds the bearer token and `X-Org-ID`; the query cache is partitioned by org (`src/api/queryClient.ts`). Tenancy endpoints: `src/api/tenancy.ts` |
 | UI primitives | `src/components/` (Button, Dialog, Field, Badge, JsonView, Tabs, Toast, Empty, MessageBar, PageHeader, SearchBox, Switch, Popover/OverflowMenu, Table sort header, AppIcon monogram tiles, ErrorBoundary) |
 | App shell | `src/features/shell/` (global header, global search, collapsible nav rail) |
 | Flow builder | `src/features/builder/` — `model/` (pure: tree ops, keys, layout, variables, conditions, schedule, history, selection, key/value rows, typed values such as integers and number fields, code editor edits and issue lines, custom functions (`core.script`) starter/examples/logs), `canvas/` (React Flow nodes and edges; `viewLayout.ts` spaces the model layout out for the wider cards, presentation only), `panel/` (Configure / Settings / Test tabs) (side panels), `forms/` (dynamic FieldSpec forms, mapping input, variable picker, `CodeEditor` for `code` fields), `condition/` |
-| Flows list / history / connections (usage, limits) / recipes / settings (retention) | `src/features/{flows,history,connections,recipes,settings}/` |
+| Flows list / history / connections (usage, limits) / recipes / settings (organisation, users and invitations, retention) | `src/features/{flows,history,connections,recipes,settings}/` |
 
 ## Rules
 - **Pure model first:** any change to how the definition tree is edited or laid out goes in `features/builder/model/*.ts` with a unit test. Components only call those functions.
 - The builder state is an immutable `FlowDefinition` in an undo/redo reducer (`model/history.ts`). Apply edits through `useBuilder().apply(def, tag?)`. Use a `tag` for typing-style edits so they coalesce into one undo step.
 - All server state goes through TanStack Query, and all HTTP goes through `src/api/client.ts`. Never call `fetch` elsewhere.
+- Hide or disable actions the caller's role cannot do (`can(useRole(), …)` from `features/auth/permissions.ts`); the server decides, the UI only avoids buttons that would be refused. Never put an org ID in a request body: the org is the `X-Org-ID` header.
 - No `any`. Use `unknown` and narrow it. Files ≤ 300 lines; split components when they grow.
 - Forms render from `FieldSpec` (`forms/DynamicForm.tsx`). Do not hand-build per-connector forms. A new field type means one `case` in `FieldInput` plus a test.
 - Accessibility: every input has a label (`Field` or `aria-label`), dialogs use `components/Dialog.tsx`, and interactive elements are buttons.

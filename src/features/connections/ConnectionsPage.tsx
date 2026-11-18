@@ -15,10 +15,13 @@ import { type SortState, nextSort, sortRows } from '../../lib/sort';
 import { ConnectionDialog } from './ConnectionDialog';
 import { ConnectionRow } from './ConnectionRow';
 import { LimitsDialog } from './LimitsDialog';
+import { can } from '../auth/permissions';
+import { useRole } from '../auth/session';
 
 type Column = 'name' | 'app' | 'status' | 'today' | 'created';
 
 export function ConnectionsPage() {
+  const canCreate = can(useRole(), 'connection.create');
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState('');
   const [app, setApp] = useState('');
@@ -52,9 +55,11 @@ export function ConnectionsPage() {
             </>
           }
           actions={
-            <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>
-              New connection
-            </Button>
+            canCreate && (
+              <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>
+                New connection
+              </Button>
+            )
           }
         />
         <div className="command-bar">

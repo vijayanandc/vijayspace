@@ -23,6 +23,8 @@ import { Palette } from './Palette';
 import { SidePanel } from './panel/SidePanel';
 import { Toolbar } from './Toolbar';
 import { useAutosave } from './useAutosave';
+import { can } from '../auth/permissions';
+import { useRole } from '../auth/session';
 
 export function BuilderPage() {
   const { flowId = '' } = useParams();
@@ -91,7 +93,14 @@ function LoadedBuilder({ flow, manifests, refetch, refreshError }: LoadedProps) 
   const [showIssues, setShowIssues] = useState(false);
   const issues = useMemo(() => issuesByNode(def, autosave.issues), [def, autosave.issues]);
 
-  const apply = useCallback((next: FlowDefinition, tag?: string) => dispatch({ type: 'apply', def: next, tag }), []);
+  // Viewers look at flows without changing them: edits are not applied (and so never saved).
+  const readOnly = !can(useRole(), 'flow.edit');
+  const apply = useCallback(
+    (next: FlowDefinition, tag?: string) => {
+      if (!readOnly) dispatch({ type: 'apply', def: next, tag });
+    },
+    [readOnly],
+  );
 
   const placeNew = useCallback(
     (point: InsertionPoint, item: PaletteItem) => {
@@ -172,7 +181,13 @@ function LoadedBuilder({ flow, manifests, refetch, refreshError }: LoadedProps) 
             autosave.setIssues(list);
             setShowIssues(true);
           }}
+          readOnly={readOnly}
         />
+        {readOnly && (
+          <MessageBar intent="info" role="status" className="builder-banner">
+            View only: as a viewer you can look at this flow but not change, test or publish it.
+          </MessageBar>
+        )}
         {refreshError && (
           <MessageBar intent="warning" role="status" className="builder-banner" actions={<Button size="sm" onClick={() => void refetch()}>Try again</Button>}>
             Could not refresh this flow from the server ({refreshError}). You can keep editing.

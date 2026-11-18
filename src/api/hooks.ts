@@ -17,6 +17,11 @@ export const qk = {
   execution: (id: string) => ['execution', id] as const,
   recipes: ['recipes'] as const,
   org: ['org'] as const,
+  /** The signed-in user, their orgs and invitations (kept when switching orgs). */
+  me: ['me'] as const,
+  authConfig: ['auth-config'] as const,
+  members: ['members'] as const,
+  invitations: ['invitations'] as const,
 };
 
 /** Mutation keys, for mutations other components wait on (e.g. the builder waits for a draft save). */
