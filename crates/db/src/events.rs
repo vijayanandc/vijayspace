@@ -16,7 +16,8 @@ use crate::{
 };
 
 /// Inserts a trigger event; `Ok(false)` when its dedupe key already exists for the registration
-/// (`InnoDB` rolls back only the failed statement, so the transaction continues).
+/// (`InnoDB` rolls back only the failed statement, so the transaction continues). Dedupe keys live in
+/// `trigger_dedupe` (not partitioned), so a key is recognised again on any later day within 30 days.
 pub(crate) async fn insert_event(
     tx: &mut Transaction<'_, MySql>,
     org: OrgId,
@@ -24,7 +25,23 @@ pub(crate) async fn insert_event(
     ev: &NewTriggerEvent,
     now: DateTime<Utc>,
 ) -> Res<bool> {
-    let inserted = sqlx::query("INSERT INTO trigger_events (id, org_id, flow_id, registration_id, dedupe_key, status, payload, received_at) VALUES (?, ?, ?, ?, ?, 'accepted', ?, ?)")
+    if let Some(key) = &ev.dedupe_key {
+        let claimed = sqlx::query(
+            "INSERT INTO trigger_dedupe (registration_id, dedupe_key, event_id, created_at) VALUES (?, ?, ?, ?)",
+        )
+        .bind(ev.registration_id.as_uuid())
+        .bind(key)
+        .bind(ev.id.as_uuid())
+        .bind(now)
+        .execute(&mut **tx)
+        .await;
+        match claimed {
+            Ok(_) => {}
+            Err(e) if is_duplicate(&e) => return Ok(false),
+            Err(e) => return Err(db_err(e)),
+        }
+    }
+    let inserted = sqlx::query("INSERT INTO trigger_events (id, org_id, flow_id, registration_id, dedupe_key, status, payload, received_at, day) VALUES (?, ?, ?, ?, ?, 'accepted', ?, ?, ?)")
         .bind(ev.id.as_uuid())
         .bind(org.as_uuid())
         .bind(item.execution.flow_id.as_uuid())
@@ -32,13 +49,10 @@ pub(crate) async fn insert_event(
         .bind(&ev.dedupe_key)
         .bind(Json(&ev.payload))
         .bind(now)
+        .bind(now.date_naive())
         .execute(&mut **tx)
         .await;
-    match inserted {
-        Ok(_) => Ok(true),
-        Err(e) if is_duplicate(&e) => Ok(false),
-        Err(e) => Err(db_err(e)),
-    }
+    inserted.map(|_| true).map_err(db_err)
 }
 
 /// Debounce: gives the burst's execution the newest trigger data while its job is still waiting.
@@ -53,7 +67,7 @@ pub(crate) async fn coalesce_into_queued(
     // Find the burst's execution with a plain read: locking through `trigger_events` would take
     // an exclusive lock on the event row that every concurrent delivery of the burst already
     // holds a shared lock on (from its duplicate insert), which deadlocks.
-    let found: Option<Uuid> = sqlx::query_scalar("SELECT e.id FROM executions e JOIN trigger_events t ON t.id = e.trigger_event_id WHERE e.org_id = ? AND t.registration_id = ? AND t.dedupe_key = ?")
+    let found: Option<Uuid> = sqlx::query_scalar("SELECT e.id FROM executions e JOIN trigger_dedupe d ON d.event_id = e.trigger_event_id WHERE e.org_id = ? AND d.registration_id = ? AND d.dedupe_key = ?")
         .bind(org.as_uuid())
         .bind(ev.registration_id.as_uuid())
         .bind(&ev.dedupe_key)

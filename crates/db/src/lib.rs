@@ -13,6 +13,7 @@ mod limits;
 mod links;
 mod members;
 mod orgs;
+pub mod partitions;
 mod quotas;
 mod retention;
 mod rows;

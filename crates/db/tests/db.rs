@@ -274,3 +274,77 @@ async fn claims_follow_queue_priority_without_starving_a_queue() {
     assert_eq!(ids.len(), 3, "no job is claimed twice");
     drop_db(t).await;
 }
+
+#[tokio::test]
+async fn a_run_older_than_the_cap_is_expired_and_its_partition_dropped() {
+    use weft_app::ports::RetentionRepo;
+    let t = db().await;
+    let today = t0().date_naive();
+    let pool = weft_db::connect(&format!("{}/{}", t.base, t.name), 1)
+        .await
+        .unwrap();
+    let id = uuid::Uuid::new_v4();
+    let old = t0() - Duration::days(40);
+    sqlx::query(
+        "INSERT INTO executions (id, org_id, flow_id, flow_version_id, mode, status, trigger_data, run_state, queued_at, updated_at, day) \
+         VALUES (?, ?, ?, ?, 'live', 'waiting', '{}', '{}', ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(uuid::Uuid::new_v4())
+    .bind(uuid::Uuid::new_v4())
+    .bind(uuid::Uuid::new_v4())
+    .bind(old)
+    .bind(old)
+    .bind(old.date_naive())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let key = format!("exe:{}", weft_domain::ids::ExecutionId::from_uuid(id));
+    t.store.enqueue(&job(&key), t0()).await.unwrap();
+
+    let report = t
+        .store
+        .maintain_partitions(today, 30, 7, t0())
+        .await
+        .unwrap();
+    assert_eq!(report.expired_runs, 1, "{report:?}");
+    let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM executions")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0, "its day partition was dropped");
+    let jobs: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM jobs WHERE dedupe_key = ?")
+        .bind(&key)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(jobs, 0, "nothing points at the gone run");
+    let names: Vec<String> = sqlx::query_scalar(
+        "SELECT CAST(partition_name AS CHAR) FROM information_schema.partitions \
+         WHERE table_schema = DATABASE() AND table_name = 'executions' AND partition_name IS NOT NULL",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert!(names.contains(&weft_db::partitions::partition_name(
+        today + Duration::days(7)
+    )));
+    assert!(
+        names.iter().all(|n| n == "pmax"
+            || n.as_str()
+                >= weft_db::partitions::partition_name(today - Duration::days(30)).as_str()),
+        "{names:?}"
+    );
+    // A second run (another server, or the next sweep) changes nothing and does not fail.
+    let again = t
+        .store
+        .maintain_partitions(today, 30, 7, t0())
+        .await
+        .unwrap();
+    assert_eq!(
+        (again.created, again.dropped, again.expired_runs),
+        (0, 0, 0),
+        "{again:?}"
+    );
+    drop_db(t).await;
+}

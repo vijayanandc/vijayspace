@@ -71,6 +71,18 @@ pub(crate) fn is_loopback(bind: &str) -> bool {
             .is_ok_and(|ip| ip.is_loopback())
 }
 
+/// Every sign-in setting (read only by the commands that serve the API).
+pub const SIGN_IN_KEYS: [&str; 8] = [
+    "WEFT_AUTH",
+    "WEFT_LOGTO_ENDPOINT",
+    "WEFT_LOGTO_APP_ID",
+    "WEFT_LOGTO_APP_SECRET",
+    "WEFT_LOGTO_CLIENT_APP_ID",
+    "WEFT_LOGTO_RESOURCE",
+    "WEFT_LOGTO_SCOPES",
+    "WEFT_LOGTO_CACHE_SECS",
+];
+
 /// `WEFT_AUTH` and the `WEFT_LOGTO_*` settings it needs. Fails closed: with neither `WEFT_AUTH`
 /// nor `WEFT_LOGTO_ENDPOINT` set the server does not start, and `WEFT_AUTH=off` (every request is
 /// an owner) is accepted only on a loopback bind address (`WEFT_BIND=127.0.0.1:8080`).

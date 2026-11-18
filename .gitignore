@@ -1,6 +1,8 @@
 /target
 **/*.rs.bk
 .env
+# Settings with secrets (see config.properties.example)
+config.properties
 *.pending-snap
 /fuzz/artifacts
 /fuzz/corpus/*/.tmp*

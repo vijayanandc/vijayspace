@@ -1,4 +1,5 @@
-//! Settings from environment variables (validated at startup; fail fast).
+//! Settings from `config.properties` and environment variables (the environment wins; see
+//! `properties.rs`), validated at startup: a bad value stops the server.
 
 use std::collections::HashMap;
 
@@ -37,13 +38,13 @@ pub struct Settings {
     pub oauth_clients: HashMap<String, OAuthClient>,
 }
 
-/// `WEFT_RETENTION_DAYS`: 1..=3650, default 30.
+/// `WEFT_RETENTION_DAYS`: 1..=30 (the platform cap), default 30.
 fn retention_days(value: Option<&str>) -> Result<u32, String> {
     value.map_or(Ok(30), |v| {
         v.parse()
             .ok()
-            .filter(|d| (1..=3650).contains(d))
-            .ok_or_else(|| "WEFT_RETENTION_DAYS must be a number of days from 1 to 3650".to_owned())
+            .filter(|d| (1..=weft_app::retention::MAX_DAYS).contains(d))
+            .ok_or_else(|| "WEFT_RETENTION_DAYS must be a number of days from 1 to 30".to_owned())
     })
 }
 
@@ -59,17 +60,33 @@ fn script_memory_mb(value: Option<&str>) -> Result<u64, String> {
     })
 }
 
-fn var(name: &str) -> Option<String> {
-    std::env::var(name)
-        .ok()
-        .map(|v| v.trim().to_owned())
-        .filter(|v| !v.is_empty())
-}
-
 impl Settings {
-    /// Reads `WEFT_*` variables. See `README.md` for the full list. `serves_api`: whether this
+    /// Reads the settings from `config.properties` and the environment. Logs file keys no setting reads.
+    pub fn load(source: &crate::properties::Source, serves_api: bool) -> Result<Self, String> {
+        let asked = std::cell::RefCell::new(Vec::new());
+        let var = |name: &str| {
+            asked.borrow_mut().push(name.to_owned());
+            source.get(name)
+        };
+        let settings = Self::from_source(&var, serves_api)?;
+        if let Some(path) = source.path() {
+            let mut asked = asked.borrow().clone();
+            asked.extend(crate::auth_settings::SIGN_IN_KEYS.map(str::to_owned));
+            asked.extend(["WEFT_LOG", "WEFT_LOG_FORMAT", "WEFT_CONFIG_PATH"].map(str::to_owned));
+            let unknown = source.unknown_keys(&asked);
+            if !unknown.is_empty() {
+                tracing::warn!(path, ?unknown, "config keys no setting reads (typos?)");
+            }
+        }
+        Ok(settings)
+    }
+
+    /// Reads `WEFT_*` settings through `var` (see `README.md` for the full list). `serves_api`: whether this
     /// process answers API requests (only then are the sign-in settings required).
-    pub fn from_env(serves_api: bool) -> Result<Self, String> {
+    pub fn from_source(
+        var: &dyn Fn(&str) -> Option<String>,
+        serves_api: bool,
+    ) -> Result<Self, String> {
         let public_url = var("WEFT_PUBLIC_URL").unwrap_or_else(|| "http://localhost:8080".into());
         let mut oauth_clients = HashMap::new();
         for connector in ["zoho_crm", "autodesk_forma"] {
@@ -123,13 +140,13 @@ impl Settings {
             allow_private_networks: var("WEFT_ALLOW_PRIVATE_NETWORKS")
                 .is_some_and(|v| v == "true" || v == "1"),
             sign_in: if serves_api {
-                crate::auth_settings::sign_in(&var, &bind)?
+                crate::auth_settings::sign_in(var, &bind)?
             } else {
                 None
             },
             app_url: var("WEFT_APP_URL").unwrap_or_else(|| "http://127.0.0.1:3000".into()),
             owner_emails: crate::auth_settings::owner_emails(var("WEFT_OWNER_EMAILS")),
-            mail: crate::auth_settings::mail(&var),
+            mail: crate::auth_settings::mail(var),
             mail_from: var("WEFT_MAIL_FROM").unwrap_or_else(|| "Weft <no-reply@localhost>".into()),
             worker_concurrency,
             db_pool_size,
@@ -195,7 +212,11 @@ mod tests {
         assert_eq!(retention_days(None), Ok(30));
         assert_eq!(retention_days(Some("7")), Ok(7));
         assert!(retention_days(Some("0")).is_err());
-        assert!(retention_days(Some("3651")).is_err());
+        assert!(retention_days(Some("30")).is_ok());
+        assert!(
+            retention_days(Some("31")).is_err(),
+            "history is kept at most 30 days"
+        );
         assert_eq!(script_memory_mb(None), Ok(512));
         assert_eq!(script_memory_mb(Some("64")), Ok(64));
         assert!(

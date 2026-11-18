@@ -67,16 +67,29 @@ async fn shutdown_signal() {
     tracing::info!("shutting down");
 }
 
+/// `RUST_LOG`, else `WEFT_LOG` (default `info,sqlx=warn`); `WEFT_LOG_FORMAT=json` for one JSON object per line
+/// (log shipping), else readable text.
+fn init_logging(source: &weft_server::properties::Source) {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        source
+            .get("WEFT_LOG")
+            .unwrap_or_else(|| "info,sqlx=warn".into())
+            .into()
+    });
+    let builder = tracing_subscriber::fmt().with_env_filter(filter);
+    if source.get("WEFT_LOG_FORMAT").as_deref() == Some("json") {
+        builder.json().init();
+    } else {
+        builder.init();
+    }
+}
+
 async fn run(cli: Cli) -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,sqlx=warn".into()),
-        )
-        .init();
+    let source = weft_server::properties::Source::load().map_err(anyhow::Error::msg)?;
+    init_logging(&source);
     let command = cli.command.unwrap_or(Command::Serve);
     let serves_api = matches!(command, Command::Serve | Command::Api);
-    let settings = Settings::from_env(serves_api).map_err(anyhow::Error::msg)?;
+    let settings = Settings::load(&source, serves_api).map_err(anyhow::Error::msg)?;
     let pool = weft_db::connect(&settings.database_url, settings.db_pool_size).await?;
     weft_db::migrate(&pool).await?;
     if matches!(command, Command::Migrate) {

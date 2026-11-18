@@ -298,6 +298,11 @@ impl TestApp {
         id
     }
 
+    /// This test's database (for checks the API does not show, e.g. partitions).
+    pub fn database_url(&self) -> String {
+        format!("{}/{}", self.base, self.db)
+    }
+
     pub async fn cleanup(self) {
         if let Ok(admin) = weft_db::connect(&format!("{}/mysql", self.base), 1).await {
             let _ = admin

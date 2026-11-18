@@ -1,6 +1,6 @@
-//! Run history retention: finished runs older than the org's retention are deleted with their
-//! step runs, trigger events and test snapshots; runs still waiting are never touched; the org
-//! setting overrides the server default; a run past the cutoff can be re-run but not retried.
+//! Run history retention: history lives in day partitions and is kept 30 days at most (older partitions are
+//! dropped); an org that keeps less loses its older finished runs sooner; a run past the cutoff can be re-run
+//! but not retried.
 
 use chrono::Duration;
 use serde_json::{Value, json};
@@ -24,8 +24,22 @@ async fn exists(app: &TestApp, exe: &str) -> bool {
         .is_success()
 }
 
+/// Day partitions of run history in this test's database.
+async fn partitions(app: &TestApp, table: &str) -> Vec<String> {
+    let pool = weft_db::connect(&app.database_url(), 1).await.unwrap();
+    let names: Vec<String> = sqlx::query_scalar(
+        "SELECT CAST(partition_name AS CHAR) FROM information_schema.partitions \
+         WHERE table_schema = DATABASE() AND table_name = ? AND partition_name IS NOT NULL",
+    )
+    .bind(table)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    names
+}
+
 #[tokio::test]
-async fn finished_runs_past_retention_are_deleted_and_waiting_ones_are_kept() {
+async fn run_history_is_kept_30_days_in_day_partitions_and_then_dropped() {
     let app = TestApp::spawn().await;
     let quick = app
         .live_flow(
@@ -33,11 +47,7 @@ async fn finished_runs_past_retention_are_deleted_and_waiting_ones_are_kept() {
             json!({"trigger": {"type": "webhook"}, "steps": [{"key": "s", "type": "stop"}]}),
         )
         .await;
-    let slow = app
-        .live_flow("Slow", json!({"trigger": {"type": "webhook"}, "steps": [{"key": "wait", "type": "delay", "seconds": 2_592_000}]}))
-        .await;
     let old = webhook_run(&app, &quick).await;
-    let waiting = webhook_run(&app, &slow).await;
     let draft = app.ok("POST", "/api/v1/flows", Some(json!({"name": "Draft", "definition": {"trigger": {"type": "manual"}, "steps": [{"key": "s", "type": "stop"}]}}))).await;
     app.ok(
         "POST",
@@ -46,30 +56,47 @@ async fn finished_runs_past_retention_are_deleted_and_waiting_ones_are_kept() {
     )
     .await;
     app.drain().await;
+    let first_day = app.deps.clock.now().date_naive();
 
     app.clock.advance(Duration::days(29));
     let recent = webhook_run(&app, &quick).await;
     let early = weft_app::retention::sweep(&app.deps).await.unwrap();
-    assert_eq!(
-        early.executions, 0,
-        "nothing is older than 30 days yet: {early:?}"
-    );
+    assert_eq!(early.partitions.expired_runs, 0, "{early:?}");
+    assert!(exists(&app, &old).await, "29 days old: kept");
+    let today = app.deps.clock.now().date_naive();
+    for table in ["executions", "step_runs", "trigger_events"] {
+        let names = partitions(&app, table).await;
+        let ahead = weft_db::partitions::partition_name(today + Duration::days(7));
+        assert!(
+            names.contains(&ahead),
+            "{table}: a week of day partitions ahead: {names:?}"
+        );
+        assert!(
+            names.contains(&"pmax".to_owned()),
+            "{table}: the catch-all stays"
+        );
+    }
 
     app.clock.advance(Duration::days(2)); // the first runs are now 31 days old
     let report = weft_app::retention::sweep(&app.deps).await.unwrap();
-    assert_eq!(
-        report.executions, 2,
-        "the old webhook run and the test run: {report:?}"
-    );
-    assert!(report.step_runs >= 2, "{report:?}");
-    assert!(report.trigger_events >= 1, "{report:?}");
-    assert_eq!(report.test_snapshots, 1, "{report:?}");
-    assert!(!exists(&app, &old).await);
     assert!(
-        exists(&app, &waiting).await,
-        "a waiting run is never deleted"
+        report.partitions.dropped >= 3,
+        "a day partition per table: {report:?}"
     );
+    assert_eq!(report.partitions.rows_in_catch_all, 0, "{report:?}");
+    assert_eq!(
+        report.test_snapshots, 1,
+        "the test run's snapshot: {report:?}"
+    );
+    assert!(!exists(&app, &old).await, "dropped with its day");
     assert!(exists(&app, &recent).await);
+    let gone = weft_db::partitions::partition_name(first_day);
+    for table in ["executions", "step_runs", "trigger_events"] {
+        assert!(
+            !partitions(&app, table).await.contains(&gone),
+            "{table}: {gone} dropped"
+        );
+    }
     app.cleanup().await;
 }
 

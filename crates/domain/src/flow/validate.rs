@@ -12,7 +12,8 @@ use crate::ids::ConnectionId;
 /// Limits from `docs/plan/01-product-scope.md` §4.
 pub const MAX_STEPS: usize = 100;
 pub const MAX_DEPTH: usize = 8;
-pub const MAX_DELAY_SECS: u64 = 30 * 24 * 3600;
+/// A delay ends well within the 30-day history cap (a run and its retries must finish before its history goes).
+pub const MAX_DELAY_SECS: u64 = 14 * 24 * 3600;
 
 /// What the validator needs to know about connectors (implemented by the connector registry).
 pub trait Catalog {
@@ -331,7 +332,7 @@ impl Validator<'_> {
                     self.error(
                         &format!("{path}/seconds"),
                         "delay.out_of_range",
-                        "Delay must be between 1 second and 30 days",
+                        "Delay must be between 1 second and 14 days",
                     );
                 }
                 (Some(_), None) => {}

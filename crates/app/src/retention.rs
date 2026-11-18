@@ -1,13 +1,17 @@
-//! Run history retention (doc 05 §4): finished runs older than the org's retention are deleted
-//! in small batches, with their step runs, trigger events and test snapshots; platform
-//! housekeeping removes dead jobs, expired OAuth states and leases, and old usage counters.
+//! Run history retention (doc 05 §4). History is kept at most 30 days: run history lives in day partitions,
+//! and partitions past the cap are dropped (their space goes back to the operating system). An org that keeps
+//! less has its older finished runs deleted in small batches; platform housekeeping removes dead jobs, expired
+//! OAuth states and leases, old counters, dedupe keys and unused test snapshots.
 
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use weft_domain::{error_codes, model::Org};
 
 use crate::tenancy::Actor;
-use crate::{AppError, Deps, ports::Purged};
+use crate::{
+    AppError, Deps,
+    ports::{PartitionReport, Purged},
+};
 use weft_domain::permissions::Permission;
 
 /// Rows per batch (executions, events or snapshots; step runs go in smaller chunks).
@@ -15,11 +19,13 @@ const BATCH: u32 = 200;
 /// Batches per org per sweep, so one sweep never hogs the database; the next sweep (every 15
 /// minutes) continues. 200 × 200 per 15 minutes keeps up with ~40 finished runs per second.
 const MAX_BATCHES: u32 = 200;
-/// Allowed retention, in days.
+/// Allowed retention, in days. `MAX_DAYS` is the platform cap for everything kept about runs.
 pub const MIN_DAYS: u32 = 1;
-pub const MAX_DAYS: u32 = 3_650;
-/// Daily connection usage counters are kept this long.
-const USAGE_DAYS: i64 = 90;
+pub const MAX_DAYS: u32 = 30;
+/// Daily connection usage and send counters are kept this long (within the cap).
+const USAGE_DAYS: i64 = 30;
+/// Day partitions are created this many days ahead.
+const AHEAD_DAYS: u32 = 7;
 
 /// What one sweep removed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
@@ -33,6 +39,8 @@ pub struct SweepReport {
     pub sync_leases: u64,
     pub usage_days: u64,
     pub invitations: u64,
+    pub dedupe_keys: u64,
+    pub partitions: PartitionReport,
 }
 
 impl SweepReport {
@@ -88,8 +96,24 @@ pub async fn sweep(deps: &Deps) -> Result<SweepReport, AppError> {
 }
 
 async fn sweep_all(deps: &Deps, now: DateTime<Utc>) -> Result<SweepReport, AppError> {
-    let mut report = SweepReport::default();
+    let mut report = SweepReport {
+        partitions: deps
+            .store
+            .maintain_partitions(now.date_naive(), MAX_DAYS, AHEAD_DAYS, now)
+            .await?,
+        ..SweepReport::default()
+    };
+    if report.partitions.rows_in_catch_all > 0 {
+        tracing::warn!(
+            rows = report.partitions.rows_in_catch_all,
+            "run history rows sit in the catch-all partition (more than a week ahead, or maintenance lapsed)"
+        );
+    }
     for org in deps.store.list_orgs().await? {
+        // Orgs that keep the full 30 days lose their history with the day partitions.
+        if effective_days(deps, &org) >= MAX_DAYS {
+            continue;
+        }
         // One org's failure (e.g. a lock wait timeout) must not stop the others.
         if let Err(e) = sweep_org(deps, &org, now, &mut report).await {
             tracing::warn!(org = %org.id, error = %e, "retention sweep of an org failed");
@@ -100,18 +124,23 @@ async fn sweep_all(deps: &Deps, now: DateTime<Utc>) -> Result<SweepReport, AppEr
             deps.config.default_retention_days.clamp(MIN_DAYS, MAX_DAYS),
         ));
     let usage_before = (now - Duration::days(USAGE_DAYS)).date_naive();
+    let history_before = now - Duration::days(i64::from(MAX_DAYS));
     // Batches until a round comes back short (bounded), so a busy day does not leave a growing backlog.
     for _ in 0..MAX_BATCHES {
         let h = deps
             .store
-            .housekeeping(jobs_before, now, usage_before, BATCH)
+            .housekeeping(jobs_before, now, usage_before, history_before, BATCH)
             .await?;
         report.dead_jobs += h.dead_jobs;
         report.oauth_states += h.oauth_states;
         report.sync_leases += h.sync_leases;
         report.usage_days += h.usage_days;
         report.invitations += h.invitations;
+        report.dedupe_keys += h.dedupe_keys;
+        report.test_snapshots += h.test_snapshots;
         let most = [
+            h.dedupe_keys,
+            h.test_snapshots,
             h.dead_jobs,
             h.oauth_states,
             h.sync_leases,

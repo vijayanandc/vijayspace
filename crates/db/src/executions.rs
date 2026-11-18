@@ -41,8 +41,8 @@ pub(crate) async fn insert_execution(
     now: DateTime<Utc>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT INTO executions (id, org_id, flow_id, flow_version_id, trigger_event_id, mode, rerun_of, status, trigger_data, run_state, queued_at, updated_at) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO executions (id, org_id, flow_id, flow_version_id, trigger_event_id, mode, rerun_of, status, trigger_data, run_state, queued_at, updated_at, day) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(e.id.as_uuid())
     .bind(e.org_id.as_uuid())
@@ -56,6 +56,8 @@ pub(crate) async fn insert_execution(
     .bind(Json(&e.run_state))
     .bind(e.queued_at)
     .bind(now)
+    // The history partition: the UTC day the run was queued (its steps share it).
+    .bind(e.queued_at.date_naive())
     .execute(&mut **tx)
     .await
     .map(|_| ())
@@ -218,9 +220,10 @@ impl ExecutionRepo for MySqlStore {
     }
 
     async fn insert_step_run(&self, org: OrgId, run: &StepRun) -> Res<()> {
-        sqlx::query(
-            "INSERT INTO step_runs (id, org_id, execution_id, seq, step_key, kind, attempt, status, input, output, error, warnings, started_at, finished_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        // A step run lives in its run's day partition (read from the run).
+        let inserted = sqlx::query(
+            "INSERT INTO step_runs (id, org_id, execution_id, seq, step_key, kind, attempt, status, input, output, error, warnings, started_at, finished_at, day) \
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, e.day FROM executions e WHERE e.id = ?",
         )
         .bind(run.id.as_uuid())
         .bind(org.as_uuid())
@@ -236,9 +239,16 @@ impl ExecutionRepo for MySqlStore {
         .bind((!run.warnings.is_empty()).then_some(Json(&run.warnings)))
         .bind(run.started_at)
         .bind(run.finished_at)
+        .bind(run.execution_id.as_uuid())
         .execute(&self.pool)
         .await
         .map_err(db_err)?;
+        if inserted.rows_affected() == 0 {
+            return Err(weft_app::AppError::internal(format!(
+                "step run for missing execution {}",
+                run.execution_id
+            )));
+        }
         Ok(())
     }
 

@@ -49,7 +49,7 @@ The run appears under **History** with each step's input and output.
 | `WEFT_SMTP_URL`, `WEFT_MAIL_FROM` | log only | Email (invitations and the email step) over SMTP (Mailpit: `smtp://localhost:1025`). `WEFT_MAIL_FROM` is `Name <address>`, also used for ZeptoMail |
 | `WEFT_WORKER_CONCURRENCY` | `16` | Jobs processed in parallel (1–256) |
 | `WEFT_DB_POOL_SIZE` | worker concurrency + 16 | Database connections per process (at least worker concurrency + 4) |
-| `WEFT_RETENTION_DAYS` | `30` | Days finished runs are kept (orgs can set their own, 1–3650) |
+| `WEFT_RETENTION_DAYS` | `30` | Days finished runs are kept (orgs can set their own); 1–30: history is kept 30 days at most |
 | `WEFT_SCRIPT_ISOLATION` | `process` | Run custom functions in child processes under OS memory/CPU limits; `thread` runs them inside the server (development only) |
 | `WEFT_SCRIPT_MEMORY_MB` | `512` | Memory a custom-function process may use (64–65536; its 64 MB stack comes on top) |
 | `WEFT_OAUTH_ZOHO_CRM_CLIENT_ID` / `_SECRET` | — | Zoho CRM OAuth app (redirect URI: `<public url>/oauth/callback`) |

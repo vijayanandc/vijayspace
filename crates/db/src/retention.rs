@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::QueryBuilder;
 use uuid::Uuid;
-use weft_app::ports::{Housekeeping, Purged, Res, RetentionRepo};
+use weft_app::ports::{Housekeeping, PartitionReport, Purged, Res, RetentionRepo};
 use weft_domain::ids::OrgId;
 
 use crate::{MySqlStore, codec::db_err};
@@ -112,6 +112,7 @@ impl RetentionRepo for MySqlStore {
         jobs_before: DateTime<Utc>,
         now: DateTime<Utc>,
         usage_before: NaiveDate,
+        history_before: DateTime<Utc>,
         limit: u32,
     ) -> Res<Housekeeping> {
         let run = |sql: &'static str| sqlx::query(sql);
@@ -160,12 +161,41 @@ impl RetentionRepo for MySqlStore {
             .await
             .map_err(db_err)?
             .rows_affected();
+        let dedupe_keys = run("DELETE FROM trigger_dedupe WHERE created_at < ? LIMIT ?")
+            .bind(history_before)
+            .bind(limit)
+            .execute(&self.pool)
+            .await
+            .map_err(db_err)?
+            .rows_affected();
+        let test_snapshots = run(
+            "DELETE FROM flow_versions WHERE kind = 'test_snapshot' AND created_at < ? \
+             AND NOT EXISTS (SELECT 1 FROM executions e WHERE e.flow_version_id = flow_versions.id) LIMIT ?",
+        )
+        .bind(history_before)
+        .bind(limit)
+        .execute(&self.pool)
+        .await
+        .map_err(db_err)?
+        .rows_affected();
         Ok(Housekeeping {
+            dedupe_keys,
+            test_snapshots,
             invitations,
             dead_jobs,
             oauth_states,
             sync_leases,
             usage_days,
         })
+    }
+
+    async fn maintain_partitions(
+        &self,
+        today: NaiveDate,
+        keep_days: u32,
+        ahead_days: u32,
+        now: DateTime<Utc>,
+    ) -> Res<PartitionReport> {
+        self.maintain(today, keep_days, ahead_days, now).await
     }
 }

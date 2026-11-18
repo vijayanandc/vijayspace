@@ -259,7 +259,7 @@ Roles: `owner | admin | member | viewer`. The matrix (doc 08 §2): owners do eve
 | Method | Path | Response |
 |---|---|---|
 | GET | `/api/v1/org` | `{id, name, timezone, role (the caller's), retention_days (the org's setting, or null), retention_days_effective, retention_days_default}` |
-| PATCH | `/api/v1/org` with `{name?, timezone?, retention_days?: 1..3650 \| null}` | the org (as above); owners only (403 otherwise). Finished runs older than this are deleted (every 15 minutes) with their step history; queued, running and waiting runs are kept. `null` = the server default (`WEFT_RETENTION_DAYS`, 30). |
+| PATCH | `/api/v1/org` with `{name?, timezone?, retention_days?: 1..30 \| null}` | the org (as above); owners only (403 otherwise). Finished runs older than this are deleted (every 15 minutes) with their step history. Run history is kept 30 days at most: runs queued more than 30 days ago are removed with their day, and one still unfinished then ends as failed (`execution.expired`). `null` = the server default (`WEFT_RETENTION_DAYS`, 30). |
 | GET | `/api/v1/usage` | `{period: "2026-11", tasks_used, executions}` |
 | GET | `/healthz`, `/readyz` | `ok` |
 
