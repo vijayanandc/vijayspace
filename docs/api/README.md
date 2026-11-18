@@ -237,7 +237,7 @@ For a `decision` step run, `output` is `{"branch": "big"}`; when no branch match
 ```
 `details` depends on `kind`:
 - `http`: `{method, url, status|null, error|null, duration_ms, request_bytes, response_bytes, response_excerpt|null}`.
-  - `url` has no user info, and secret query values are replaced by `…` (`token`, `access_token`, `key`, `secret`, `password`, `signature`, `code`, …).
+  - `url` has no user info, and secret query values are replaced by `***` (`token`, `access_token`, `key`, `secret`, `password`, `signature`, `code`, …).
   - `response_excerpt` is the first 2 KB of the answer, only when the status is 400 or above.
   - Headers and request bodies are never logged.
 - `limit`: `{reason, until}`.

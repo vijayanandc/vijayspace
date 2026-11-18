@@ -16,7 +16,7 @@ use weft_domain::{
 use crate::{
     AppError, Deps,
     ports::{LogKind, LogLevel, LogRecord},
-    runner::calls::viewer_details,
+    runner::calls::{viewer_details, viewer_http_message},
     tenancy::Actor,
 };
 
@@ -107,7 +107,14 @@ pub fn timeline(
     };
     run_start(&mut b, exe);
     for run in steps {
-        step_lines(&mut b, run);
+        // A failed last attempt that did not fail the run: the step continues on error.
+        let continued = run.status == StepStatus::Failed
+            && !steps
+                .iter()
+                .any(|s| s.step_key == run.step_key && s.seq > run.seq)
+            && !(exe.status == ExecutionStatus::Failed
+                && exe.failed_step_key.as_ref() == Some(&run.step_key));
+        step_lines(&mut b, run, continued);
     }
     for r in records {
         let group = steps
@@ -145,25 +152,6 @@ pub fn timeline(
     run_end(&mut b, exe);
     b.lines.sort_by_key(|l| l.0);
     b.lines.into_iter().map(|(_, e)| e).collect()
-}
-
-fn viewer_http_message(details: Option<&Value>) -> String {
-    let get = |k: &str| {
-        details
-            .and_then(|d| d.get(k))
-            .cloned()
-            .unwrap_or(Value::Null)
-    };
-    let status = get("status");
-    let outcome = status
-        .as_u64()
-        .map_or_else(|| "no answer".to_owned(), |s| s.to_string());
-    format!(
-        "{} {} → {outcome} in {} ms",
-        get("method").as_str().unwrap_or("?"),
-        get("url").as_str().unwrap_or(""),
-        get("duration_ms").as_i64().unwrap_or(0)
-    )
 }
 
 fn run_start(b: &mut Builder, exe: &Execution) {
@@ -256,7 +244,7 @@ pub fn duration(ms: i64) -> String {
     }
 }
 
-fn step_lines(b: &mut Builder, run: &StepRun) {
+fn step_lines(b: &mut Builder, run: &StepRun, continued: bool) {
     let seq = i64::from(run.seq);
     let key = &run.step_key;
     let with = |mut e: LogEntry| {
@@ -272,7 +260,7 @@ fn step_lines(b: &mut Builder, run: &StepRun) {
         );
     }
     let at = run.finished_at.unwrap_or(run.started_at);
-    if let Some((level, message, details)) = step_outcome(run, b.full) {
+    if let Some((level, message, details)) = step_outcome(run, b.full, continued) {
         let mut e = with(entry(at, level, LogKind::Step, message));
         e.details = details;
         b.push((at, seq, 2), e);
@@ -292,6 +280,15 @@ fn step_lines(b: &mut Builder, run: &StepRun) {
     }
 }
 
+fn continued_failure(run: &StepRun, full: bool) -> (LogLevel, String, Option<Value>) {
+    let why = error_text(run, full);
+    let message = format!(
+        "Step `{}` failed and the run continued: {why}",
+        run.step_key
+    );
+    (LogLevel::Warn, message, None)
+}
+
 fn error_text(run: &StepRun, full: bool) -> String {
     let get = |k: &str| {
         run.error
@@ -306,7 +303,11 @@ fn error_text(run: &StepRun, full: bool) -> String {
     }
 }
 
-fn step_outcome(run: &StepRun, full: bool) -> Option<(LogLevel, String, Option<Value>)> {
+fn step_outcome(
+    run: &StepRun,
+    full: bool,
+    continued: bool,
+) -> Option<(LogLevel, String, Option<Value>)> {
     let key = &run.step_key;
     let out = |k: &str| run.output.as_ref().and_then(|o| o.get(k)).cloned();
     let took = run
@@ -353,6 +354,8 @@ fn step_outcome(run: &StepRun, full: bool) -> Option<(LogLevel, String, Option<V
             format!("Step `{key}` succeeded in {took}"),
             None,
         ),
+        (_, StepStatus::Skipped) => continued_failure(run, full),
+        (_, StepStatus::Failed) if continued => continued_failure(run, full),
         (_, StepStatus::Failed) => (
             LogLevel::Error,
             format!("Step `{key}` failed: {}", error_text(run, full)),
@@ -363,14 +366,6 @@ fn step_outcome(run: &StepRun, full: bool) -> Option<(LogLevel, String, Option<V
             format!(
                 "Step `{key}` attempt {} failed: {}",
                 run.attempt,
-                error_text(run, full)
-            ),
-            None,
-        ),
-        (_, StepStatus::Skipped) => (
-            LogLevel::Warn,
-            format!(
-                "Step `{key}` failed and the run continued: {}",
                 error_text(run, full)
             ),
             None,

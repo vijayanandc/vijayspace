@@ -211,7 +211,7 @@ fn excerpt(body: &[u8]) -> String {
     text
 }
 
-/// The URL without user info, fragment or secret query values (`?token=…`).
+/// The URL without user info, fragment or secret query values (`?token=***`).
 #[must_use]
 pub fn redact_url(raw: &str) -> String {
     let Ok(mut url) = url::Url::parse(raw) else {
@@ -226,8 +226,9 @@ pub fn redact_url(raw: &str) -> String {
             let secret = SECRET_PARAMS.contains(&k.to_ascii_lowercase().as_str());
             (
                 k.into_owned(),
+                // `***` needs no percent-encoding, so the logged URL stays readable.
                 if secret {
-                    "…".to_owned()
+                    "***".to_owned()
                 } else {
                     v.into_owned()
                 },
@@ -259,6 +260,27 @@ pub fn viewer_details(details: &Value) -> Value {
     })
 }
 
+/// The message of an HTTP log line as viewers see it (from their `viewer_details`).
+#[must_use]
+pub fn viewer_http_message(details: Option<&Value>) -> String {
+    let get = |k: &str| {
+        details
+            .and_then(|d| d.get(k))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    let status = get("status");
+    let outcome = status
+        .as_u64()
+        .map_or_else(|| "no answer".to_owned(), |s| s.to_string());
+    format!(
+        "{} {} → {outcome} in {} ms",
+        get("method").as_str().unwrap_or("?"),
+        get("url").as_str().unwrap_or(""),
+        get("duration_ms").as_i64().unwrap_or(0)
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,7 +291,7 @@ mod tests {
             redact_url(
                 "https://user:pw@api.example.com/v2/Leads/42?fields=Name&access_token=abc&KEY=k#frag"
             ),
-            "https://api.example.com/v2/Leads/42?fields=Name&access_token=%E2%80%A6&KEY=%E2%80%A6"
+            "https://api.example.com/v2/Leads/42?fields=Name&access_token=***&KEY=***"
         );
         assert_eq!(
             redact_url("https://api.example.com/x"),

@@ -74,7 +74,7 @@ async fn the_log_shows_each_call_of_each_attempt_and_the_retry_without_secrets()
         calls[0]["details"]["url"]
             .as_str()
             .unwrap()
-            .ends_with("/items?page=1&token=%E2%80%A6"),
+            .ends_with("/items?page=1&token=***"),
         "{log}"
     );
     assert_eq!(calls[1]["attempt"], 2);

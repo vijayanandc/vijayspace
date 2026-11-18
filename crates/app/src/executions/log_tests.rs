@@ -163,3 +163,37 @@ fn a_waiting_run_says_until_when_and_durations_read_naturally() {
     assert_eq!(duration(2_400), "2.4 s");
     assert_eq!(duration(185_000), "3 min 5 s");
 }
+
+#[test]
+fn a_failure_the_run_continued_past_is_a_warning_not_the_runs_failure() {
+    let mut run = exe(ExecutionStatus::Succeeded);
+    run.failed_step_key = None;
+    let failed = step(0, 1, StepStatus::Failed, 20, 40);
+    let log = timeline(&run, std::slice::from_ref(&failed), Vec::new(), true);
+    let line = log
+        .iter()
+        .find(|e| e.message.contains("continued"))
+        .unwrap();
+    assert_eq!(line.level, LogLevel::Warn);
+    assert_eq!(
+        line.message,
+        "Step `crm` failed and the run continued: app.unavailable: the app said: account 42 is locked"
+    );
+    // The step that failed the run, or one retried later by hand, stays an error.
+    let log = timeline(
+        &exe(ExecutionStatus::Failed),
+        std::slice::from_ref(&failed),
+        Vec::new(),
+        true,
+    );
+    assert!(
+        log.iter()
+            .any(|e| e.message.starts_with("Step `crm` failed: ") && e.level == LogLevel::Error)
+    );
+    let retried = [failed, step(1, 2, StepStatus::Succeeded, 50, 60)];
+    let log = timeline(&run, &retried, Vec::new(), true);
+    assert!(
+        log.iter()
+            .any(|e| e.message.starts_with("Step `crm` failed: "))
+    );
+}
