@@ -1,3 +1,5 @@
+> **Moved.** The web client now lives in [`vijayanandc/appblocks_flow_client`](https://github.com/vijayanandc/appblocks_flow_client) (`main`), with this branch's history. This branch is no longer updated; make changes there.
+
 # Weft web client
 
 The browser UI for Weft (a Zoho Flow–style integration platform): flows list, a drag-and-drop flow builder, connections, run history and prebuilt recipes. The server lives in [`vijayanandc/appblocks_flow`](https://github.com/vijayanandc/appblocks_flow).
