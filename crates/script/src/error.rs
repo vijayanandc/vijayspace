@@ -111,23 +111,26 @@ impl From<ParseError> for ScriptError {
 }
 
 /// An error raised inside a script function is reported as the inner error, with the innermost
-/// known position and the outermost named function, i.e. the script's own `fn` rather than a
-/// built-in such as `map` it passed a closure to (closures have no useful name).
+/// known position and the innermost script function it happened in. Closures (`anon$…`) have no
+/// useful name, and a built-in such as `map` is skipped when the frame inside it is a closure.
 fn innermost(e: Box<EvalAltResult>) -> (Box<EvalAltResult>, Option<String>, Position) {
     let mut position = e.position();
-    let mut function = None;
+    let mut frames: Vec<String> = Vec::new();
     let mut e = e;
     while matches!(*e, EvalAltResult::ErrorInFunctionCall(..)) {
         if let EvalAltResult::ErrorInFunctionCall(name, _, inner, _) = *e {
-            if function.is_none() && !name.starts_with("anon$") {
-                function = Some(name);
-            }
+            frames.push(name);
             if !inner.position().is_none() {
                 position = inner.position();
             }
             e = inner;
         }
     }
+    let anon = |name: &str| name.starts_with("anon$");
+    let function = (0..frames.len())
+        .rev()
+        .find(|&i| !anon(&frames[i]) && !frames.get(i + 1).is_some_and(|next| anon(next)))
+        .map(|i| frames[i].clone());
     (e, function, position)
 }
 

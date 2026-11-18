@@ -287,6 +287,13 @@ fn rhai_dead_ends_explain_what_to_do() {
     let e = fail("fn g(items) {\n  items.map(|x| x.nope())\n}\ng(input.items)");
     assert!(e.to_string().contains("(in function `g`)"), "{e}");
     assert_eq!(e.position().0, Some(2), "{e}");
+    // The name and the position belong to the same function.
+    let e = fail("fn a() {\n  b()\n}\nfn b() {\n  throw \"boom\"\n}\na()");
+    assert!(e.to_string().contains("(in function `b`)"), "{e}");
+    assert_eq!(e.position().0, Some(5), "{e}");
+    // A built-in given a closure is not named.
+    let e = fail("input.items.map(|x| x.nope())");
+    assert!(!e.to_string().contains("in function"), "{e}");
 }
 
 #[test]

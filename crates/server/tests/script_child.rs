@@ -91,3 +91,19 @@ async fn memory_bombs_only_kill_the_child() {
         .unwrap();
     assert_eq!(ok.output, json!({"ok": true}));
 }
+
+#[tokio::test]
+async fn the_script_stack_comes_on_top_of_the_memory_setting() {
+    // At the smallest allowed setting the child still starts its 64 MB-stack script thread.
+    let small = ProcessScriptRunner::new(
+        PathBuf::from(env!("CARGO_BIN_EXE_weft")),
+        1,
+        64,
+        Duration::from_secs(30),
+    );
+    let out = small
+        .run("#{ n: input.n * 2 }", json!({"n": 21}), json!({}))
+        .await
+        .unwrap();
+    assert_eq!(out.output, json!({"n": 42}));
+}

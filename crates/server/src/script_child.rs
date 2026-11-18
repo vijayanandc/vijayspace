@@ -17,7 +17,9 @@ fn set_limits() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(DEFAULT_MEMORY_MB);
-    let bytes = memory_mb.saturating_mul(1 << 20);
+    // `WEFT_SCRIPT_MEMORY_MB` is what the script may use; the script thread's stack comes on top.
+    let stack = u64::try_from(weft_script::STACK_BYTES).unwrap_or(64 << 20);
+    let bytes = memory_mb.saturating_mul(1 << 20).saturating_add(stack);
     // Best effort on platforms without these limits; the engine's own limits still apply.
     let _ = rlimit::setrlimit(rlimit::Resource::AS, bytes, bytes);
     let _ = rlimit::setrlimit(rlimit::Resource::CPU, CPU_SECS, CPU_SECS);

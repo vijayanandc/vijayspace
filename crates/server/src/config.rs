@@ -20,12 +20,35 @@ pub struct Settings {
     /// Run custom functions in child processes (`WEFT_SCRIPT_ISOLATION=process`, the default)
     /// or on threads of this process (`thread`, for development only).
     pub script_processes: bool,
-    /// Address-space cap of a script process (`WEFT_SCRIPT_MEMORY_MB`, default 512).
+    /// Memory a script process may use (`WEFT_SCRIPT_MEMORY_MB`, 64..=65536, default 512); its
+    /// address-space cap adds the script stack.
     pub script_memory_mb: u64,
     pub smtp_url: Option<String>,
     pub mail_from: String,
     pub worker_concurrency: usize,
     pub oauth_clients: HashMap<String, OAuthClient>,
+}
+
+/// `WEFT_RETENTION_DAYS`: 1..=3650, default 30.
+fn retention_days(value: Option<&str>) -> Result<u32, String> {
+    value.map_or(Ok(30), |v| {
+        v.parse()
+            .ok()
+            .filter(|d| (1..=3650).contains(d))
+            .ok_or_else(|| "WEFT_RETENTION_DAYS must be a number of days from 1 to 3650".to_owned())
+    })
+}
+
+/// `WEFT_SCRIPT_MEMORY_MB`: 64..=65536, default 512.
+fn script_memory_mb(value: Option<&str>) -> Result<u64, String> {
+    value.map_or(Ok(crate::script_child::DEFAULT_MEMORY_MB), |v| {
+        v.parse()
+            .ok()
+            .filter(|mb| (64..=65_536).contains(mb))
+            .ok_or_else(|| {
+                "WEFT_SCRIPT_MEMORY_MB must be a number of MB from 64 to 65536".to_owned()
+            })
+    })
 }
 
 fn var(name: &str) -> Option<String> {
@@ -77,17 +100,8 @@ impl Settings {
             public_url,
             master_keys,
             script_processes: var("WEFT_SCRIPT_ISOLATION").as_deref() != Some("thread"),
-            script_memory_mb: var("WEFT_SCRIPT_MEMORY_MB")
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(crate::script_child::DEFAULT_MEMORY_MB),
-            retention_days: match var("WEFT_RETENTION_DAYS") {
-                None => 30,
-                Some(v) => v
-                    .parse()
-                    .ok()
-                    .filter(|d| (1..=3650).contains(d))
-                    .ok_or("WEFT_RETENTION_DAYS must be a number of days from 1 to 3650")?,
-            },
+            script_memory_mb: script_memory_mb(var("WEFT_SCRIPT_MEMORY_MB").as_deref())?,
+            retention_days: retention_days(var("WEFT_RETENTION_DAYS").as_deref())?,
             http_proxy: var("WEFT_HTTP_PROXY"),
             allow_private_networks: var("WEFT_ALLOW_PRIVATE_NETWORKS")
                 .is_some_and(|v| v == "true" || v == "1"),
@@ -98,5 +112,25 @@ impl Settings {
                 .unwrap_or(16),
             oauth_clients,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retention_and_script_memory_are_range_checked() {
+        assert_eq!(retention_days(None), Ok(30));
+        assert_eq!(retention_days(Some("7")), Ok(7));
+        assert!(retention_days(Some("0")).is_err());
+        assert!(retention_days(Some("3651")).is_err());
+        assert_eq!(script_memory_mb(None), Ok(512));
+        assert_eq!(script_memory_mb(Some("64")), Ok(64));
+        assert!(
+            script_memory_mb(Some("63")).is_err(),
+            "too small to run a script"
+        );
+        assert!(script_memory_mb(Some("lots")).is_err());
     }
 }

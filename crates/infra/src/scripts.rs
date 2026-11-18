@@ -1,8 +1,8 @@
 //! `ScriptRunner`s (doc 08 §7):
 //! - [`ProcessScriptRunner`] (production): each script runs in a child process under OS memory
 //!   and CPU limits, so a script that defeats the engine's size accounting only kills itself.
-//! - [`PooledScriptRunner`] (tests, development): blocking threads in this process. This is the
-//!   one sanctioned use of `spawn_blocking` outside the worker and server.
+//! - [`PooledScriptRunner`] (tests, development): a thread per script in this process, at most
+//!   `concurrency` at once (each holds its permit until it finishes).
 
 use std::{path::PathBuf, process::Stdio, sync::Arc, time::Duration};
 
@@ -55,19 +55,20 @@ impl ScriptRunner for PooledScriptRunner {
         input: Value,
         context: Value,
     ) -> Result<ScriptRun, ConnectorError> {
-        let _permit = self
-            .permits
-            .acquire()
+        let permit = Arc::clone(&self.permits)
+            .acquire_owned()
             .await
             .map_err(|_| ConnectorError::transient("the script runner is shutting down"))?;
         let (code, limits) = (code.to_owned(), self.limits.clone());
         // Its own thread with a large stack (the blocking pool's 2 MB is too small for deeply
-        // nested values); the permit above bounds how many run at once.
+        // nested values). The thread holds the permit, so even if this future is dropped (a step
+        // timeout) no more than `concurrency` scripts run at once.
         let (done, result) = tokio::sync::oneshot::channel();
         std::thread::Builder::new()
             .name("weft-script".into())
             .stack_size(weft_script::STACK_BYTES)
             .spawn(move || {
+                let _permit = permit;
                 let _ = done.send(weft_script::run(&code, &input, &context, &limits));
             })
             .map_err(|e| ConnectorError::transient(format!("starting a script thread: {e}")))?;
@@ -170,6 +171,11 @@ impl ScriptRunner for ProcessScriptRunner {
         let mut child = Command::new(&self.exe)
             .arg(CHILD_SUBCOMMAND)
             .env("WEFT_SCRIPT_MEMORY_MB", self.memory_mb.to_string())
+            // One malloc arena (a second thread would reserve another 64 MB of address space),
+            // and no backtrace capture for the panics the sandbox catches.
+            .env("MALLOC_ARENA_MAX", "1")
+            .env("RUST_BACKTRACE", "0")
+            .env("RUST_LIB_BACKTRACE", "0")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
