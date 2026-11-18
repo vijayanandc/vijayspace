@@ -10,7 +10,7 @@ import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { Field } from '../../components/Field';
 import { useToast } from '../../components/Toast';
-import { ROLE_LABELS } from '../auth/permissions';
+import { ROLE_LABELS } from '../auth';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

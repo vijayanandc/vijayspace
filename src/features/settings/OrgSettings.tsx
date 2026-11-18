@@ -11,7 +11,7 @@ import type { Org } from '../../api/types';
 import { Button } from '../../components/Button';
 import { Field } from '../../components/Field';
 import { useToast } from '../../components/Toast';
-import { timeZones } from '../auth/timezones';
+import { timeZones } from '../auth';
 
 export function OrgSettings({ org, editable }: { org: Org; editable: boolean }) {
   const qc = useQueryClient();

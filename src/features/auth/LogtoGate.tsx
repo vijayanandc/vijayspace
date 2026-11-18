@@ -12,6 +12,8 @@ import type { SignInConfig } from '../../api/tenancy';
 import { CALLBACK_PATH, redirectUris } from './config';
 import { MeGate } from './MeGate';
 import { SignInPage } from './SignInPage';
+import { read, remove, write } from '../../lib/storage';
+import { safeNextPath } from '../../lib/safePath';
 import { draftSavesSettled } from './session';
 import { Splash } from './Splash';
 
@@ -27,29 +29,16 @@ const SIGNED_OUT: AuthHooks = {
 };
 
 function rememberReturnPath(pathname: string, search: string): void {
-  try {
-    if (pathname !== CALLBACK_PATH && pathname !== '/') window.sessionStorage.setItem(RETURN_KEY, `${pathname}${search}`);
-  } catch {
-    // Without session storage the user simply lands on the flows list.
-  }
+  if (pathname !== CALLBACK_PATH && pathname !== '/') write(RETURN_KEY, `${pathname}${search}`, 'session');
 }
 
 /** The page to open after signing in (read without removing it: React may run initializers twice). */
 function peekReturnPath(): string {
-  try {
-    const path = window.sessionStorage.getItem(RETURN_KEY);
-    return path && path.startsWith('/') && !path.startsWith('//') ? path : '/flows';
-  } catch {
-    return '/flows';
-  }
+  return safeNextPath(read(RETURN_KEY, 'session')) ?? '/flows';
 }
 
 function forgetReturnPath(): void {
-  try {
-    window.sessionStorage.removeItem(RETURN_KEY);
-  } catch {
-    // Nothing stored.
-  }
+  remove(RETURN_KEY, 'session');
 }
 
 /** Whether Logto says the session is over (as opposed to being unreachable). */

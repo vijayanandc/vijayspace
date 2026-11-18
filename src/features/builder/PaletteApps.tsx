@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import type { ConnectorManifest } from '../../api/types';
 import { AppIcon } from '../../components/AppIcon';
-import { SCRIPT_CONNECTOR } from './model/script';
+import { SCRIPT_CONNECTOR } from '../../domain/script';
 import { PaletteItem } from './PaletteItem';
 
 function Actions({ manifest, actions }: { manifest: ConnectorManifest; actions: ConnectorManifest['actions'] }) {

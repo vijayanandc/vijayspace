@@ -8,7 +8,7 @@ import { type Role, tenancy } from '../../api/tenancy';
 import { Button } from '../../components/Button';
 import { useToast } from '../../components/Toast';
 import { formatTime } from '../../lib/format';
-import { ROLE_LABELS, assignableRoles } from '../auth/permissions';
+import { ROLE_LABELS, assignableRoles } from '../auth';
 
 export function PendingInvitations({ actor }: { actor: Role }) {
   const qc = useQueryClient();

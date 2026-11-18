@@ -15,8 +15,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { SearchBox } from '../../components/SearchBox';
 import { InstallWizard } from './InstallWizard';
 import { RecipeApps } from './RecipeApps';
-import { can } from '../auth/permissions';
-import { useRole } from '../auth/session';
+import { can, useRole } from '../auth';
 
 export function RecipesPage() {
   const role = useRole();

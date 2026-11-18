@@ -3,10 +3,10 @@
 import type { ActionStep, JsonObject } from '../../../api/types';
 import { Field } from '../../../components/Field';
 import { useBuilder } from '../BuilderContext';
-import { DynamicForm } from '../forms/DynamicForm';
-import { updateStep } from '../model/tree';
-import { buildVariableTree } from '../model/variables';
-import { ConnectionPicker } from './ConnectionPicker';
+import { DynamicForm } from '../../../forms/DynamicForm';
+import { updateStep } from '../../../domain/tree';
+import { buildVariableTree } from '../../../domain/variables';
+import { StepConnectionPicker } from './StepConnectionPicker';
 
 export function ActionPanel({ step }: { step: ActionStep }) {
   const { def, apply, manifests, flow, issues } = useBuilder();
@@ -50,7 +50,7 @@ export function ActionPanel({ step }: { step: ActionStep }) {
       {manifest && manifest.auth.kind !== 'none' && (
         <section className="panel-section">
           <h3 className="section-title">Connection</h3>
-          <ConnectionPicker connector={manifest.key} value={step.connection_id} onChange={(id) => set({ connection_id: id })} />
+          <StepConnectionPicker connector={manifest.key} value={step.connection_id} onChange={(id) => set({ connection_id: id })} />
         </section>
       )}
       {spec && (

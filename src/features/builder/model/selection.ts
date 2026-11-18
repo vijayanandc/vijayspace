@@ -2,7 +2,7 @@
 
 import type { FlowDefinition } from '../../../api/types';
 import { TRIGGER_ID } from './paths';
-import { allSteps } from './tree';
+import { allSteps } from '../../../domain/tree';
 
 /**
  * The node to keep selected after `prev` became `next`: the same key when it still exists, the step's new

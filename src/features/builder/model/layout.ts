@@ -5,7 +5,7 @@ import type { Edge, Node } from '@xyflow/react';
 import type { FlowDefinition, Step, TriggerNode } from '../../../api/types';
 import { summarize } from './condition';
 import { TRIGGER_ID } from './paths';
-import { type InsertionPoint, type ListRef, ROOT, listRefId } from './tree';
+import { type InsertionPoint, type ListRef, ROOT, listRefId } from '../../../domain/tree';
 
 export const COL_WIDTH = 300;
 export const NODE_WIDTH = 240;

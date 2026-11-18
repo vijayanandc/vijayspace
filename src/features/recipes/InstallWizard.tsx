@@ -14,7 +14,7 @@ import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { ErrorBox } from '../../components/Empty';
 import { MessageBar } from '../../components/MessageBar';
-import { ConnectionPicker } from '../builder/panel/ConnectionPicker';
+import { ConnectionPicker } from '../connections';
 import { RecipeApps } from './RecipeApps';
 
 interface Props {

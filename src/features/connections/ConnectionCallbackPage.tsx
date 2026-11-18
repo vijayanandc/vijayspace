@@ -12,8 +12,9 @@ import { endpoints } from '../../api/endpoints';
 import { qk } from '../../api/hooks';
 import { LinkButton } from '../../components/Button';
 import { useToast } from '../../components/Toast';
-import { useSession } from '../auth/session';
-import { OAUTH_RETURN_PATH, safeNextPath } from './oauth';
+import { useSession } from '../auth';
+import { safeNextPath } from '../../lib/safePath';
+import { OAUTH_RETURN_PATH } from './oauth';
 
 /** The callback URL that shows `result` (the finish token never stays in the address bar or history). */
 function resultUrl(result: Record<string, string>, next: string | null): string {

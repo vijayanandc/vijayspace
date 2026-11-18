@@ -3,12 +3,12 @@
 import type { AppTriggerNode, TriggerNode, TriggerType, WebhookTriggerNode } from '../../../api/types';
 import { Field } from '../../../components/Field';
 import { formatTime } from '../../../lib/format';
-import { TRIGGER_CHOICES } from '../../flows/NewFlowDialog';
+import { TRIGGER_CHOICES } from '../../../domain/triggers';
 import { useBuilder } from '../BuilderContext';
-import { DynamicForm } from '../forms/DynamicForm';
-import { defaultTrigger } from '../model/factories';
-import { buildVariableTree } from '../model/variables';
-import { ConnectionPicker } from './ConnectionPicker';
+import { DynamicForm } from '../../../forms/DynamicForm';
+import { defaultTrigger } from '../../../domain/factories';
+import { buildVariableTree } from '../../../domain/variables';
+import { StepConnectionPicker } from './StepConnectionPicker';
 import { CopyField } from './CopyField';
 import { SchedulePanel } from './SchedulePanel';
 
@@ -70,7 +70,7 @@ function AppSection({ trigger, onChange }: { trigger: AppTriggerNode; onChange: 
       {manifest && manifest.auth.kind !== 'none' && (
         <section className="panel-section">
           <h3 className="section-title">Connection</h3>
-          <ConnectionPicker connector={manifest.key} value={trigger.connection_id} onChange={(id) => onChange({ ...trigger, connection_id: id })} />
+          <StepConnectionPicker connector={manifest.key} value={trigger.connection_id} onChange={(id) => onChange({ ...trigger, connection_id: id })} />
         </section>
       )}
       {spec && (

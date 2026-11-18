@@ -6,7 +6,7 @@ import type { Step } from '../../../api/types';
 import { AppIcon } from '../../../components/AppIcon';
 import { useBuilder } from '../BuilderContext';
 import type { NodeLabel } from '../canvas/labels';
-import { updateStep } from '../model/tree';
+import { updateStep } from '../../../domain/tree';
 
 export function PanelHeader({ label, step, onClose }: { label: NodeLabel; step?: Step; onClose: () => void }) {
   const { def, apply } = useBuilder();

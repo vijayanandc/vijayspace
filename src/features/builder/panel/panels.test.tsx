@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppTriggerNode, ConnectorManifest, Flow, FlowDefinition, Step } from '../../../api/types';
 import { renderWithProviders } from '../../../test/render';
 import { BuilderContext, type BuilderCtx } from '../BuilderContext';
-import { allSteps } from '../model/tree';
+import { allSteps } from '../../../domain/tree';
 import { SidePanel } from './SidePanel';
 import { TriggerSettings } from './TriggerExtras';
 

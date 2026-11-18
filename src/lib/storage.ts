@@ -1,20 +1,35 @@
-// Per-viewer UI preferences in localStorage (collapsed nav, list/grid view). Never required for correctness.
+// The only access to browser storage: per-viewer preferences in localStorage (collapsed nav, list/grid view, the
+// current org) and per-tab values in sessionStorage (the page to return to after signing in). Never required for
+// correctness: storage can be unavailable (private mode, blocked site data), and then nothing is kept.
 
 import { useCallback, useState } from 'react';
 
-export function read(key: string): string | null {
+/** `local`: kept across visits. `session`: this tab only. */
+export type StorageArea = 'local' | 'session';
+
+const area = (which: StorageArea): Storage => (which === 'local' ? window.localStorage : window.sessionStorage);
+
+export function read(key: string, which: StorageArea = 'local'): string | null {
   try {
-    return window.localStorage.getItem(key);
+    return area(which).getItem(key);
   } catch {
     return null;
   }
 }
 
-export function write(key: string, value: string): void {
+export function write(key: string, value: string, which: StorageArea = 'local'): void {
   try {
-    window.localStorage.setItem(key, value);
+    area(which).setItem(key, value);
   } catch {
-    // Storage can be unavailable (private mode, blocked site data); the preference is simply not kept.
+    // Not kept.
+  }
+}
+
+export function remove(key: string, which: StorageArea = 'local'): void {
+  try {
+    area(which).removeItem(key);
+  } catch {
+    // Nothing stored.
   }
 }
 

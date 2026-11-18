@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectorManifest, Flow, FlowDefinition, Issue, Step } from '../../../api/types';
 import { renderWithProviders } from '../../../test/render';
 import { BuilderContext, type BuilderCtx } from '../BuilderContext';
-import { CodeEditor } from '../forms/CodeEditor';
-import { SCRIPT_EXAMPLES } from '../model/script';
-import { findStep } from '../model/tree';
+import { CodeEditor } from '../../../forms/CodeEditor';
+import { SCRIPT_EXAMPLES } from '../../../domain/script';
+import { findStep } from '../../../domain/tree';
 import { SidePanel } from './SidePanel';
 
 const script: ConnectorManifest = {

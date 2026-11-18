@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Connection, ConnectionUsage, ConnectorManifest, LimitsView } from '../../api/types';
 import { renderWithProviders } from '../../test/render';
-import { TestSession } from '../auth/session';
+import { TestSession } from '../auth';
 import { ConnectionsPage } from './ConnectionsPage';
 import { UsageMeter } from './UsageMeter';
 

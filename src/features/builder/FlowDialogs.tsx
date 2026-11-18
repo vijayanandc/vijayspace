@@ -14,7 +14,7 @@ import { EmptyState, ErrorBox, Loading } from '../../components/Empty';
 import { MessageBar } from '../../components/MessageBar';
 import { formatTime, relativeTime } from '../../lib/format';
 import { useBuilder } from './BuilderContext';
-import { JsonInput } from './forms/JsonInput';
+import { JsonInput } from '../../forms/JsonInput';
 
 export function TestFlowDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { flowId, flow, flush } = useBuilder();

@@ -5,8 +5,8 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import type { DecisionStep } from '../../../api/types';
 import { useBuilder } from '../BuilderContext';
 import { ConditionBuilder } from '../condition/ConditionBuilder';
-import { addBranch, moveBranch, removeBranch, updateBranch } from '../model/tree';
-import { buildVariableTree } from '../model/variables';
+import { addBranch, moveBranch, removeBranch, updateBranch } from '../../../domain/tree';
+import { buildVariableTree } from '../../../domain/variables';
 
 export function DecisionPanel({ step }: { step: DecisionStep }) {
   const { def, apply, manifests, flow } = useBuilder();

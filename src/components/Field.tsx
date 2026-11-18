@@ -1,3 +1,5 @@
+// Form field wrapper: label, required mark, help text with inline code, error text and header actions.
+
 import { type ReactNode, useId } from 'react';
 
 import { inlineCodeParts } from '../lib/format';

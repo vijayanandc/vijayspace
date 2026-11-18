@@ -5,10 +5,10 @@ import { useRef } from 'react';
 import type { ActionStep, JsonObject } from '../../../api/types';
 import { MessageBar } from '../../../components/MessageBar';
 import { useBuilder } from '../BuilderContext';
-import { DynamicForm } from '../forms/DynamicForm';
-import { SCRIPT_CONNECTOR, type ScriptExample, hasOwnCode, withExample } from '../model/script';
-import { updateStep } from '../model/tree';
-import { buildVariableTree } from '../model/variables';
+import { DynamicForm } from '../../../forms/DynamicForm';
+import { SCRIPT_CONNECTOR, type ScriptExample, hasOwnCode, withExample } from '../../../domain/script';
+import { updateStep } from '../../../domain/tree';
+import { buildVariableTree } from '../../../domain/variables';
 import { ScriptHelp } from './ScriptHelp';
 
 export function ScriptPanel({ step }: { step: ActionStep }) {

@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "npm run typecheck && npm run lint && npm run test && npm run build"
+    "arch": "node scripts/check-arch.mjs",
+    "check": "npm run typecheck && npm run lint && npm run arch && npm run test && npm run build"
   },
   "dependencies": {
     "@logto/browser": "3.1.2",

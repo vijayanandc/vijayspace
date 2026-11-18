@@ -13,10 +13,10 @@ import { JsonView } from '../../../components/JsonView';
 import { LogBlock } from '../../../components/LogBlock';
 import { MessageBar } from '../../../components/MessageBar';
 import { useBuilder } from '../BuilderContext';
-import { formatLocation } from '../model/code';
-import { isScriptStep, scriptError, splitLogs } from '../model/script';
-import { findStep, updateStep } from '../model/tree';
-import { testContext } from '../model/variables';
+import { formatLocation } from '../../../domain/code';
+import { isScriptStep, scriptError, splitLogs } from '../../../domain/script';
+import { findStep, updateStep } from '../../../domain/tree';
+import { testContext } from '../../../domain/variables';
 
 function ErrorResult({ error }: { error: NonNullable<StepTestResult['error']> }) {
   const script = scriptError(error);

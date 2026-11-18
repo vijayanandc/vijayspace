@@ -1,6 +1,5 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, useMutation } from '@tanstack/react-query';
-import { render } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +8,7 @@ import { api, configureAuth, request, setCurrentOrg } from '../../api/client';
 import { mk } from '../../api/hooks';
 import type { Me, Membership } from '../../api/tenancy';
 import { renderWithProviders } from '../../test/render';
-import { OrgSwitcher } from '../shell/AccountMenus';
+import { OrgSwitcher } from '../shell';
 import { AuthRoot } from './AuthRoot';
 import { useSession } from './session';
 

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { setCurrentOrg } from '../../api/client';
 import type { Connection, ConnectorManifest } from '../../api/types';
-import { TestSession } from '../auth/session';
+import { TestSession } from '../auth';
 import { ToastProvider } from '../../components/Toast';
 import { renderWithProviders } from '../../test/render';
 import { ConnectionCallbackPage } from './ConnectionCallbackPage';

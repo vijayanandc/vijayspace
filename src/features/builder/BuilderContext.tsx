@@ -3,8 +3,8 @@
 import { createContext, useContext } from 'react';
 
 import type { ConnectorManifest, Flow, FlowDefinition, Issue } from '../../api/types';
-import type { DragPayload, PaletteItem } from './model/factories';
-import type { InsertionPoint } from './model/tree';
+import type { DragPayload, PaletteItem } from '../../domain/factories';
+import type { InsertionPoint } from '../../domain/tree';
 
 export interface BuilderCtx {
   flowId: string;

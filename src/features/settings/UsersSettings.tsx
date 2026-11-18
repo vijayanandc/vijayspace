@@ -13,8 +13,7 @@ import { Button } from '../../components/Button';
 import { ErrorBox, Loading } from '../../components/Empty';
 import { useToast } from '../../components/Toast';
 import { formatTime } from '../../lib/format';
-import { ROLE_LABELS, assignableRoles, can } from '../auth/permissions';
-import { useSession } from '../auth/session';
+import { assignableRoles, can, ROLE_LABELS, useSession } from '../auth';
 import { InviteDialog } from './InviteDialog';
 import { PendingInvitations } from './PendingInvitations';
 

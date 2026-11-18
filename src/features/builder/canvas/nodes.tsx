@@ -6,11 +6,11 @@ import { type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode,
 
 import { AppIcon, tileColor } from '../../../components/AppIcon';
 import { useBuilder } from '../BuilderContext';
-import { isWeftDrag, readDrag, writeMoveDrag } from '../model/factories';
-import { isScriptStep } from '../model/script';
+import { isWeftDrag, readDrag, writeMoveDrag } from '../../../domain/factories';
+import { isScriptStep } from '../../../domain/script';
 import type { BuilderNode } from '../model/layout';
 import { TRIGGER_ID } from '../model/paths';
-import { allSteps, sameList } from '../model/tree';
+import { allSteps, sameList } from '../../../domain/tree';
 import { type NodeLabel, stepLabel, triggerLabel } from './labels';
 
 function Handles() {

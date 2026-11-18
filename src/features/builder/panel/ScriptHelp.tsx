@@ -5,7 +5,7 @@ import { BookOpen, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import { useId, useState } from 'react';
 
 import { Popover } from '../../../components/Popover';
-import { SCRIPT_EXAMPLES, type ScriptExample } from '../model/script';
+import { SCRIPT_EXAMPLES, type ScriptExample } from '../../../domain/script';
 
 const HELPERS: [string, string][] = [
   ['parse_json(text)', 'JSON text → map or array'],

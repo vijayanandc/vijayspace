@@ -16,8 +16,7 @@ import { updatedAgo } from '../../lib/format';
 import { useStoredChoice } from '../../lib/storage';
 import { FlowGrid, FlowTable } from './FlowTable';
 import { NewFlowDialog } from './NewFlowDialog';
-import { can } from '../auth/permissions';
-import { useRole } from '../auth/session';
+import { can, useRole } from '../auth';
 
 type Filter = 'all' | 'on' | 'off' | 'draft';
 const FILTERS: { key: Filter; label: string }[] = [

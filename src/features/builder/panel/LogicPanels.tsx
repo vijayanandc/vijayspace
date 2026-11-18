@@ -6,12 +6,12 @@ import { useState } from 'react';
 import type { DelayStep, JsonValue, SetVariableStep, StopStep } from '../../../api/types';
 import { Field } from '../../../components/Field';
 import { useBuilder } from '../BuilderContext';
-import { IntInput } from '../forms/IntInput';
-import { MappingInput } from '../forms/MappingInput';
-import { ParsedMappingInput } from '../forms/ParsedMappingInput';
-import { updateStep } from '../model/tree';
-import { DELAY_UNITS, MAX_DELAY_SECS, bestDelayUnit, changeDelayUnit, delaySeconds, delayUnit, parseLooseValue } from '../model/values';
-import { buildVariableTree } from '../model/variables';
+import { IntInput } from '../../../forms/IntInput';
+import { MappingInput } from '../../../forms/MappingInput';
+import { ParsedMappingInput } from '../../../forms/ParsedMappingInput';
+import { updateStep } from '../../../domain/tree';
+import { DELAY_UNITS, MAX_DELAY_SECS, bestDelayUnit, changeDelayUnit, delaySeconds, delayUnit, parseLooseValue } from '../../../domain/values';
+import { buildVariableTree } from '../../../domain/variables';
 
 const UNIT_LABELS: Record<number, string> = { 1: 'seconds', 60: 'minutes', 3600: 'hours', 86_400: 'days' };
 

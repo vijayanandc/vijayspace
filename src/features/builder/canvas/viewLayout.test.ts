@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { sampleDefinition } from '../model/fixtures';
+import { sampleDefinition } from '../../../test/flowFixtures';
 import { INSERT_SIZE, layoutDefinition } from '../model/layout';
 import { CARD_WIDTH, COLUMN_PITCH, ROW_STRETCH, toViewEdges, toViewNodes } from './viewLayout';
 

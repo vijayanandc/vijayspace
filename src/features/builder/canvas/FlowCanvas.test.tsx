@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Flow, FlowDefinition } from '../../../api/types';
 import { renderWithProviders } from '../../../test/render';
 import { BuilderContext, type BuilderCtx } from '../BuilderContext';
-import { ROOT } from '../model/tree';
+import { ROOT } from '../../../domain/tree';
 import { FlowCanvas } from './FlowCanvas';
 
 class NoResize {

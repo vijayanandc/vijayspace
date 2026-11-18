@@ -8,8 +8,8 @@ import { Badge, StatusBadge } from '../../components/Badge';
 import { JsonView } from '../../components/JsonView';
 import { LogBlock } from '../../components/LogBlock';
 import { formatDuration, formatTime } from '../../lib/format';
-import { formatLocation } from '../builder/model/code';
-import { isScriptRun, scriptError, splitLogs } from '../builder/model/script';
+import { formatLocation } from '../../domain/code';
+import { isScriptRun, scriptError, splitLogs } from '../../domain/script';
 import { describeRun, groupRuns } from './timeline';
 
 const ICONS: Record<StepRun['status'], LucideIcon> = {

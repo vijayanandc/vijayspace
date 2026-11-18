@@ -6,7 +6,7 @@ import { MousePointerClick } from 'lucide-react';
 import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef } from 'react';
 
 import { useBuilder } from '../BuilderContext';
-import { isWeftDrag } from '../model/factories';
+import { isWeftDrag } from '../../../domain/factories';
 import { type BuilderNode, layoutDefinition, stepNodeId } from '../model/layout';
 import { TRIGGER_ID } from '../model/paths';
 import { edgeTypes } from './edges';

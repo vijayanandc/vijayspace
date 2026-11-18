@@ -5,12 +5,12 @@ import { useState } from 'react';
 
 import type { Condition, JsonValue, Op } from '../../../api/types';
 import { OPS } from '../../../api/types';
-import { JsonInput } from '../forms/JsonInput';
-import { MappingInput } from '../forms/MappingInput';
+import { JsonInput } from '../../../forms/JsonInput';
+import { MappingInput } from '../../../forms/MappingInput';
 import {
   type Group, type Mode, NO_RIGHT, OP_LABELS, type Row, type SubGroup, conditionProblem, emptyRow, fromModel, isCondition, isEditable, isSubGroup, toModel,
 } from '../model/condition';
-import type { VarNode } from '../model/variables';
+import type { VarNode } from '../../../domain/variables';
 
 interface Props {
   value: Condition;

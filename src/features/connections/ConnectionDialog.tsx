@@ -14,7 +14,7 @@ import { Dialog } from '../../components/Dialog';
 import { ErrorBox } from '../../components/Empty';
 import { Field } from '../../components/Field';
 import { MessageBar } from '../../components/MessageBar';
-import { DynamicForm } from '../builder/forms/DynamicForm';
+import { DynamicForm } from '../../forms/DynamicForm';
 import { oauthReturnUrl } from './oauth';
 
 interface Props {

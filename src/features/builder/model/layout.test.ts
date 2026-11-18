@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { action, sampleDefinition } from './fixtures';
+import { action, sampleDefinition } from '../../../test/flowFixtures';
 import { COL_WIDTH, layoutDefinition, listWidth } from './layout';
 
 describe('layout', () => {

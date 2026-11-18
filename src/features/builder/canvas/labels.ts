@@ -1,8 +1,8 @@
 // Display labels for the trigger and steps: title, subtitle, kind and icon tile key.
 
 import type { ConnectorManifest, Step, TriggerNode } from '../../../api/types';
-import { LOGIC_ITEMS } from '../model/factories';
-import { isScriptStep } from '../model/script';
+import { LOGIC_ITEMS } from '../../../domain/factories';
+import { isScriptStep } from '../../../domain/script';
 
 export interface NodeLabel {
   title: string;

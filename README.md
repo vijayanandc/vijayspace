@@ -7,9 +7,9 @@ The browser UI for Weft (a Zoho Flow–style integration platform): flows list, 
 # 1. In the backend worktree (Rust server + MySQL), start the API on :8080 — see its README.
 # 2. Here:
 npm install
-npm run dev            # http://localhost:5173 — proxies /api, /hooks, /oauth, /healthz to http://localhost:8080
+npm run dev            # http://127.0.0.1:3000 — proxies /api, /hooks, /oauth, /healthz to http://localhost:8080
 ```
-Use `WEFT_BACKEND=http://host:port npm run dev` to point the proxy elsewhere, or build with `VITE_API_URL=https://api.example.com npm run build` to call the API directly (the server must allow the origin via CORS). `VITE_ORG_ID` sends an `X-Org-ID` header (optional; the server uses the default org when it is absent — authentication via Logto comes later).
+Use `WEFT_BACKEND=http://host:port npm run dev` to point the proxy elsewhere, or build with `VITE_API_URL=https://api.example.com npm run build` to call the API directly (the server must allow the origin via CORS). Sign-in follows the server: `/api/v1/auth/config` turns Logto on (the app's redirect URI is `http://127.0.0.1:3000/callback`), or off for local development (`WEFT_AUTH=off` on the server).
 
 ## Features
 - **Flows**: list with trigger type, version, unpublished-changes badge, last run, on/off toggle; create and delete.
@@ -29,6 +29,7 @@ Use `WEFT_BACKEND=http://host:port npm run dev` to point the proxy elsewhere, or
 npm test          # Vitest
 npm run lint
 npm run typecheck
+npm run arch      # architecture check (layers, feature APIs, restricted APIs)
 npm run check     # all of the above + production build
 ```
-See `AGENTS.md` for structure and conventions.
+See `AGENTS.md` for the architecture, recipes for common changes and the rules (changes are made by AI agents).

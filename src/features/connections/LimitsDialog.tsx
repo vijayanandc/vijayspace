@@ -17,8 +17,7 @@ import {
   LIMIT_KEYS, LIMIT_LABELS, type LimitField, type LimitKey, type LimitMode, type LimitsForm, formatLimit, limitError, limitsBody, limitsForm,
 } from './limits';
 import { UsageMeter } from './UsageMeter';
-import { can } from '../auth/permissions';
-import { useRole, useUserId } from '../auth/session';
+import { can, useRole, useUserId } from '../auth';
 
 interface Props {
   connection: Connection | null;

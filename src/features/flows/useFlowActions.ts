@@ -10,8 +10,7 @@ import { qk } from '../../api/hooks';
 import type { FlowSummary } from '../../api/types';
 import type { MenuItem } from '../../components/Popover';
 import { useToast } from '../../components/Toast';
-import { can } from '../auth/permissions';
-import { useRole, useUserId } from '../auth/session';
+import { can, useRole, useUserId } from '../auth';
 
 export function useFlowActions(flow: FlowSummary) {
   const qc = useQueryClient();

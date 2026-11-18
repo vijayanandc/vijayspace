@@ -5,7 +5,7 @@ import type { DragEvent } from 'react';
 
 import { AppIcon } from '../../components/AppIcon';
 import { useBuilder } from './BuilderContext';
-import { type PaletteItem as Item, writePaletteDrag } from './model/factories';
+import { type PaletteItem as Item, writePaletteDrag } from '../../domain/factories';
 
 interface Props {
   item: Item;

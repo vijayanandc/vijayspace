@@ -11,8 +11,7 @@ import { formatTime, relativeTime } from '../../lib/format';
 import { type SortState, nextSort, sortRows } from '../../lib/sort';
 import { AppChain, FlowStatus, LastRun } from './FlowParts';
 import { useFlowActions } from './useFlowActions';
-import { can } from '../auth/permissions';
-import { useRole } from '../auth/session';
+import { can, useRole } from '../auth';
 
 type Column = 'name' | 'status' | 'last_run' | 'updated';
 

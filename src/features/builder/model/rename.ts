@@ -1,8 +1,8 @@
 // Renaming a step key, updating `steps.<key>` references everywhere.
 
 import type { FlowDefinition, JsonValue, Step } from '../../../api/types';
-import { isValidKey } from './keys';
-import { allSteps, mapDeep } from './tree';
+import { isValidKey } from '../../../domain/keys';
+import { allSteps, mapDeep } from '../../../domain/tree';
 
 function replaceRefs(value: JsonValue, from: RegExp, to: string): JsonValue {
   if (typeof value === 'string') return value.replace(from, to);

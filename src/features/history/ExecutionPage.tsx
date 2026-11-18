@@ -17,8 +17,7 @@ import { useToast } from '../../components/Toast';
 import { formatDuration, formatTime, isTerminal } from '../../lib/format';
 import { MODE_LABELS } from './labels';
 import { StepTimeline } from './StepTimeline';
-import { can } from '../auth/permissions';
-import { useRole } from '../auth/session';
+import { can, useRole } from '../auth';
 
 export function ExecutionPage() {
   const { executionId = '' } = useParams();

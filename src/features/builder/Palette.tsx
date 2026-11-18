@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { SearchBox } from '../../components/SearchBox';
 import { Tabs } from '../../components/Tabs';
 import { useBuilder } from './BuilderContext';
-import { LOGIC_ITEMS } from './model/factories';
+import { LOGIC_ITEMS } from '../../domain/factories';
 import { PaletteApps } from './PaletteApps';
 import { PaletteItem } from './PaletteItem';
 

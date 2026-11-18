@@ -10,10 +10,7 @@ import { qk, useOrg } from '../../api/hooks';
 import type { Me, Membership } from '../../api/tenancy';
 import { Dialog } from '../../components/Dialog';
 import { Popover } from '../../components/Popover';
-import { CreateOrgForm } from '../auth/CreateOrgForm';
-import { InvitationList } from '../auth/InvitationList';
-import { ROLE_LABELS } from '../auth/permissions';
-import { useSession } from '../auth/session';
+import { CreateOrgForm, InvitationList, ROLE_LABELS, useSession } from '../auth';
 import { initials } from './nav';
 
 /** Adds an org the user just created or joined to the cached `/me` (before switching to it). */

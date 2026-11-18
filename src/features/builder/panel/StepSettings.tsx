@@ -7,10 +7,10 @@ import type { ActionStep, Step } from '../../../api/types';
 import { Button } from '../../../components/Button';
 import { Field } from '../../../components/Field';
 import { useBuilder } from '../BuilderContext';
-import { IntInput } from '../forms/IntInput';
-import { isValidKey } from '../model/keys';
+import { IntInput } from '../../../forms/IntInput';
+import { isValidKey } from '../../../domain/keys';
 import { renameStep } from '../model/rename';
-import { allSteps, updateStep } from '../model/tree';
+import { allSteps, updateStep } from '../../../domain/tree';
 
 /** The UI's cap on attempts (the server stores a u16). */
 const MAX_ATTEMPTS = 20;

@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Member, Role } from '../../api/tenancy';
 import { renderWithProviders } from '../../test/render';
-import { TestSession } from '../auth/session';
-import { FlowsPage } from '../flows/FlowsPage';
+import { TestSession } from '../auth';
+import { FlowsPage } from '../flows';
 import { UsersSettings } from './UsersSettings';
 
 const member = (id: string, name: string, role: Role): Member => ({

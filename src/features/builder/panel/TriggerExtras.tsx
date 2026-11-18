@@ -14,8 +14,8 @@ import { Field } from '../../../components/Field';
 import { JsonView } from '../../../components/JsonView';
 import { useToast } from '../../../components/Toast';
 import { useBuilder } from '../BuilderContext';
-import { IntInput } from '../forms/IntInput';
-import { U32_MAX } from '../model/values';
+import { IntInput } from '../../../forms/IntInput';
+import { U32_MAX } from '../../../domain/values';
 import { CopyField } from './CopyField';
 
 type OnChange = (t: TriggerNode, tag?: string) => void;

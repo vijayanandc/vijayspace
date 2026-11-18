@@ -12,7 +12,7 @@ import { Button } from '../../components/Button';
 import { EmptyState, ErrorBox, Loading } from '../../components/Empty';
 import { PageHeader } from '../../components/PageHeader';
 import { formatDuration, formatTime, relativeTime } from '../../lib/format';
-import { retentionNote } from '../settings/retention';
+import { retentionNote } from '../settings';
 import { MODE_LABELS } from './labels';
 
 const STATUSES: { value: string; label: string }[] = [

@@ -6,8 +6,8 @@ import { type Tab, Tabs } from '../../../components/Tabs';
 import { useBuilder } from '../BuilderContext';
 import { stepLabel, triggerLabel } from '../canvas/labels';
 import { TRIGGER_ID } from '../model/paths';
-import { isScriptStep } from '../model/script';
-import { findStep } from '../model/tree';
+import { isScriptStep } from '../../../domain/script';
+import { findStep } from '../../../domain/tree';
 import { ActionPanel } from './ActionPanel';
 import { DecisionPanel } from './DecisionPanel';
 import { DelayPanel, SetVariablePanel, StopPanel } from './LogicPanels';
@@ -17,8 +17,7 @@ import { StepSettings } from './StepSettings';
 import { TestStepBox } from './TestStepBox';
 import { TriggerSettings, TriggerTest } from './TriggerExtras';
 import { TriggerPanel } from './TriggerPanel';
-import { can } from '../../auth/permissions';
-import { useRole } from '../../auth/session';
+import { can, useRole } from '../../auth';
 
 type PanelTab = 'configure' | 'settings' | 'test';
 

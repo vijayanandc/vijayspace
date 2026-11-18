@@ -4,9 +4,9 @@ import { useState } from 'react';
 
 import type { ScheduleSpec } from '../../../api/types';
 import { Field } from '../../../components/Field';
-import { IntInput } from '../forms/IntInput';
+import { IntInput } from '../../../forms/IntInput';
 import { type Preset, type PresetState, detectPreset, presetToSpec, scheduleView } from '../model/schedule';
-import { MAX_INTERVAL_MINUTES } from '../model/values';
+import { MAX_INTERVAL_MINUTES } from '../../../domain/values';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const PRESETS: { value: Preset; label: string }[] = [

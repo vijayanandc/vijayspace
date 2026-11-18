@@ -1,15 +1,15 @@
+// Routes: every page of the app inside the sign-in root and the shell. Pages come from each feature's index.ts.
+
 import { Navigate, Route, Routes } from 'react-router-dom';
 
-import { AuthRoot } from './features/auth/AuthRoot';
-import { BuilderPage } from './features/builder/BuilderPage';
-import { ConnectionCallbackPage } from './features/connections/ConnectionCallbackPage';
-import { ConnectionsPage } from './features/connections/ConnectionsPage';
-import { FlowsPage } from './features/flows/FlowsPage';
-import { ExecutionPage } from './features/history/ExecutionPage';
-import { HistoryPage } from './features/history/HistoryPage';
-import { RecipesPage } from './features/recipes/RecipesPage';
-import { SettingsPage } from './features/settings/SettingsPage';
-import { Layout } from './features/shell/Layout';
+import { AuthRoot } from './features/auth';
+import { BuilderPage } from './features/builder';
+import { ConnectionCallbackPage, ConnectionsPage } from './features/connections';
+import { FlowsPage } from './features/flows';
+import { ExecutionPage, HistoryPage } from './features/history';
+import { RecipesPage } from './features/recipes';
+import { SettingsPage } from './features/settings';
+import { Layout } from './features/shell';
 
 export function App() {
   return (

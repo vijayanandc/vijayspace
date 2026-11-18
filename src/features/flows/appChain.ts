@@ -1,7 +1,7 @@
 // The app-icon chain of a flow: trigger app first, then each action app once, in step order.
 
 import type { FlowDefinition, TriggerNode } from '../../api/types';
-import { allSteps } from '../builder/model/tree';
+import { allSteps } from '../../domain/tree';
 
 /** Icon key of a trigger: the connector for app triggers, else `trigger:<type>`. */
 export function triggerIconKey(trigger: TriggerNode): string {

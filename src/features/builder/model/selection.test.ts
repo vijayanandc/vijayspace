@@ -4,7 +4,7 @@ import type { FlowDefinition } from '../../../api/types';
 import { TRIGGER_ID } from './paths';
 import { renameStep } from './rename';
 import { followSelection } from './selection';
-import { deleteStep } from './tree';
+import { deleteStep } from '../../../domain/tree';
 
 const def: FlowDefinition = {
   schema_version: 1,

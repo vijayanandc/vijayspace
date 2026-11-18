@@ -16,8 +16,7 @@ import { formatTime, relativeTime } from '../../lib/format';
 import { oauthReturnUrl } from './oauth';
 import { usageSummary } from './limits';
 import { UsageMeter } from './UsageMeter';
-import { can } from '../auth/permissions';
-import { useRole, useUserId } from '../auth/session';
+import { can, useRole, useUserId } from '../auth';
 
 /** The connection's non-secret auth settings (e.g. region), resent when signing in again. */
 function oauthSettings(connection: Connection, manifest: ConnectorManifest | undefined): JsonObject {

@@ -14,17 +14,16 @@ import { MessageBar } from '../../components/MessageBar';
 import { BuilderContext, type BuilderCtx } from './BuilderContext';
 import { FlowCanvas } from './canvas/FlowCanvas';
 import { IssuesPanel } from './IssuesPanel';
-import { createStep, type DragPayload, type PaletteItem } from './model/factories';
+import { createStep, type DragPayload, type PaletteItem } from '../../domain/factories';
 import { historyReducer, initHistory } from './model/history';
 import { issuesByNode } from './model/paths';
 import { followSelection } from './model/selection';
-import { type InsertionPoint, ROOT, deleteStep as removeStep, findStep, insertStep, moveStep } from './model/tree';
+import { type InsertionPoint, ROOT, deleteStep as removeStep, findStep, insertStep, moveStep } from '../../domain/tree';
 import { Palette } from './Palette';
 import { SidePanel } from './panel/SidePanel';
 import { Toolbar } from './Toolbar';
 import { useAutosave } from './useAutosave';
-import { can } from '../auth/permissions';
-import { useRole } from '../auth/session';
+import { can, useRole } from '../auth';
 
 export function BuilderPage() {
   const { flowId = '' } = useParams();

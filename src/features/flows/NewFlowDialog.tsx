@@ -14,14 +14,8 @@ import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { ErrorBox } from '../../components/Empty';
 import { Field } from '../../components/Field';
-import { starterDefinition } from '../builder/model/factories';
-
-export const TRIGGER_CHOICES: { type: TriggerType; label: string; description: string }[] = [
-  { type: 'webhook', label: 'Webhook', description: 'An HTTP request to a unique URL starts the flow' },
-  { type: 'app', label: 'App event', description: 'A record changes in Zoho CRM, Appblocks, Forma…' },
-  { type: 'schedule', label: 'Schedule', description: 'Run once, every N minutes, or on a cron schedule' },
-  { type: 'manual', label: 'Manual', description: 'Run on demand with “Run now” or the API' },
-];
+import { starterDefinition } from '../../domain/factories';
+import { TRIGGER_CHOICES } from '../../domain/triggers';
 
 export function NewFlowDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [name, setName] = useState('');

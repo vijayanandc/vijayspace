@@ -15,8 +15,7 @@ import { type SortState, nextSort, sortRows } from '../../lib/sort';
 import { ConnectionDialog } from './ConnectionDialog';
 import { ConnectionRow } from './ConnectionRow';
 import { LimitsDialog } from './LimitsDialog';
-import { can } from '../auth/permissions';
-import { useRole } from '../auth/session';
+import { can, useRole } from '../auth';
 
 type Column = 'name' | 'app' | 'status' | 'today' | 'created';
 
