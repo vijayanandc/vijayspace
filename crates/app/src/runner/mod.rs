@@ -6,6 +6,7 @@ pub mod calls;
 mod journal;
 mod persist;
 pub mod plan_cache;
+mod redact;
 mod run;
 
 pub use action::{call_action, step_error};

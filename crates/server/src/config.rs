@@ -90,14 +90,25 @@ fn the_production_config_template_uses_only_known_settings() {
     );
 }
 
-/// `WEFT_RETENTION_DAYS`: 1..=30 (the platform cap), default 30.
+/// `WEFT_RETENTION_DAYS`: 1..=30 (the platform cap), default 30. More than 30 (a setting from before the cap)
+/// is lowered to 30 with a warning rather than stopping the server.
 fn retention_days(value: Option<&str>) -> Result<u32, String> {
-    value.map_or(Ok(30), |v| {
-        v.parse()
-            .ok()
-            .filter(|d| (1..=weft_app::retention::MAX_DAYS).contains(d))
-            .ok_or_else(|| "WEFT_RETENTION_DAYS must be a number of days from 1 to 30".to_owned())
-    })
+    let max = weft_app::retention::MAX_DAYS;
+    let Some(v) = value else {
+        return Ok(max);
+    };
+    match v.trim().parse::<u32>() {
+        Ok(d) if d > max => {
+            tracing::warn!(
+                set = d,
+                used = max,
+                "WEFT_RETENTION_DAYS is above the 30-day cap; using 30"
+            );
+            Ok(max)
+        }
+        Ok(d) if d >= 1 => Ok(d),
+        _ => Err("WEFT_RETENTION_DAYS must be a number of days from 1 to 30".to_owned()),
+    }
 }
 
 /// `WEFT_ZOHO_ACCOUNTS_URL`: a Zoho accounts server to use instead of Zoho's (testing against a mock). It
@@ -326,10 +337,12 @@ mod tests {
         assert_eq!(retention_days(Some("7")), Ok(7));
         assert!(retention_days(Some("0")).is_err());
         assert!(retention_days(Some("30")).is_ok());
-        assert!(
-            retention_days(Some("31")).is_err(),
-            "history is kept at most 30 days"
+        assert_eq!(
+            retention_days(Some("90")),
+            Ok(30),
+            "history is kept at most 30 days; an older, longer setting is lowered"
         );
+        assert!(retention_days(Some("thirty")).is_err());
         assert_eq!(script_memory_mb(None), Ok(512));
         assert_eq!(script_memory_mb(Some("64")), Ok(64));
         assert!(

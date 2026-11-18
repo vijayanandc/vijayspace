@@ -4,6 +4,8 @@
 
 use std::collections::BTreeMap;
 
+use serde_json::json;
+
 use weft_connector_sdk::Connector as _;
 use weft_connectors::zoho_crm::ZohoCrmConnector;
 
@@ -62,5 +64,24 @@ fn an_operator_accounts_override_is_the_only_accounts_server_used() {
             .unwrap()
             .authorize_url,
         "https://accounts.zoho.com/oauth/v2/auth"
+    );
+}
+
+#[test]
+fn a_stored_accounts_server_is_checked_again_before_each_token_request() {
+    let zoho = ZohoCrmConnector::new();
+    let eu = json!({"accounts_server": "https://accounts.zoho.eu"});
+    assert!(zoho.oauth_spec(&eu).unwrap().is_some());
+    // A connection whose config was edited to point elsewhere never sends the client secret there.
+    let edited = json!({"accounts_server": "https://attacker.example"});
+    assert!(zoho.oauth_spec(&edited).is_err());
+    let mock = ZohoCrmConnector::with_accounts_server("http://127.0.0.1:9200");
+    assert!(
+        mock.oauth_spec(&json!({"accounts_server": "http://127.0.0.1:9200"}))
+            .is_ok()
+    );
+    assert!(
+        mock.oauth_spec(&eu).is_err(),
+        "with the override, only the override"
     );
 }

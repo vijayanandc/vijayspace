@@ -77,7 +77,7 @@ impl LogRepo for MySqlStore {
     ) -> Res<Vec<LogRecord>> {
         let rows: Vec<LogRow> = sqlx::query_as(
             "SELECT id, step_key, attempt, level, kind, message, details, at FROM execution_logs \
-             WHERE org_id = ? AND execution_id = ? ORDER BY at, id LIMIT ?",
+             WHERE org_id = ? AND execution_id = ? ORDER BY at DESC, id DESC LIMIT ?",
         )
         .bind(org.as_uuid())
         .bind(execution.as_uuid())
@@ -85,8 +85,10 @@ impl LogRepo for MySqlStore {
         .fetch_all(&self.pool)
         .await
         .map_err(db_err)?;
+        // The newest lines (where a long run failed) are kept when there are more than `limit`; oldest first.
         Ok(rows
             .into_iter()
+            .rev()
             .map(
                 |(id, step_key, attempt, level, kind, message, details, at)| LogRecord {
                     id,

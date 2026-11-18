@@ -10,8 +10,8 @@ mod triggers;
 use std::collections::BTreeMap;
 
 use weft_connector_sdk::{
-    EventBatch, InboundRequest, PollResult, RecordObjects, SubscribeRequest, SubscriptionInfo,
-    prelude::*,
+    EventBatch, InboundRequest, OAuth2Spec, PollResult, RecordObjects, SubscribeRequest,
+    SubscriptionInfo, prelude::*,
 };
 
 use crate::util::{list, object, opt_bool, opt_f64, opt_str, req_str};
@@ -326,6 +326,24 @@ impl Connector for ZohoCrmConnector {
 
     fn records(&self) -> Option<&dyn RecordObjects> {
         Some(self)
+    }
+
+    /// Checked again at every token request (the stored accounts server may have been edited): the request
+    /// carries the platform's client secret, so it only goes to Zoho's own accounts servers or the override.
+    fn oauth_spec(&self, config: &Value) -> Result<Option<OAuth2Spec>, ConnectorError> {
+        if let Some(accounts) = config.get("accounts_server").and_then(Value::as_str) {
+            let trusted = self.accounts_override.as_deref().map_or_else(
+                || ACCOUNTS_SERVERS.contains(&accounts),
+                |only| only == accounts,
+            );
+            if !trusted {
+                return Err(ConnectorError::invalid_field(
+                    "accounts_server",
+                    "Not a Zoho accounts server: sign in to Zoho again",
+                ));
+            }
+        }
+        Ok(self.manifest.auth.oauth2.clone())
     }
 
     fn oauth_callback_config(&self, query: &BTreeMap<String, String>) -> Value {

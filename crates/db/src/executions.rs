@@ -138,8 +138,11 @@ impl ExecutionRepo for MySqlStore {
         org: OrgId,
         filter: &ExecutionFilter,
     ) -> Res<Vec<(Execution, String)>> {
+        // STRAIGHT_JOIN: read runs first (newest first, from an org index) and look each flow up. With run history
+        // partitioned, MySQL otherwise starts from `flows` and sorts every run the org has (661 ms at 108k runs,
+        // against 0.4 ms).
         let mut qb = QueryBuilder::new(format!(
-            "SELECT {EXE_SUMMARY_COLUMNS}, f.name AS flow_name FROM executions e JOIN flows f ON f.id = e.flow_id WHERE e.org_id = "
+            "SELECT {EXE_SUMMARY_COLUMNS}, f.name AS flow_name FROM executions e STRAIGHT_JOIN flows f ON f.id = e.flow_id WHERE e.org_id = "
         ));
         qb.push_bind(org.as_uuid());
         if let Some(flow) = filter.flow_id {
@@ -149,6 +152,8 @@ impl ExecutionRepo for MySqlStore {
             qb.push(" AND e.status = ").push_bind(enum_str(&status));
         }
         if let Some((at, id)) = filter.before {
+            // Older pages only need the partitions up to the cursor's day.
+            qb.push(" AND e.day <= ").push_bind(at.date_naive());
             qb.push(" AND (e.queued_at < ")
                 .push_bind(at)
                 .push(" OR (e.queued_at = ")

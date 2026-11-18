@@ -40,11 +40,15 @@ pub fn may_create_orgs(deps: &Deps, memberships: &[Membership]) -> bool {
     }
 }
 
-/// Fails unless the actor is staff, acting in the default org.
-pub fn require_staff(deps: &Deps, actor: &Actor) -> Result<(), AppError> {
+/// Fails unless the actor is staff: an owner or admin of the default org, whichever org they are acting in now.
+pub async fn require_staff(deps: &Deps, actor: &Actor) -> Result<(), AppError> {
     if actor.org == deps.config.default_org_id && staff_role(actor.role) {
-        Ok(())
-    } else {
-        Err(AppError::forbidden("Only the operator's staff can do this"))
+        return Ok(());
     }
+    if let Some(user) = actor.user
+        && is_staff(deps, &deps.store.memberships(user).await?)
+    {
+        return Ok(());
+    }
+    Err(AppError::forbidden("Only the operator's staff can do this"))
 }

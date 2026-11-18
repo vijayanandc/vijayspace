@@ -172,14 +172,15 @@ async fn a_run_whose_history_is_being_removed_can_be_rerun_but_not_retried() {
     app.drain().await;
     let (early, exe) = (&runs[0], &runs[1]);
 
-    // Two hours before the 30-day cutoff a retry is still allowed.
-    app.clock.advance(Duration::days(29) + Duration::hours(22));
+    // Two hours before the retry cutoff (28 days after the run was queued) a retry is still allowed: it has
+    // time to finish before its day is expired and dropped.
+    app.clock.advance(Duration::days(27) + Duration::hours(22));
     app.ok("POST", &format!("/api/v1/executions/{early}/retry"), None)
         .await;
 
-    // Within the last hour before the cutoff, the sweep may already be deleting its steps.
+    // Past it, the retried run could be expired before it finishes, or lose its steps when its day is dropped.
     app.clock
-        .advance(Duration::hours(1) + Duration::minutes(30));
+        .advance(Duration::hours(2) + Duration::minutes(30));
     let (status, body) = app
         .req("POST", &format!("/api/v1/executions/{exe}/retry"), None)
         .await;
@@ -192,5 +193,50 @@ async fn a_run_whose_history_is_being_removed_can_be_rerun_but_not_retried() {
         .ok("POST", &format!("/api/v1/executions/{exe}/rerun"), None)
         .await;
     assert!(rerun["execution_id"].is_string(), "{rerun}");
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_wait_that_would_outlast_the_history_fails_the_run_at_once() {
+    let app = TestApp::spawn().await;
+    let flow = app
+        .live_flow(
+            "Waits",
+            json!({"trigger": {"type": "manual"}, "steps": [
+                {"key": "wait", "type": "delay", "until": "{{ trigger.at }}"}
+            ]}),
+        )
+        .await;
+    let flow_id = flow["id"].as_str().unwrap();
+    let now = weft_app::ports::Clock::now(&app.clock);
+    let run = |days: i64| {
+        let at = (now + Duration::days(days)).to_rfc3339();
+        let app = &app;
+        async move {
+            let r = app
+                .ok(
+                    "POST",
+                    &format!("/api/v1/flows/{flow_id}/run"),
+                    Some(json!({"payload": {"at": at}})),
+                )
+                .await;
+            r["execution_id"].as_str().unwrap().to_owned()
+        }
+    };
+    let (short, long) = (run(20).await, run(29).await);
+    app.drain().await;
+    let short = app
+        .ok("GET", &format!("/api/v1/executions/{short}"), None)
+        .await;
+    assert_eq!(short["status"], "waiting", "{short}");
+    // History is kept 30 days from the day the run was queued: a 29-day wait would end with the run gone.
+    let long = app
+        .ok("GET", &format!("/api/v1/executions/{long}"), None)
+        .await;
+    assert_eq!(
+        (long["status"].as_str(), long["error_code"].as_str()),
+        (Some("failed"), Some("delay.too_long")),
+        "{long}"
+    );
     app.cleanup().await;
 }

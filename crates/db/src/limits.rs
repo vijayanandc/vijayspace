@@ -1,7 +1,7 @@
 //! `LimitRepo` for MySQL: connection limit overrides and atomic daily request counters.
 
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDate, NaiveDateTime, Timelike as _, Utc};
+use chrono::{DateTime, NaiveDate, Timelike as _, Utc};
 use sqlx::types::Json;
 use uuid::Uuid;
 use weft_app::ports::{ConnectionUsage, Counted, LimitRepo, Res};
@@ -85,8 +85,11 @@ impl LimitRepo for MySqlStore {
         if counted.rows_affected() > 0 {
             return Ok(Counted::Allowed);
         }
-        let (requests, minute_start, minute_requests): (u32, Option<NaiveDateTime>, u32) = sqlx::query_as(
-            "SELECT requests, minute_start, minute_requests FROM connection_usage WHERE org_id = ? AND connection_id = ? AND day = ?",
+        // Which cap refused: the day's count only grows, so it is decided from that alone. The minute window may
+        // already have moved on (another server counted in the next minute), which must not turn a minute refusal
+        // into a wait until midnight.
+        let requests: u32 = sqlx::query_scalar(
+            "SELECT requests FROM connection_usage WHERE org_id = ? AND connection_id = ? AND day = ?",
         )
         .bind(org.as_uuid())
         .bind(id.as_uuid())
@@ -103,12 +106,10 @@ impl LimitRepo for MySqlStore {
             .await
             .map_err(db_err)?;
         let day_full = daily_cap.is_some_and(|cap| requests >= cap);
-        let minute_full = per_minute
-            .is_some_and(|cap| minute_start == Some(minute.naive_utc()) && minute_requests >= cap);
-        Ok(if minute_full && !day_full {
-            Counted::MinuteFull
-        } else {
+        Ok(if day_full || per_minute.is_none() {
             Counted::DayFull
+        } else {
+            Counted::MinuteFull
         })
     }
 

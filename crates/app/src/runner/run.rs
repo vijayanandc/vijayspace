@@ -17,13 +17,16 @@ use super::{
     action::{call_action, idempotency_key, step_error},
     calls::{self, CallLog},
     journal,
-    persist::{checkpoint, finish, leak, record_trace, to_value},
+    persist::{checkpoint, finish, leak, record_trace, throttled, to_value},
 };
 use crate::{
     AppError, Deps,
     limits::RequestClass,
     ports::{Checkpoint, StepCompletion},
 };
+
+/// A run may wait (delays, chained delays, "until" dates) at most this long after it was queued.
+const MAX_RUN_DAYS: i64 = crate::retention::RUN_DAYS as i64;
 
 /// Actions per slice before yielding the worker to other executions.
 const MAX_ACTIONS_PER_SLICE: u32 = 25;
@@ -132,7 +135,17 @@ pub async fn run_execution(deps: &Deps, id: ExecutionId) -> Result<JobOutcome, A
                 finish(deps, &exe, &state, status, err, now).await?;
                 return Ok(JobOutcome::Done);
             }
-            Directive::Sleep { until, .. } => {
+            Directive::Sleep { until, step } => {
+                // History (and with it the waiting run) is kept 30 days from the day the run was queued: a wait
+                // past `RUN_DAYS` would end with the run expired. Fail now, visibly, instead.
+                if until > exe.queued_at + chrono::Duration::days(MAX_RUN_DAYS) {
+                    let why = format!(
+                        "The delay ends after {until}, more than {MAX_RUN_DAYS} days after the run started; runs must finish within that"
+                    );
+                    let err = Some((error_codes::DELAY_TOO_LONG, why, Some(step)));
+                    finish(deps, &exe, &state, ExecutionStatus::Failed, err, now).await?;
+                    return Ok(JobOutcome::Done);
+                }
                 checkpoint(deps, &exe, &state, ExecutionStatus::Waiting, Some(until)).await?;
                 return Ok(JobOutcome::RescheduleAt(until));
             }
@@ -278,31 +291,6 @@ async fn run_step(
             StepResult::Failed(step_error(&err))
         }
     }
-}
-
-/// Parks an execution whose step was held back by the connection's limits until `at`.
-async fn throttled(
-    deps: &Deps,
-    exe: &Execution,
-    state: &RunState,
-    step_run_id: weft_domain::ids::StepRunId,
-    at: DateTime<Utc>,
-    now: DateTime<Utc>,
-) -> Result<JobOutcome, AppError> {
-    deps.store
-        .park_held_back_step(
-            step_run_id,
-            &Checkpoint {
-                execution_id: exe.id,
-                org_id: exe.org_id,
-                status: ExecutionStatus::Waiting,
-                run_state: to_value(state),
-                waiting_until: Some(at),
-                now,
-            },
-        )
-        .await?;
-    Ok(JobOutcome::RescheduleAt(at))
 }
 
 /// Persists the action result. Returns `Some(job outcome)` when this slice must end.

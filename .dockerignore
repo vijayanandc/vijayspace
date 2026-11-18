@@ -1,6 +1,12 @@
+# Build context of the server image: no build output, history, local settings or secrets, at any depth.
 target
+**/target
 .git
 **/node_modules
-scripts/my.cnf
-config.properties
-*.env
+**/my.cnf
+**/config.properties
+**/*.env
+**/.env*
+**/*.pem
+**/*.key
+**/__pycache__

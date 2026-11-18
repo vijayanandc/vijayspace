@@ -36,6 +36,9 @@ const CATCH_ALL: &str = "pmax";
 const MAX_NEW_PER_TABLE: i64 = 64;
 /// Unfinished runs expired per sweep before their partition is dropped.
 const EXPIRE_BATCH: i64 = 1000;
+/// Runs still unfinished this many days before their day is dropped are expired (runs are kept to
+/// `weft_app::retention::RUN_DAYS` days, which leaves a day's margin).
+const EXPIRE_AHEAD_DAYS: i64 = 1;
 /// MySQL: duplicate partition name (another server created it) / dropping a partition that is gone.
 const BENIGN: [&str; 2] = ["1517", "1507"];
 
@@ -93,6 +96,13 @@ fn bound(description: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(description.trim().trim_matches('\''), "%Y-%m-%d").ok()
 }
 
+/// MySQL: lock wait timeout (a metadata lock held by a long transaction).
+fn lock_timeout(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .and_then(sqlx::error::DatabaseError::code)
+        .is_some_and(|c| c == "1205")
+}
+
 fn benign(e: &sqlx::Error) -> bool {
     e.as_database_error()
         .and_then(sqlx::error::DatabaseError::code)
@@ -120,10 +130,29 @@ impl MySqlStore {
             .collect())
     }
 
+    /// Runs partition DDL on its own connection with a short metadata-lock wait: behind a long transaction (a
+    /// backup, a report) the DDL gives up after 5 s and the next sweep tries again, instead of waiting while
+    /// every new query on the table queues behind it.
     async fn ddl(&self, statement: &str) -> Res<bool> {
-        match sqlx::query(statement).execute(&self.pool).await {
+        let mut conn = self.pool.acquire().await.map_err(db_err)?;
+        sqlx::query("SET SESSION lock_wait_timeout = 5")
+            .execute(&mut *conn)
+            .await
+            .map_err(db_err)?;
+        let result = sqlx::query(statement).execute(&mut *conn).await;
+        let _ = sqlx::query("SET SESSION lock_wait_timeout = DEFAULT")
+            .execute(&mut *conn)
+            .await;
+        match result {
             Ok(_) => Ok(true),
             Err(e) if benign(&e) => Ok(false),
+            Err(e) if lock_timeout(&e) => {
+                tracing::warn!(
+                    statement,
+                    "partition maintenance waited too long for a table lock; the next sweep retries"
+                );
+                Ok(false)
+            }
             Err(e) => Err(db_err(e)),
         }
     }
@@ -158,7 +187,9 @@ impl MySqlStore {
         }
         update.push(")");
         update.build().execute(&mut *tx).await.map_err(db_err)?;
-        let mut jobs = QueryBuilder::new("DELETE FROM jobs WHERE dedupe_key IN (");
+        // A job a worker is running now is left to it: it finds the run finished and stops.
+        let mut jobs =
+            QueryBuilder::new("DELETE FROM jobs WHERE status <> 'running' AND dedupe_key IN (");
         let mut keys = jobs.separated(", ");
         for id in &ids {
             keys.push_bind(format!("exe:{}", ExecutionId::from_uuid(*id)));
@@ -177,8 +208,12 @@ impl MySqlStore {
         now: DateTime<Utc>,
     ) -> Res<PartitionReport> {
         let keep_from = today - Duration::days(i64::from(keep_days));
+        // Unfinished runs are failed a day before their day is dropped, so the failure (`execution.expired`)
+        // stays visible in History and in the failed-runs alert for that day.
         let mut report = PartitionReport {
-            expired_runs: self.expire_unfinished(keep_from, now).await?,
+            expired_runs: self
+                .expire_unfinished(keep_from + Duration::days(EXPIRE_AHEAD_DAYS), now)
+                .await?,
             ..PartitionReport::default()
         };
         for (table, pmax_rows) in TABLES.into_iter().zip(PMAX_ROWS) {

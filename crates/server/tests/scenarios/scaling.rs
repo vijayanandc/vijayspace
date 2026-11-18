@@ -194,12 +194,12 @@ async fn staff_are_emailed_each_new_condition_once_an_hour() {
     let sent = app.mailer.sent.lock().unwrap().clone();
     assert_eq!(sent.len(), 1, "one email per check");
     assert_eq!(sent[0].to, ["ops@weft.test"]);
+    // The subject carries no tenant text (org or connection names): those are only in the body.
+    assert_eq!(sent[0].subject, "[Weft] 2 critical alerts");
     assert!(
-        sent[0]
-            .subject
-            .starts_with("[Weft] 2 alerts: No worker is running"),
+        sent[0].body.contains("No worker is running"),
         "{}",
-        sent[0].subject
+        sent[0].body
     );
     assert!(
         sent[0].body.contains("Connection Source CRM (memsrc)"),
@@ -224,5 +224,50 @@ async fn staff_are_emailed_each_new_condition_once_an_hour() {
         .unwrap();
     assert_eq!(weft_app::alerts::check(&app.deps).await.unwrap(), 1);
     assert_eq!(app.mailer.sent.lock().unwrap().clone().len(), 2);
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_run_that_fails_days_after_it_was_queued_counts_in_the_failed_runs_alert() {
+    let app = TestApp::spawn().await;
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(400).set_body_string("bad"))
+        .mount(&mock)
+        .await;
+    let flow = app
+        .live_flow(
+            "Later",
+            json!({"trigger": {"type": "manual"}, "steps": [
+                {"key": "wait", "type": "delay", "seconds": 3 * 86_400},
+                {"key": "call", "type": "action", "connector": "core.http", "action": "request",
+                    "input": {"method": "POST", "url": mock.uri()}}
+            ]}),
+        )
+        .await;
+    let flow_id = flow["id"].as_str().unwrap();
+    app.ok(
+        "POST",
+        &format!("/api/v1/flows/{flow_id}/run"),
+        Some(json!({"payload": {}})),
+    )
+    .await;
+    app.drain().await;
+    app.clock.advance(Duration::days(3) + Duration::minutes(1));
+    app.drain().await;
+    let runs = app.executions(flow_id).await;
+    assert_eq!(runs[0]["status"], "failed", "{runs:?}");
+    // Queued three days ago, failed now: it counts in the last hour's failures.
+    let facts = app
+        .deps
+        .store
+        .alert_facts(app.clock.now() - Duration::hours(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        facts.failed_runs.iter().map(|o| o.failed).sum::<u64>(),
+        1,
+        "{facts:?}"
+    );
     app.cleanup().await;
 }

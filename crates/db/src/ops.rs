@@ -70,11 +70,12 @@ impl OpsRepo for MySqlStore {
         .map_err(db_err)?;
         // `day` prunes to the window's partitions (a run's day is when it was queued: at most a day before).
         let failed: Vec<(Uuid, String, i64)> = sqlx::query_as(
-            "SELECT e.org_id, o.name, COUNT(*) FROM executions e JOIN orgs o ON o.id = e.org_id \
-             WHERE e.day >= ? AND e.status = 'failed' AND e.finished_at >= ? \
-             GROUP BY e.org_id, o.name ORDER BY COUNT(*) DESC LIMIT 50",
+            // Per org, through (org_id, status, queued_at): only failed runs are read, whatever day they were
+            // queued (a delayed or retried run can fail weeks after it was queued).
+            "SELECT o.id, o.name, COUNT(*) FROM orgs o STRAIGHT_JOIN executions e FORCE INDEX (ix_executions_org_status) \
+             ON e.org_id = o.id AND e.status = 'failed' \
+             WHERE e.finished_at >= ? GROUP BY o.id, o.name ORDER BY COUNT(*) DESC LIMIT 50",
         )
-        .bind((since - chrono::Duration::days(1)).date_naive())
         .bind(since)
         .fetch_all(&self.pool)
         .await

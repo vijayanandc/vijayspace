@@ -218,7 +218,7 @@ Secrets are never returned.
 | GET | `/api/v1/executions?flow_id=&status=&limit=50&cursor=` | — | `{items: ExecutionSummary[], next_cursor}` |
 | GET | `/api/v1/executions/{id}` | — | `ExecutionDetail` |
 | GET | `/api/v1/executions/{id}/log` | — | `ExecutionLog`: the run's detailed log, oldest first |
-| POST | `/api/v1/executions/{id}/retry` | — | `ExecutionSummary` (from the failed step, same version). 409 `execution.not_retryable` if the run is not failed, or finished within an hour of the org's retention cutoff (its history is being removed; re-run it instead). |
+| POST | `/api/v1/executions/{id}/retry` | — | `ExecutionSummary` (from the failed step, same version). 409 `execution.not_retryable` if the run is not failed, was queued 28 days ago or more, or finished within an hour of the org's retention cutoff (its history is being removed; re-run it instead). |
 | POST | `/api/v1/executions/{id}/rerun` | — | `{execution_id}` (new execution, latest published version) |
 | POST | `/api/v1/executions/{id}/cancel` | — | `ExecutionSummary` |
 
@@ -250,7 +250,7 @@ For a `decision` step run, `output` is `{"branch": "big"}`; when no branch match
 - scheduled retries;
 - a worker that stopped mid-step.
 
-`truncated` is true when the run has more than 2,000 stored lines.
+`truncated` is true when the run has more than 2,000 stored lines; the newest 2,000 are returned (the oldest are left out).
 ```json
 { "at": "2026-11-18T09:00:00.050Z", "level": "info|warn|error", "kind": "run|step|http|limit|retry|event",
   "step_key": "crm"|null, "attempt": 1|null, "message": "POST https://crm.example.com/v2/Leads → 201 in 182 ms",
@@ -310,7 +310,7 @@ Roles: `owner | admin | member | viewer`. The matrix (doc 08 §2): owners do eve
 | Method | Path | Response |
 |---|---|---|
 | GET | `/api/v1/org` | `{id, name, timezone, role (the caller's), retention_days (the org's setting, or null), retention_days_effective, retention_days_default}` |
-| PATCH | `/api/v1/org` with `{name?, timezone?, retention_days?: 1..30 \| null}` | the org (as above); owners only (403 otherwise). Finished runs older than this are deleted (every 15 minutes) with their step history. Run history is kept 30 days at most: runs queued more than 30 days ago are removed with their day, and one still unfinished then ends as failed (`execution.expired`). `null` = the server default (`WEFT_RETENTION_DAYS`, 30). |
+| PATCH | `/api/v1/org` with `{name?, timezone?, retention_days?: 1..30 \| null}` | the org (as above); owners only (403 otherwise). Finished runs older than this are deleted (every 15 minutes) with their step history. Run history is kept 30 days at most: runs queued more than 30 days ago are removed with their day, and one still unfinished a day before that ends as failed (`execution.expired`). A run must finish within 28 days of being queued: a delay that would end later fails the run at once with `delay.too_long`. `null` = the server default (`WEFT_RETENTION_DAYS`, 30). |
 | GET | `/api/v1/usage` | `{period: "2026-11", tasks_used, executions}` |
 | GET | `/healthz`, `/readyz` | `ok` |
 | GET | `/api/v1/ops/status` | Staff only (owners and admins acting in the default org; others 403): `{now, instances: [{id, kind: "api"\|"worker"\|"all", host, version, started_at, seen_at}], queues: [{queue, ready, lag_seconds}], running_jobs, dead_jobs, alerts: [{key, severity: "critical"\|"warning", title, detail}]}`. `lag_seconds` is how long the oldest due job has waited: when it keeps growing, start another `weft worker`. `alerts` lists the conditions now: no worker, a queue lagging over 5 min, jobs that died in the last hour, orgs with 10 or more failed runs in the last hour, and connections that need signing in again. |

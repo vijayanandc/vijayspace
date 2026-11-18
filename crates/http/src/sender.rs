@@ -118,8 +118,11 @@ fn to_reqwest(method: Method) -> reqwest::Method {
     }
 }
 
-fn map_error(err: &reqwest::Error) -> ConnectorError {
-    let mut source: Option<&(dyn std::error::Error + 'static)> = Some(err);
+/// The error without its URL: a URL can carry a secret query value or path token, and this text reaches run
+/// histories and logs.
+fn map_error(err: reqwest::Error) -> ConnectorError {
+    let err = err.without_url();
+    let mut source: Option<&(dyn std::error::Error + 'static)> = Some(&err);
     while let Some(e) = source {
         if let Some(io) = e.downcast_ref::<std::io::Error>()
             && io.kind() == std::io::ErrorKind::PermissionDenied
@@ -145,7 +148,11 @@ impl HttpSender for ReqwestSender {
         if !destination_allowed(&url, self.policy) {
             return Err(ConnectorError::invalid_field(
                 "url",
-                format!("destination not allowed: {url}"),
+                // Only the host: the path or query can carry a credential.
+                format!(
+                    "destination not allowed: {}",
+                    url.host_str().unwrap_or("(no host)")
+                ),
             ));
         }
         let mut builder = self
@@ -158,7 +165,7 @@ impl HttpSender for ReqwestSender {
         if let Some(body) = request.body {
             builder = builder.body(body);
         }
-        let mut response = builder.send().await.map_err(|e| map_error(&e))?;
+        let mut response = builder.send().await.map_err(map_error)?;
         let status = response.status().as_u16();
         let headers = response
             .headers()
@@ -171,7 +178,7 @@ impl HttpSender for ReqwestSender {
             })
             .collect();
         let mut body = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|e| map_error(&e))? {
+        while let Some(chunk) = response.chunk().await.map_err(map_error)? {
             if body.len() + chunk.len() > MAX_BODY {
                 return Err(ConnectorError::permanent("response body exceeds 10 MB"));
             }

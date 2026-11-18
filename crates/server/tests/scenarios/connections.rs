@@ -92,8 +92,15 @@ async fn concurrent_forced_refreshes_call_the_token_endpoint_once() {
     app.deps.store.insert_connection(&stored).await.unwrap();
 
     // Eight steps got a 401 with the same old token at the same time.
+    // The mock is the operator's accounts server (`WEFT_ZOHO_ACCOUNTS_URL`): no other host gets the client secret.
+    let mut registry = weft_server::wiring::registry();
+    registry.register(std::sync::Arc::new(
+        weft_connectors::zoho_crm::ZohoCrmConnector::with_accounts_server(&accounts.uri()),
+    ));
+    let mut deps = app.deps.clone();
+    deps.connectors = std::sync::Arc::new(registry);
     let handles: Vec<_> = (0..8)
-        .map(|_| DbConnectionHandle::new(app.deps.clone(), stored.clone()))
+        .map(|_| DbConnectionHandle::new(deps.clone(), stored.clone()))
         .collect();
     let tokens = futures::future::join_all(
         handles

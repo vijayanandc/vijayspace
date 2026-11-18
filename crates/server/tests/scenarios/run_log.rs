@@ -151,7 +151,7 @@ async fn a_request_held_back_by_a_limit_is_in_the_log_but_is_not_a_call() {
         "Waiting"
     );
 
-    app.clock.advance(Duration::seconds(67));
+    app.clock.advance(Duration::seconds(121)); // at most a minute to wait, plus a minute of spread
     app.drain().await;
     let log = app
         .ok("GET", &format!("/api/v1/executions/{exe}/log"), None)
@@ -169,5 +169,49 @@ async fn a_request_held_back_by_a_limit_is_in_the_log_but_is_not_a_call() {
             .starts_with("GET http://127.0.0.1"),
         "{log}"
     );
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_very_long_log_keeps_its_newest_lines() {
+    use weft_app::ports::{Clock as _, LogKind, LogLevel, LogRecord};
+    let app = TestApp::spawn().await;
+    let flow = app
+        .live_flow("Loud", json!({"trigger": {"type": "manual"}, "steps": [
+            {"key": "say", "type": "action", "connector": "core.formatter", "action": "text_transform",
+                "input": {"text": "hi", "operation": "upper"}}
+        ]}))
+        .await;
+    let exe = run(&app, flow["id"].as_str().unwrap()).await;
+    app.drain().await;
+    let now = app.clock.now();
+    let id: weft_domain::ids::ExecutionId = exe.parse().unwrap();
+    let records: Vec<LogRecord> = (0..2100)
+        .map(|i| LogRecord {
+            id: app.deps.ids.uuid(),
+            execution_id: id,
+            step_key: Some("say".into()),
+            attempt: Some(1),
+            level: LogLevel::Info,
+            kind: LogKind::Event,
+            message: format!("line {i}"),
+            details: None,
+            at: now + Duration::milliseconds(i),
+        })
+        .collect();
+    let org = weft_domain::ids::OrgId::from_uuid(weft_server::wiring::DEFAULT_ORG);
+    app.deps.store.append_logs(org, id, &records).await.unwrap();
+    let log = app
+        .ok("GET", &format!("/api/v1/executions/{exe}/log"), None)
+        .await;
+    assert_eq!(log["truncated"], true);
+    let lines: Vec<&str> = of_kind(&log, "event")
+        .iter()
+        .filter_map(|e| e["message"].as_str())
+        .collect();
+    // Where a long run went wrong is at its end: the oldest lines are left out, never the newest.
+    assert_eq!(lines.len(), 2000);
+    assert_eq!(lines.first(), Some(&"line 100"));
+    assert_eq!(lines.last(), Some(&"line 2099"));
     app.cleanup().await;
 }

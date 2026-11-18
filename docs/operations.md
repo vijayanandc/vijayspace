@@ -9,14 +9,18 @@ Weft reads its settings the way the Appblocks servers do:
 
 - **The file.** `WEFT_CONFIG_PATH` names a properties file; without it, `./config.properties` is read when it
   exists. Each `WEFT_FOO_BAR` variable is written in the file as `foo_bar = value` (`DATABASE_URL` →
-  `database_url`). The format is Java-style: `key = value` or `key: value`, with `#` and `!` comments.
+  `database_url`). The format is Java-style: `key = value` or `key: value`, with `#` and `!` comment lines.
+  A `#` after a value is part of the value (as in Java), and a leading byte-order mark is skipped.
 - **Precedence.** A set (non-empty) environment variable always wins over the file, so one file can be shared
   and a single value changed per server.
-- **Startup checks.** A key that is set twice, or a line that is not `key = value`, stops the server. A key
-  that no setting reads (usually a typo) is logged as a warning.
-- **Secrets.** The file may hold secrets (`master_keys`, `logto_app_secret`, `zeptomail_api_key`): keep it
-  readable by the server's user only (`chmod 600`). The server warns when every user can read it.
-  `config.properties` is in `.gitignore`.
+- **Startup checks.** A key that is set twice, or a line that is not `key = value`, stops the server; the error
+  names the line number, never its text. A key that no setting reads (usually a typo) is logged as a warning.
+  `WEFT_RETENTION_DAYS` above 30 is lowered to 30 with a warning.
+- **Secrets.** The file may hold secrets (`master_keys`, `logto_app_secret`, `zeptomail_api_key`, the database
+  password): keep it readable by the server's user only. **A file every user can read stops the server**; a
+  group-readable one is logged as a warning. In the container image the server runs as uid 10001, so on the
+  host: `chown 10001 config.properties && chmod 600 config.properties`. `config.properties` is in
+  `.gitignore` and `.dockerignore`.
 
 Every setting is listed in the README's configuration table. Logging uses `WEFT_LOG`
 (default `info,sqlx=warn`; `RUST_LOG` wins). Set `WEFT_LOG_FORMAT=json` for one JSON object per line, for log
@@ -37,7 +41,8 @@ shipping.
 1. MySQL 8.4, preferably managed (backups, binary logs, `max_connections` sized as below).
    - Create the database and a user.
    - Over a network, use `?ssl-mode=verify-identity` in `database_url`.
-2. `deploy/production/config.properties.example` → `config.properties` (chmod 600).
+2. `deploy/production/config.properties.example` → `config.properties`, then
+   `chown 10001 config.properties && chmod 600 config.properties` (uid 10001 is the server's user in the image).
    - Set the database, the URLs, fresh master keys, Logto, `owner_emails`, `alert_emails` and the mail provider.
    - Generate a key with `openssl rand -base64 32`.
 3. In Logto, register:
@@ -49,8 +54,22 @@ shipping.
    org and invite its people.
 6. Watch `GET /api/v1/ops/status` (or the Platform page). Scale with `docker compose up -d --scale weft-worker=N`.
 
+**Clocks.** Every server's clock must be synchronised (NTP, as on any managed host). Leases, schedules, limits
+and the day partitions are decided by the servers' clocks, never the database's: a server whose clock is hours
+off can fire schedules early or expire history a day early.
+
 **Upgrades.** Pull or build the new images and run `docker compose up -d`. `weft-migrate` applies new migrations
-before the servers start. Migrations are additive, so the old servers keep working while the new ones start.
+before the servers start. Most releases add only columns and tables, so the old servers keep working while the
+new ones start.
+
+**Upgrading to the partitioned history (migration `20261119000004` and later).** Stop every server first
+(`docker compose stop weft-api weft-worker`), then migrate, then start the new images:
+
+- Old servers do not write the new `day` column, so their inserts fail once the tables are partitioned.
+- The migration rebuilds `executions`, `step_runs` and `trigger_events`; on a large history this takes minutes and
+  blocks writes. Expect about a minute per few million rows.
+- The first sweep drops all history older than 30 days (the new cap), including history an org had set to keep
+  longer.
 
 **Kubernetes or systemd.** Run the same commands as separate units: one `weft migrate` per release, N × `weft api`
 behind the load balancer, M × `weft worker`. Each receives SIGTERM on stop and gets 40 s to finish.
@@ -140,6 +159,17 @@ time the number of workers doubles.
 - One worker already keeps up with what one API instance takes in, about 170–200 runs/s.
 - More workers still cut the worst wait from 6.5 s to 3.8 s.
 - Past that point, add API instances for intake.
+
+**What adding servers does not fix.**
+
+- **The database.** Every server shares one MySQL: queue claims, run writes, limits and logs all go there.
+  Watch its CPU and lock waits; once it is the bottleneck, more workers make the lag worse, not better. Scale
+  MySQL up (or move history to faster storage) instead.
+- **An app's own limits.** A connection's `requests_per_minute`, `daily_requests` and `max_concurrent` hold
+  across all servers, so runs through a rate-limited app wait for the app however many workers there are.
+- **One busy flow.** Runs of one flow run in parallel, but the steps of one run are sequential.
+- **The measurement above** is one 4-core host where the workers, MySQL and the mock share CPU; numbers on real
+  hosts differ. Re-run `scripts/scale_out.py` against a staging database before sizing production.
 
 ## Alerts and what to do
 

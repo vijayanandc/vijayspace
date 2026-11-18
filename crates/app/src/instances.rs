@@ -124,7 +124,7 @@ pub struct OpsStatus {
 
 /// Live servers and queue lag. Staff only: owners and admins of the default (operator's) org.
 pub async fn status(deps: &Deps, actor: &Actor) -> Result<OpsStatus, AppError> {
-    require_staff(deps, actor)?;
+    require_staff(deps, actor).await?;
     let now = deps.clock.now();
     let instances = deps
         .store
@@ -153,8 +153,8 @@ pub async fn status(deps: &Deps, actor: &Actor) -> Result<OpsStatus, AppError> {
 }
 
 /// Staff are owners and admins of the default org (the operator's own org).
-pub fn require_staff(deps: &Deps, actor: &Actor) -> Result<(), AppError> {
-    crate::tenancy::staff::require_staff(deps, actor)
+pub async fn require_staff(deps: &Deps, actor: &Actor) -> Result<(), AppError> {
+    crate::tenancy::staff::require_staff(deps, actor).await
 }
 
 #[cfg(test)]

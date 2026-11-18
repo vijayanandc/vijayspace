@@ -87,8 +87,8 @@ async fn limits_hold_back_requests_and_usage_reports_the_budget() {
     // 2 per minute: the third request waits for the next minute instead of reaching the app.
     let held = run(&app, flow).await;
     assert_eq!(held["status"], "waiting", "{held}");
-    // The park time is at most 60 s to the next minute plus a spread of at most 10%.
-    app.clock.advance(Duration::seconds(67));
+    // The park time is at most 60 s to the next minute plus a spread of at most a minute.
+    app.clock.advance(Duration::seconds(121));
     app.drain().await;
     let done = app
         .ok(
@@ -197,8 +197,8 @@ async fn a_held_back_request_is_not_an_attempt_and_is_never_skipped() {
         Some(0),
         "a held-back request leaves no history row: {held}"
     );
-    // The park time is the limiter's hint (at most 60 s) plus a spread of at most 10% of it.
-    app.clock.advance(Duration::seconds(67));
+    // The park time is the limiter's hint (at most 60 s) plus a spread of at most a minute.
+    app.clock.advance(Duration::seconds(121));
     app.drain().await;
     let done = app
         .ok(

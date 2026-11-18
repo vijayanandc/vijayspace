@@ -23,9 +23,11 @@ pub fn key_for(env_name: &str) -> String {
 }
 
 /// Parses Java-style properties: `key = value` or `key: value` lines, `#` and `!` comments, blank lines.
-/// Values are trimmed; a value may not continue on the next line.
+/// Values are trimmed; a value may not continue on the next line, and `#` inside a value is part of it (as in
+/// Java). A leading byte-order mark is skipped. Errors name the line and never echo a value (it may be a secret).
 pub fn parse(text: &str) -> Result<HashMap<String, String>, String> {
     let mut out = HashMap::new();
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     for (n, raw) in text.lines().enumerate() {
         let line = raw.trim();
         if line.is_empty() || line.starts_with('#') || line.starts_with('!') {
@@ -33,16 +35,15 @@ pub fn parse(text: &str) -> Result<HashMap<String, String>, String> {
         }
         let Some(at) = line.find(['=', ':']) else {
             return Err(format!(
-                "line {}: expected `key = value`, found `{line}`",
+                "line {}: expected `key = value` (no `=` or `:` found)",
                 n + 1
             ));
         };
         let key = line[..at].trim().to_ascii_lowercase();
         if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
             return Err(format!(
-                "line {}: `{}` is not a setting name",
-                n + 1,
-                &line[..at]
+                "line {}: the setting name may hold only letters, digits and `_`",
+                n + 1
             ));
         }
         if out
@@ -65,10 +66,10 @@ impl Source {
             None if Path::new("config.properties").is_file() => "config.properties".to_owned(),
             None => return Ok(Self::default()),
         };
+        refuse_if_readable_by_everyone(&path)?;
         let text =
             std::fs::read_to_string(&path).map_err(|e| format!("reading config `{path}`: {e}"))?;
         let file = parse(&text).map_err(|e| format!("config `{path}`: {e}"))?;
-        warn_if_readable_by_others(&path);
         Ok(Self {
             file,
             path: Some(path),
@@ -119,21 +120,33 @@ fn env(name: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+/// The file may hold the database password and encryption keys: a file every user can read stops the server.
 #[cfg(unix)]
-fn warn_if_readable_by_others(path: &str) {
+fn refuse_if_readable_by_everyone(path: &str) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt as _;
-    if let Ok(meta) = std::fs::metadata(path)
-        && meta.permissions().mode() & 0o004 != 0
-    {
+    let mode = std::fs::metadata(path)
+        .map_err(|e| format!("reading config `{path}`: {e}"))?
+        .permissions()
+        .mode();
+    if mode & 0o004 != 0 {
+        return Err(format!(
+            "config `{path}` is readable by every user and may hold secrets: make it readable by the server's \
+             user only (chmod 600; in the container image that user is 10001: chown 10001 {path})"
+        ));
+    }
+    if mode & 0o040 != 0 {
         tracing::warn!(
             path,
-            "the config file is readable by every user; it may hold secrets (chmod 600)"
+            "the config file is readable by its group; it may hold secrets"
         );
     }
+    Ok(())
 }
 
 #[cfg(not(unix))]
-fn warn_if_readable_by_others(_path: &str) {}
+fn refuse_if_readable_by_everyone(_path: &str) -> Result<(), String> {
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
@@ -149,6 +162,16 @@ mod tests {
         assert_eq!(file["logto_endpoint"], "https://t.logto.app");
         assert_eq!(file["empty"], "");
         assert!(parse("no separator here").is_err());
+        assert_eq!(
+            parse("\u{feff}a = 1").unwrap()["a"],
+            "1",
+            "a byte-order mark is skipped"
+        );
+        let err = parse("ok = 1\nhunter2-secret").unwrap_err();
+        assert!(
+            err.starts_with("line 2") && !err.contains("hunter2"),
+            "errors never echo a line: {err}"
+        );
         assert!(parse("bad key! = x").is_err());
         assert!(
             parse("a = 1\na = 2").is_err(),

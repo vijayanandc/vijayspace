@@ -25,6 +25,7 @@ The request and response shapes follow crates/connectors/src/zoho_crm/ and crate
   Admin  /_mock/records/<Module>[/<id>]  GET, POST (create), PATCH, DELETE: acts as a CRM user, fires notifications
          /_mock/calls (GET, DELETE)   request log (method, path, status, time; CRM query and body, tokens removed)
          /_mock/channels, /_mock/deliveries, /_mock/health, POST /_mock/expire-tokens
+         Admin calls must send Content-Type: application/json (DELETE/POST too) and no Origin header.
 
 Every record change (API or admin) is POSTed in Zoho's notification shape to each matching, unexpired channel's
 notify_url, from a background thread with retries and never through a proxy.
@@ -1267,7 +1268,12 @@ class Handler(BaseHTTPRequestHandler):
             elif path.startswith("/crm/"):
                 self.crm(method, path, query, raw)
             elif path.startswith("/_mock/"):
-                self.admin(method, path, raw)
+                # Never from a browser page: a cross-site form cannot send JSON or leave out Origin.
+                ctype = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
+                if self.headers.get("Origin") or (method != "GET" and ctype != "application/json"):
+                    self.send_json(403, {"error": "admin endpoints take JSON from scripts only"})
+                else:
+                    self.admin(method, path, raw)
             else:
                 self.send_json(404, ZohoError("INVALID_URL_PATTERN", "Please check if the URL trying to access is a "
                                                                      "correct one").body)

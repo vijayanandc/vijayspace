@@ -60,6 +60,8 @@ pub const STEP_TIMEOUT: &str = "step.timeout";
 pub const STEP_OUTPUT_TOO_LARGE: &str = "step.output_too_large";
 pub const MAPPING_ERROR: &str = "mapping.error";
 pub const DELAY_INVALID_DATETIME: &str = "delay.invalid_datetime";
+/// A delay would end after the run's history is removed (30 days after it was queued).
+pub const DELAY_TOO_LONG: &str = "delay.too_long";
 pub const ENGINE_BUDGET_EXCEEDED: &str = "engine.budget_exceeded";
 pub const STOPPED_BY_FLOW: &str = "flow.stopped";
 pub const CANCELLED: &str = "execution.cancelled";

@@ -124,7 +124,7 @@ fn only_methods_that_http_defines_as_idempotent_are_safe_to_repeat() {
         );
     }
     assert!(
-        http.is_idempotent("request", &json!({})),
-        "GET is the default method"
+        !http.is_idempotent("request", &json!({})),
+        "POST is the default method (what `request` sends without one), so not safe to repeat"
     );
 }

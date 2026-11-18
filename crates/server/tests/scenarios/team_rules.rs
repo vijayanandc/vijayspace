@@ -304,5 +304,10 @@ async fn only_staff_create_organisations_by_default() {
         .req_as("eve", Some(acme), "GET", "/api/v1/ops/status", None)
         .await;
     assert_eq!(status.as_u16(), 403);
+    // Staff keep the platform status while acting in a customer's org (the Platform page in any org).
+    let (status, ops) = app
+        .req_as("staff", Some(acme), "GET", "/api/v1/ops/status", None)
+        .await;
+    assert_eq!(status.as_u16(), 200, "{ops}");
     app.cleanup().await;
 }

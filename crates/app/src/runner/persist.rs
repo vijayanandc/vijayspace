@@ -8,6 +8,8 @@ use weft_domain::{
 };
 use weft_engine::{RunState, TraceEntry};
 
+use super::JobOutcome;
+
 use crate::{
     AppError, Deps,
     ports::{Checkpoint, Finish},
@@ -173,6 +175,7 @@ pub(super) fn leak(code: &str) -> &'static str {
     match code {
         c if c == error_codes::MAPPING_ERROR => error_codes::MAPPING_ERROR,
         c if c == error_codes::DELAY_INVALID_DATETIME => error_codes::DELAY_INVALID_DATETIME,
+        c if c == error_codes::DELAY_TOO_LONG => error_codes::DELAY_TOO_LONG,
         c if c == error_codes::ENGINE_BUDGET_EXCEEDED => error_codes::ENGINE_BUDGET_EXCEEDED,
         c if c == error_codes::STOPPED_BY_FLOW => error_codes::STOPPED_BY_FLOW,
         c if c == error_codes::APP_UNAVAILABLE => error_codes::APP_UNAVAILABLE,
@@ -186,4 +189,29 @@ pub(super) fn leak(code: &str) -> &'static str {
         c if c == error_codes::APP_OUTCOME_UNKNOWN => error_codes::APP_OUTCOME_UNKNOWN,
         _ => error_codes::APP_ERROR,
     }
+}
+
+/// Parks an execution whose step was held back by the connection's limits until `at`.
+pub(super) async fn throttled(
+    deps: &Deps,
+    exe: &Execution,
+    state: &RunState,
+    step_run_id: weft_domain::ids::StepRunId,
+    at: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> Result<JobOutcome, AppError> {
+    deps.store
+        .park_held_back_step(
+            step_run_id,
+            &Checkpoint {
+                execution_id: exe.id,
+                org_id: exe.org_id,
+                status: ExecutionStatus::Waiting,
+                run_state: to_value(state),
+                waiting_until: Some(at),
+                now,
+            },
+        )
+        .await?;
+    Ok(JobOutcome::RescheduleAt(at))
 }

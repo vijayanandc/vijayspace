@@ -108,7 +108,7 @@ pub trait LogRepo: Send + Sync {
         execution: ExecutionId,
         records: &[LogRecord],
     ) -> Res<()>;
-    /// A run's stored lines, oldest first, at most `limit`.
+    /// A run's newest `limit` stored lines, oldest first.
     async fn list_logs(
         &self,
         org: OrgId,

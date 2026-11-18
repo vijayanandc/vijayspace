@@ -35,7 +35,7 @@ pub struct LogEntry {
     pub details: Option<Value>,
 }
 
-/// A run's log, oldest first. `truncated`: more stored lines exist than were read.
+/// A run's log, oldest first. `truncated`: more stored lines exist than were read (the oldest are left out).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ExecutionLog {
     pub entries: Vec<LogEntry>,
@@ -58,7 +58,8 @@ pub async fn execution_log(
     let steps = deps.store.list_step_runs(id).await?;
     let records = deps.store.list_logs(actor.org, id, MAX_LINES + 1).await?;
     let truncated = records.len() > MAX_LINES as usize;
-    let records = records.into_iter().take(MAX_LINES as usize).collect();
+    // The read is the newest `MAX_LINES + 1`, oldest first: drop the oldest to keep the newest `MAX_LINES`.
+    let records = records.into_iter().skip(usize::from(truncated)).collect();
     Ok(ExecutionLog {
         entries: timeline(&exe, &steps, records, actor.sees_payloads()),
         truncated,
@@ -127,11 +128,17 @@ pub fn timeline(
             .map_or(i64::from(u32::MAX), |s| i64::from(s.seq));
         let sub = if r.kind == LogKind::Retry { 3 } else { 1 };
         let details = match (&r.details, full, r.kind) {
-            (Some(d), false, LogKind::Http) => Some(viewer_details(d)),
+            (Some(d), false, LogKind::Http) if d.get("method").is_some() => Some(viewer_details(d)),
+            (Some(d), false, LogKind::Http) => Some(d.clone()),
             (_, false, _) => None,
             (d, true, _) => d.clone(),
         };
-        let message = if full || r.kind != LogKind::Http {
+        // An HTTP line without a call (the "N more calls" note) has nothing to hide.
+        let call_line = r
+            .details
+            .as_ref()
+            .is_some_and(|d| d.get("method").is_some());
+        let message = if full || r.kind != LogKind::Http || !call_line {
             r.message
         } else {
             viewer_http_message(details.as_ref())

@@ -197,3 +197,17 @@ fn a_failure_the_run_continued_past_is_a_warning_not_the_runs_failure() {
             .any(|e| e.message.starts_with("Step `crm` failed: "))
     );
 }
+
+#[test]
+fn viewers_read_the_note_about_calls_not_logged_as_it_was_written() {
+    let note = LogRecord {
+        message: "12 more HTTP calls were not logged".into(),
+        details: Some(json!({"not_logged": 12})),
+        ..http(1, 200, 100)
+    };
+    let steps = [step(0, 1, StepStatus::Succeeded, 20, 200)];
+    let log = timeline(&exe(ExecutionStatus::Succeeded), &steps, vec![note], false);
+    let line = log.iter().find(|e| e.kind == LogKind::Http).unwrap();
+    assert_eq!(line.message, "12 more HTTP calls were not logged");
+    assert_eq!(line.details, Some(json!({"not_logged": 12})));
+}

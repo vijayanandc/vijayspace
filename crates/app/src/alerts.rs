@@ -180,11 +180,16 @@ async fn email(deps: &Deps, alerts: &[Alert]) {
     let message = EmailMessage {
         to: deps.config.alert_emails.clone(),
         cc: Vec::new(),
+        // The subject carries no text a tenant chose (org or connection names): those stay in the body.
         subject: format!(
-            "[Weft] {} alert{}: {}",
+            "[Weft] {} {}alert{}",
             alerts.len(),
+            if alerts.iter().any(|a| a.severity == "critical") {
+                "critical "
+            } else {
+                ""
+            },
             if alerts.len() == 1 { "" } else { "s" },
-            alerts[0].title
         ),
         body: format!(
             "{body}\nSee the platform status: {}/settings/platform\n",

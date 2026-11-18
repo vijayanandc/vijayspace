@@ -14,6 +14,7 @@ use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use weft_connector_sdk::{ConnectorError, HttpRequest, HttpResponse, HttpSender};
 
+pub use super::redact::{origin_only, redact_url, redact_url_with};
 use crate::{
     Deps,
     ports::{LogKind, LogLevel, LogRecord},
@@ -23,23 +24,8 @@ use crate::{
 const MAX_CALLS: usize = 50;
 /// Bytes of an error answer kept.
 const EXCERPT_BYTES: usize = 2048;
-/// Query parameters whose values are never logged.
-const SECRET_PARAMS: [&str; 14] = [
-    "token",
-    "access_token",
-    "refresh_token",
-    "id_token",
-    "api_key",
-    "apikey",
-    "key",
-    "secret",
-    "client_secret",
-    "password",
-    "signature",
-    "sig",
-    "code",
-    "auth",
-];
+/// Longest error text kept for a call.
+const MAX_ERROR_CHARS: usize = 512;
 
 tokio::task_local! {
     static CALLS: Arc<CallLog>;
@@ -185,7 +171,12 @@ impl HttpSender for Recorder {
                 r.body.len(),
                 (r.status >= 400).then(|| excerpt(&r.body)),
             ),
-            Err(e) => (None, Some(e.to_string()), 0, None),
+            Err(e) => (
+                None,
+                Some(e.to_string().chars().take(MAX_ERROR_CHARS).collect()),
+                0,
+                None,
+            ),
         };
         self.log.push(HttpCall {
             at,
@@ -209,52 +200,6 @@ fn excerpt(body: &[u8]) -> String {
         text.push('…');
     }
     text
-}
-
-/// The URL without user info, fragment or secret query values (`?token=***`).
-#[must_use]
-pub fn redact_url(raw: &str) -> String {
-    redact_url_with(raw, &[])
-}
-
-/// [`redact_url`], also hiding the values of `extra` parameters (a connection's own credential parameter).
-#[must_use]
-pub fn redact_url_with(raw: &str, extra: &[String]) -> String {
-    let Ok(mut url) = url::Url::parse(raw) else {
-        return raw.split(['?', '#']).next().unwrap_or_default().to_owned();
-    };
-    let _ = url.set_username("");
-    let _ = url.set_password(None);
-    url.set_fragment(None);
-    let pairs: Vec<(String, String)> = url
-        .query_pairs()
-        .map(|(k, v)| {
-            let lower = k.to_ascii_lowercase();
-            let secret = SECRET_PARAMS.contains(&lower.as_str())
-                || extra.iter().any(|e| e.eq_ignore_ascii_case(&k));
-            (
-                k.into_owned(),
-                // `***` needs no percent-encoding, so the logged URL stays readable.
-                if secret {
-                    "***".to_owned()
-                } else {
-                    v.into_owned()
-                },
-            )
-        })
-        .collect();
-    if pairs.is_empty() {
-        url.set_query(None);
-    } else {
-        url.query_pairs_mut().clear().extend_pairs(pairs);
-    }
-    url.to_string()
-}
-
-/// The URL as viewers see it: scheme and host only (paths and queries carry record data).
-#[must_use]
-pub fn origin_only(url: &str) -> String {
-    url::Url::parse(url).map_or_else(|_| String::new(), |u| u.origin().ascii_serialization())
 }
 
 /// Details of an HTTP log line as viewers see them.
@@ -287,29 +232,4 @@ pub fn viewer_http_message(details: Option<&Value>) -> String {
         get("url").as_str().unwrap_or(""),
         get("duration_ms").as_i64().unwrap_or(0)
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn logged_urls_keep_no_credentials_or_secret_query_values() {
-        assert_eq!(
-            redact_url(
-                "https://user:pw@api.example.com/v2/Leads/42?fields=Name&access_token=abc&KEY=k#frag"
-            ),
-            "https://api.example.com/v2/Leads/42?fields=Name&access_token=***&KEY=***"
-        );
-        assert_eq!(
-            redact_url("https://api.example.com/x"),
-            "https://api.example.com/x"
-        );
-        assert_eq!(redact_url("not a url?token=x"), "not a url");
-        assert_eq!(
-            origin_only("https://api.example.com/v2/Leads/42?x=1"),
-            "https://api.example.com"
-        );
-        assert_eq!(excerpt(&[b'a'; 3000]).chars().count(), EXCERPT_BYTES + 1);
-    }
 }

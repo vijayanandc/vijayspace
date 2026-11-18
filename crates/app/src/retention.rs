@@ -22,6 +22,10 @@ const MAX_BATCHES: u32 = 200;
 /// Allowed retention, in days. `MAX_DAYS` is the platform cap for everything kept about runs.
 pub const MIN_DAYS: u32 = 1;
 pub const MAX_DAYS: u32 = 30;
+/// A run must finish, and can be retried, within this many days of being queued. A run's history goes with the
+/// day it was queued (dropped 30 to 31 days on); a run still unfinished a day before that is failed with
+/// `execution.expired` (`crates/db/src/partitions.rs`, `EXPIRE_AHEAD_DAYS`). This leaves a day's margin.
+pub const RUN_DAYS: u32 = MAX_DAYS - 2;
 /// Daily connection usage and send counters are kept this long (within the cap).
 const USAGE_DAYS: i64 = 30;
 /// Day partitions are created this many days ahead.
@@ -96,11 +100,21 @@ pub async fn sweep(deps: &Deps) -> Result<SweepReport, AppError> {
 }
 
 async fn sweep_all(deps: &Deps, now: DateTime<Utc>) -> Result<SweepReport, AppError> {
+    // A failed partition step (e.g. a lock held by a long transaction) must not stop the per-org purges and
+    // housekeeping: it is logged and the next sweep tries again.
+    let partitions = match deps
+        .store
+        .maintain_partitions(now.date_naive(), MAX_DAYS, AHEAD_DAYS, now)
+        .await
+    {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(error = %e, "partition maintenance failed; the next sweep tries again");
+            PartitionReport::default()
+        }
+    };
     let mut report = SweepReport {
-        partitions: deps
-            .store
-            .maintain_partitions(now.date_naive(), MAX_DAYS, AHEAD_DAYS, now)
-            .await?,
+        partitions,
         ..SweepReport::default()
     };
     if report.partitions.rows_in_catch_all > 0 {

@@ -59,7 +59,8 @@ impl Connector for HttpConnector {
         let method = input
             .get("method")
             .and_then(Value::as_str)
-            .unwrap_or("GET")
+            // The same default `execute` sends.
+            .unwrap_or("POST")
             .to_ascii_uppercase();
         matches!(method.as_str(), "GET" | "HEAD" | "PUT" | "DELETE")
     }

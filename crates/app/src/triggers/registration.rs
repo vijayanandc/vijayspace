@@ -55,13 +55,16 @@ pub async fn sync_registration(
     };
     let now = deps.clock.now();
     let active_def = published.filter(|_| flow.is_enabled);
+    let switched_on = !reg.is_active && active_def.is_some();
     reg.is_active = active_def.is_some();
     reg.kind = published.map_or(RegistrationKind::Manual, |d| {
         registration_kind(d, &deps.connectors)
     });
     reg.next_fire_at = None;
     let hash = published.map(trigger_hash);
-    if reg.state.get("trigger_hash").and_then(Value::as_str) != hash.as_deref() {
+    // A changed trigger, or a flow switched (back) on, starts from now: changes made while it was off are not
+    // replayed (the cursor goes, so the first poll records where to start).
+    if switched_on || reg.state.get("trigger_hash").and_then(Value::as_str) != hash.as_deref() {
         reg.state = json!({"trigger_hash": hash});
     }
     if let Some(def) = active_def {

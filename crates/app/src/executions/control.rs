@@ -31,8 +31,17 @@ async fn load(
 async fn ensure_history_kept(
     deps: &Deps,
     org: OrgId,
+    queued_at: DateTime<Utc>,
     finished_at: Option<DateTime<Utc>>,
 ) -> Result<(), AppError> {
+    // Run history goes with the day a run was queued: a retried run must have time to finish before that.
+    let platform_cutoff = deps.clock.now() - Duration::days(i64::from(retention::RUN_DAYS));
+    if queued_at < platform_cutoff {
+        return Err(AppError::conflict(
+            error_codes::EXECUTION_NOT_RETRYABLE,
+            "This run started 28 days ago or more and its history is about to be removed; re-run it instead",
+        ));
+    }
     let Some(finished_at) = finished_at else {
         return Ok(());
     };
@@ -60,7 +69,7 @@ pub async fn retry_execution(deps: &Deps, actor: &Actor, id: ExecutionId) -> Res
             "Only failed executions can be retried",
         ));
     }
-    ensure_history_kept(deps, org, exe.finished_at).await?;
+    ensure_history_kept(deps, org, exe.queued_at, exe.finished_at).await?;
     let mut state: RunState = serde_json::from_value(exe.run_state.clone()).unwrap_or_default();
     if let Some(step) = &exe.failed_step_key {
         state.attempts.remove(step);
