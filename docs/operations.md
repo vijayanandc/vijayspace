@@ -22,6 +22,39 @@ Every setting is listed in the README's configuration table. Logging uses `WEFT_
 (default `info,sqlx=warn`; `RUST_LOG` wins). Set `WEFT_LOG_FORMAT=json` for one JSON object per line, for log
 shipping.
 
+## Deploy
+
+**Files.**
+- `Dockerfile` builds the `weft` image: one binary for `serve`, `api`, `worker` and `migrate`.
+- The web client's image is built on the `client` branch (`docker build -t weft-web .`). It holds Caddy, the
+  client's files, and the reverse proxy rules for `/api`, `/hooks`, `/oauth`, `/healthz` and `/readyz`.
+- `deploy/production/compose.yml` puts them together on one host:
+  - a one-shot `weft-migrate`;
+  - 2 `weft-api` and 2 `weft-worker` replicas;
+  - Caddy with automatic TLS for `WEFT_SITE_ADDRESS`.
+
+**Steps.**
+1. MySQL 8.4, preferably managed (backups, binary logs, `max_connections` sized as below).
+   - Create the database and a user.
+   - Over a network, use `?ssl-mode=verify-identity` in `database_url`.
+2. `deploy/production/config.properties.example` → `config.properties` (chmod 600).
+   - Set the database, the URLs, fresh master keys, Logto, `owner_emails`, `alert_emails` and the mail provider.
+   - Generate a key with `openssl rand -base64 32`.
+3. In Logto, register:
+   - the web client's redirect URI `https://<host>/callback` and its post-sign-out URI;
+   - the server app used for introspection.
+4. Build the images, then `WEFT_SITE_ADDRESS=flow.example.com WEFT_LOGTO_ENDPOINT=https://tenant.logto.app docker compose up -d`
+   in `deploy/production/`.
+5. Sign in as an `owner_emails` address: that person owns the default org and is staff. Create each customer's
+   org and invite its people.
+6. Watch `GET /api/v1/ops/status` (or the Platform page). Scale with `docker compose up -d --scale weft-worker=N`.
+
+**Upgrades.** Pull or build the new images and run `docker compose up -d`. `weft-migrate` applies new migrations
+before the servers start. Migrations are additive, so the old servers keep working while the new ones start.
+
+**Kubernetes or systemd.** Run the same commands as separate units: one `weft migrate` per release, N × `weft api`
+behind the load balancer, M × `weft worker`. Each receives SIGTERM on stop and gets 40 s to finish.
+
 ## Processes
 
 `weft serve` runs the API and a worker in one process (small installs). For production, run them separately:

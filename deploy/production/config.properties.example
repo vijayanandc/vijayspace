@@ -1,0 +1,64 @@
+# Weft server settings (as the Appblocks servers' config.properties). Copy to config.properties, fill in, chmod 600.
+# Each key is the environment variable without `WEFT_`, in lower case; a set environment variable always wins.
+# Keys the server does not know are logged at startup (usually a typo). Secrets: master_keys, logto_app_secret,
+# zeptomail_api_key, oauth_*_client_secret, smtp_url (if it holds a password).
+
+# ---- Database (also the job queue) ----
+database_url = mysql://weft:CHANGE_ME@db.internal:3306/weft?ssl-mode=verify-identity
+# Connections per process; keep the sum over every server below MySQL's max_connections.
+db_pool_size = 32
+worker_concurrency = 16
+
+# ---- Addresses ----
+bind = 0.0.0.0:8080
+# Base of webhook and OAuth callback URLs (what apps call), and where people open Weft (links in emails).
+public_url = https://flow.example.com
+app_url = https://flow.example.com
+client_origins = https://flow.example.com
+
+# ---- Encryption of connection secrets (required off loopback) ----
+# id:base64(32 random bytes), comma-separated; the active one encrypts, all decrypt (rotation). Keep a copy
+# outside the database backups: without it no connection can be decrypted.
+master_keys = k1:CHANGE_ME_BASE64_32_BYTES
+active_key_id = k1
+
+# ---- Sign-in (Logto, the tenant the Appblocks apps use) ----
+auth = logto
+logto_endpoint = https://TENANT.logto.app
+logto_app_id = SERVER_APP_ID
+logto_app_secret = CHANGE_ME
+logto_client_app_id = WEB_CLIENT_APP_ID
+# logto_resource = https://api.flow.example.com
+# logto_scopes = openid,profile,email
+# logto_cache_secs = 300
+# Staff: verified emails that own the default org; owners and admins there run the platform.
+owner_emails = ops@example.com
+# staff (default) or anyone
+org_creation = staff
+alert_emails = ops@example.com
+
+# ---- Email (ZeptoMail takes precedence over SMTP) ----
+mail_from = Weft <no-reply@example.com>
+# zeptomail_api_key = CHANGE_ME
+# zeptomail_api_url = https://api.zeptomail.in/v1.1/email
+# smtp_url = smtps://user:password@smtp.example.com:465
+
+# ---- Apps ----
+# oauth_zoho_crm_client_id = 1000.XXXX
+# oauth_zoho_crm_client_secret = CHANGE_ME
+# oauth_autodesk_forma_client_id =
+# oauth_autodesk_forma_client_secret =
+# Egress proxy for app calls (it must block private destinations itself).
+# http_proxy = http://egress.internal:3128
+
+# ---- Run history, custom functions, logs ----
+# 1-30 days (the platform keeps history 30 days at most)
+retention_days = 30
+script_isolation = process
+script_memory_mb = 512
+log = info,sqlx=warn
+log_format = json
+
+# ---- Never in production ----
+# allow_private_networks = false
+# zoho_accounts_url: only for testing against a Zoho mock

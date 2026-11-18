@@ -44,6 +44,52 @@ pub struct Settings {
     pub alert_emails: Vec<String>,
 }
 
+/// Every setting name: those `from_source` asked for, plus the sign-in and logging ones read elsewhere.
+fn known_names(mut asked: Vec<String>) -> Vec<String> {
+    asked.extend(crate::auth_settings::SIGN_IN_KEYS.map(str::to_owned));
+    // Read only in some cases (SMTP when there is no ZeptoMail key), or outside `from_source` (logging).
+    asked.extend(
+        [
+            "WEFT_LOG",
+            "WEFT_LOG_FORMAT",
+            "WEFT_CONFIG_PATH",
+            "WEFT_ZEPTOMAIL_API_KEY",
+            "WEFT_ZEPTOMAIL_API_URL",
+            "WEFT_SMTP_URL",
+        ]
+        .map(str::to_owned),
+    );
+    asked
+}
+
+#[cfg(test)]
+#[test]
+fn the_production_config_template_uses_only_known_settings() {
+    let text = include_str!("../../../deploy/production/config.properties.example");
+    // Commented-out examples (`# key = value`) must be real settings too.
+    let uncommented: String = text
+        .lines()
+        .map(|l| {
+            l.strip_prefix("# ")
+                .filter(|r| r.contains(" = "))
+                .unwrap_or(l)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let file = crate::properties::parse(&uncommented).unwrap();
+    let source = crate::properties::Source::from_file_entries(file);
+    let asked = std::cell::RefCell::new(Vec::new());
+    let var = |name: &str| {
+        asked.borrow_mut().push(name.to_owned());
+        source.get(name)
+    };
+    let _ = Settings::from_source(&var, true);
+    assert_eq!(
+        source.unknown_keys(&known_names(asked.borrow().clone())),
+        Vec::<String>::new()
+    );
+}
+
 /// `WEFT_RETENTION_DAYS`: 1..=30 (the platform cap), default 30.
 fn retention_days(value: Option<&str>) -> Result<u32, String> {
     value.map_or(Ok(30), |v| {
@@ -102,10 +148,7 @@ impl Settings {
         };
         let settings = Self::from_source(&var, serves_api)?;
         if let Some(path) = source.path() {
-            let mut asked = asked.borrow().clone();
-            asked.extend(crate::auth_settings::SIGN_IN_KEYS.map(str::to_owned));
-            asked.extend(["WEFT_LOG", "WEFT_LOG_FORMAT", "WEFT_CONFIG_PATH"].map(str::to_owned));
-            let unknown = source.unknown_keys(&asked);
+            let unknown = source.unknown_keys(&known_names(asked.borrow().clone()));
             if !unknown.is_empty() {
                 tracing::warn!(path, ?unknown, "config keys no setting reads (typos?)");
             }

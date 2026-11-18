@@ -1,0 +1,58 @@
+# Production layout on one host (scale workers with `docker compose up -d --scale weft-worker=3`).
+#   weft-migrate  applies migrations once, then exits; the servers start after it
+#   weft-api      HTTP API, webhooks, OAuth callbacks (behind the web server; 2 replicas)
+#   weft-worker   runs, polls, schedules, retention (add replicas when GET /api/v1/ops/status shows lag)
+#   web           Caddy: TLS, the web client's files, and /api /hooks /oauth to weft-api
+#                 (image built from the `client` branch: `docker build -t weft-web .`)
+# MySQL is expected to be managed (backups, binary logs): point WEFT_DATABASE_URL at it, with
+# `?ssl-mode=verify-identity` when it is on another host.
+# Settings: ./config.properties (chmod 600; see config.properties.example). Keep the sum of every server's
+# WEFT_DB_POOL_SIZE below MySQL's max_connections.
+
+x-weft: &weft
+  image: ${WEFT_IMAGE:-weft:latest}
+  restart: unless-stopped
+  environment:
+    WEFT_CONFIG_PATH: /etc/weft/config.properties
+  volumes:
+    - ./config.properties:/etc/weft/config.properties:ro
+  stop_grace_period: 40s   # running jobs get 30 s to finish on SIGTERM
+
+services:
+  weft-migrate:
+    <<: *weft
+    command: ["migrate"]
+    restart: "no"
+
+  weft-api:
+    <<: *weft
+    command: ["api"]
+    deploy:
+      replicas: 2
+    depends_on:
+      weft-migrate:
+        condition: service_completed_successfully
+
+  weft-worker:
+    <<: *weft
+    command: ["worker"]
+    deploy:
+      replicas: 2
+    depends_on:
+      weft-migrate:
+        condition: service_completed_successfully
+
+  web:
+    image: ${WEFT_WEB_IMAGE:-weft-web:latest}
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      WEFT_SITE_ADDRESS: ${WEFT_SITE_ADDRESS:?the public host name, e.g. flow.example.com}
+      WEFT_API_UPSTREAMS: weft-api:8080
+      WEFT_LOGTO_ENDPOINT: ${WEFT_LOGTO_ENDPOINT:?the Logto tenant, e.g. https://tenant.logto.app}
+    volumes:
+      - caddy-data:/data
+    depends_on: [weft-api]
+
+volumes:
+  caddy-data:

@@ -21,7 +21,7 @@ One line per third-party crate: what it is for. Add a line here in the same chan
 | tokio, tokio-util | app, worker, server | Runtime, `Notify`/`Semaphore`; cancellation tokens for graceful shutdown |
 | axum, tower, tower-http | api | HTTP server, middleware (CORS, body limit, tracing, request IDs, timeouts) |
 | http-body-util | server (tests) | Reading response bodies in scenario tests |
-| sqlx (`mysql`, `json`, `chrono`, `uuid`, `migrate`) | db | MySQL access and embedded migrations |
+| sqlx (`mysql`, `json`, `chrono`, `uuid`, `migrate`, `tls-rustls-ring-webpki`) | db | MySQL access and embedded migrations; TLS to the database with `?ssl-mode=required` (or `verify-identity`), rustls with the webpki roots as for app calls |
 | reqwest (`rustls`) | http, infra | Outbound HTTP behind the SSRF guard (http); calls to the configured Logto tenant and ZeptoMail (infra) |
 | jsonwebtoken (`=9.3.1`) | infra | Verifying Logto access tokens (JWTs) against the tenant's JWKS; uses `ring`, already in the tree |
 | aes-gcm | infra | Encrypting connection secrets (nonces from its `OsRng`) |

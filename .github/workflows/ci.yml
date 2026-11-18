@@ -1,0 +1,41 @@
+# Backend CI: what `just check` runs, plus the MySQL suites (scenarios, db).
+name: backend
+on:
+  push:
+    branches: [backend]
+  pull_request:
+    branches: [backend]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: weft
+          MYSQL_USER: weft
+          MYSQL_PASSWORD: weft
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pweft"
+          --health-interval 5s --health-retries 30
+    env:
+      CARGO_INCREMENTAL: "0"
+      WEFT_TEST_DATABASE_URL: mysql://root:weft@127.0.0.1:3306
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo xtask check-arch
+      - run: cargo test --workspace
