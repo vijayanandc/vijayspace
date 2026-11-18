@@ -107,6 +107,7 @@ pub fn ctx(http: Arc<dyn HttpSender>, connection: Option<Arc<dyn ConnectionHandl
         connection,
         idempotency_key: "idem-test".into(),
         mailer: None,
+        scripts: None,
         timeout: Duration::from_secs(10),
         now: test_now(),
     }

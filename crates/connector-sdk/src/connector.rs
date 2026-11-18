@@ -184,6 +184,12 @@ pub trait Connector: Send + Sync {
         )))
     }
 
+    /// Checks an action's input when a flow is validated (draft save and publish), as
+    /// `(field, message)` pairs. Must be pure and fast: no IO.
+    fn check_input(&self, _action: &str, _input: &Value) -> Vec<(String, String)> {
+        Vec::new()
+    }
+
     /// The record capability, for metadata-driven apps.
     fn records(&self) -> Option<&dyn RecordObjects> {
         None

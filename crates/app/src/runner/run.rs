@@ -206,6 +206,8 @@ fn leak(code: &str) -> &'static str {
         c if c == error_codes::APP_INVALID_INPUT => error_codes::APP_INVALID_INPUT,
         c if c == error_codes::APP_NOT_FOUND => error_codes::APP_NOT_FOUND,
         c if c == error_codes::CONNECTION_NEEDS_REAUTH => error_codes::CONNECTION_NEEDS_REAUTH,
+        c if c == error_codes::SCRIPT_ERROR => error_codes::SCRIPT_ERROR,
+        c if c == error_codes::SCRIPT_LIMIT_EXCEEDED => error_codes::SCRIPT_LIMIT_EXCEEDED,
         _ => error_codes::APP_ERROR,
     }
 }

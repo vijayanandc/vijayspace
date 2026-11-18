@@ -2,15 +2,9 @@
 //!
 //! Every filter is pure and deterministic: no clock, no randomness, no IO.
 
-use std::fmt::Write as _;
-
-use base64::Engine as _;
-use chrono::{Duration, SecondsFormat};
-use hmac::{Hmac, Mac};
 use minijinja::{Environment, Error, ErrorKind, Value};
-use sha2::{Digest, Sha256};
 
-use crate::dates;
+use crate::funcs;
 
 pub(crate) fn register(env: &mut Environment<'static>) {
     env.add_filter("translate", translate);
@@ -56,38 +50,12 @@ fn to_serde(value: &Value) -> Result<serde_json::Value, Error> {
 
 /// Formats a date: `{{ created | date("%d %b %Y", "Asia/Kolkata") }}`.
 fn date(value: Value, format: Option<String>, tz: Option<String>) -> Result<String, Error> {
-    let parsed = dates::parse_json(&to_serde(&value)?)
-        .ok_or_else(|| invalid(format!("not a date: {value}")))?;
-    let format = format.unwrap_or_else(|| "%Y-%m-%d".to_owned());
-    let tz: chrono_tz::Tz = tz
-        .as_deref()
-        .unwrap_or("UTC")
-        .parse()
-        .map_err(|_| invalid("unknown time zone"))?;
-    let mut out = String::new();
-    // chrono panics on invalid format specifiers when using `to_string()`; `write!` reports an error instead.
-    write!(out, "{}", parsed.with_timezone(&tz).format(&format))
-        .map_err(|_| invalid(format!("invalid date format `{format}`")))?;
-    Ok(out)
+    funcs::format_date(&to_serde(&value)?, format.as_deref(), tz.as_deref()).map_err(invalid)
 }
 
 /// Adds a duration: `{{ due | date_add(2, "days") }}` → RFC 3339 (UTC).
 fn date_add(value: Value, amount: i64, unit: Option<String>) -> Result<String, Error> {
-    let parsed = dates::parse_json(&to_serde(&value)?)
-        .ok_or_else(|| invalid(format!("not a date: {value}")))?;
-    let delta = match unit.as_deref().unwrap_or("seconds") {
-        "seconds" | "second" => Duration::try_seconds(amount),
-        "minutes" | "minute" => Duration::try_minutes(amount),
-        "hours" | "hour" => Duration::try_hours(amount),
-        "days" | "day" => Duration::try_days(amount),
-        "weeks" | "week" => Duration::try_weeks(amount),
-        other => return Err(invalid(format!("unknown unit `{other}`"))),
-    }
-    .ok_or_else(|| invalid("duration out of range"))?;
-    parsed
-        .checked_add_signed(delta)
-        .map(|d| d.to_rfc3339_opts(SecondsFormat::Secs, true))
-        .ok_or_else(|| invalid("date out of range"))
+    funcs::date_add(&to_serde(&value)?, amount, unit.as_deref()).map_err(invalid)
 }
 
 fn slugify(value: String) -> String {
@@ -116,33 +84,23 @@ fn to_json(value: Value) -> Result<String, Error> {
 }
 
 fn base64_encode(value: String) -> String {
-    base64::engine::general_purpose::STANDARD.encode(value.as_bytes())
+    funcs::base64_encode(&value)
 }
 
 fn base64_decode(value: String) -> Result<String, Error> {
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(value.trim().as_bytes())
-        .map_err(|e| invalid(e.to_string()))?;
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
+    funcs::base64_decode(&value).map_err(invalid)
 }
 
 fn sha256(value: String) -> String {
-    hex::encode(Sha256::digest(value.as_bytes()))
+    funcs::sha256_hex(&value)
 }
 
 fn hmac_sha256(value: String, key: String) -> Result<String, Error> {
-    let mut mac =
-        Hmac::<Sha256>::new_from_slice(key.as_bytes()).map_err(|e| invalid(e.to_string()))?;
-    mac.update(value.as_bytes());
-    Ok(hex::encode(mac.finalize().into_bytes()))
+    funcs::hmac_sha256_hex(&value, &key).map_err(invalid)
 }
 
 fn regex_replace(value: String, pattern: String, replacement: String) -> Result<String, Error> {
-    let re = regex::RegexBuilder::new(&pattern)
-        .size_limit(1 << 16)
-        .build()
-        .map_err(|e| invalid(e.to_string()))?;
-    Ok(re.replace_all(&value, replacement.as_str()).into_owned())
+    funcs::regex_replace(&value, &pattern, &replacement).map_err(invalid)
 }
 
 fn truncate(value: String, length: usize) -> String {

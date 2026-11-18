@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
+use serde_json::Value;
 use weft_domain::flow::{ActionInfo, Catalog};
 
 use crate::{connector::Connector, manifest::ConnectorManifest};
@@ -48,6 +49,12 @@ impl Catalog for ConnectorRegistry {
             requires_connection: manifest.requires_connection(),
             required_fields: spec.required_fields(),
         })
+    }
+
+    fn check_input(&self, connector: &str, action: &str, input: &Value) -> Vec<(String, String)> {
+        self.get(connector)
+            .map(|c| c.check_input(action, input))
+            .unwrap_or_default()
     }
 
     fn trigger(&self, connector: &str, trigger: &str) -> Option<ActionInfo> {

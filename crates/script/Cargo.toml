@@ -1,0 +1,16 @@
+[package]
+name = "weft-script"
+description = "Custom functions: a sandboxed Rhai engine with limits and pure helpers (no IO)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+weft-expr.workspace = true
+rhai.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

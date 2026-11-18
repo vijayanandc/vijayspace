@@ -19,6 +19,7 @@ fn ctx() -> ActionCtx {
         connection: None,
         idempotency_key: "idem-1".into(),
         mailer: None,
+        scripts: None,
         timeout: Duration::from_secs(5),
         now: chrono::Utc::now(),
     }

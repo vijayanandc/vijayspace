@@ -20,7 +20,7 @@ pub use connector::{
     Connector, EventBatch, EventItem, InboundRequest, PollResult, SubscribeRequest,
     SubscriptionInfo,
 };
-pub use context::{ActionCtx, ConnectionHandle, EmailMessage, Mailer};
+pub use context::{ActionCtx, ConnectionHandle, EmailMessage, Mailer, ScriptRun, ScriptRunner};
 pub use error::ConnectorError;
 pub use http::{HttpRequest, HttpResponse, HttpSender, Method};
 pub use manifest::{

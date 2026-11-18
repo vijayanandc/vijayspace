@@ -10,6 +10,7 @@ publish.workspace = true
 weft-connector-sdk.workspace = true
 weft-domain.workspace = true
 weft-expr.workspace = true
+weft-script.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true

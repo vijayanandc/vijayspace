@@ -62,6 +62,10 @@ impl TestApp {
             secrets: Arc::new(AesGcmSecretBox::development()),
             http: Arc::new(ReqwestSender::new(SsrfPolicy::allow_private()).unwrap()),
             mailer: Some(mailer.clone()),
+            scripts: Some(Arc::new(weft_infra::PooledScriptRunner::new(
+                2,
+                weft_script::Limits::default(),
+            ))),
             connectors: Arc::new(registry),
             config: Arc::new(AppConfig {
                 public_url: "http://weft.test".into(),

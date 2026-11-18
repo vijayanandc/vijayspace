@@ -18,6 +18,7 @@ weft-api.workspace = true
 weft-worker.workspace = true
 weft-db.workspace = true
 weft-infra.workspace = true
+weft-script.workspace = true
 weft-http.workspace = true
 weft-connectors.workspace = true
 weft-connector-sdk.workspace = true

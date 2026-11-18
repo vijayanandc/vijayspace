@@ -23,6 +23,7 @@ weft-api = { path = "crates/api" }
 weft-worker = { path = "crates/worker" }
 weft-testkit = { path = "crates/testkit" }
 weft-http = { path = "crates/http" }
+weft-script = { path = "crates/script" }
 
 # External crates (major versions pinned; see docs/dependencies.md)
 serde = { version = "1", features = ["derive"] }
@@ -59,6 +60,8 @@ urlencoding = "2"
 # Test-only
 proptest = "1"
 wiremock = "0.6"
+# Custom functions. Never enable `unchecked` (it removes every sandbox limit).
+rhai = { version = "=1.27.0", default-features = false, features = ["std", "sync", "serde", "no_time", "no_module"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

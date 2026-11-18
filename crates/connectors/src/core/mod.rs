@@ -3,3 +3,4 @@
 pub mod email;
 pub mod formatter;
 pub mod http;
+pub mod script;

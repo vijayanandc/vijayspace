@@ -9,6 +9,7 @@ mod dates;
 mod env;
 mod error;
 mod filters;
+pub mod funcs;
 mod template;
 
 pub use condition::{Comparison, Condition, ConditionResult, Op, eval_condition};

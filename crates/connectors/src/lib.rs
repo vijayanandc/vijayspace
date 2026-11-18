@@ -23,6 +23,7 @@ pub fn builtin_connectors() -> Vec<Arc<dyn Connector>> {
         Arc::new(core::http::HttpConnector::new()),
         Arc::new(core::formatter::FormatterConnector::new()),
         Arc::new(core::email::EmailConnector::new()),
+        Arc::new(core::script::ScriptConnector::new()),
         Arc::new(zoho_crm::ZohoCrmConnector::new()),
         Arc::new(appblocks::AppblocksConnector::new()),
         Arc::new(autodesk_forma::FormaConnector::new()),

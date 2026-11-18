@@ -69,6 +69,7 @@ pub fn action_ctx(
         connection,
         idempotency_key,
         mailer: deps.mailer.clone(),
+        scripts: deps.scripts.clone(),
         timeout: ACTION_TIMEOUT,
         now: deps.clock.now(),
     }

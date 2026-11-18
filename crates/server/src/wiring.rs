@@ -8,7 +8,9 @@ use weft_connector_sdk::{ConnectorRegistry, Mailer};
 use weft_db::MySqlStore;
 use weft_domain::ids::OrgId;
 use weft_http::{ReqwestSender, SsrfPolicy};
-use weft_infra::{AesGcmSecretBox, LogMailer, SmtpMailer, SystemClock, UuidV7Ids};
+use weft_infra::{
+    AesGcmSecretBox, LogMailer, PooledScriptRunner, SmtpMailer, SystemClock, UuidV7Ids,
+};
 
 use crate::config::Settings;
 
@@ -58,6 +60,10 @@ pub fn build(settings: &Settings, store: MySqlStore) -> anyhow::Result<Deps> {
                 .map_err(anyhow::Error::msg)?,
         ),
         mailer: Some(mailer),
+        scripts: Some(Arc::new(PooledScriptRunner::new(
+            std::thread::available_parallelism().map_or(2, std::num::NonZeroUsize::get),
+            weft_script::Limits::default(),
+        ))),
         connectors: Arc::new(registry()),
         config: Arc::new(AppConfig {
             public_url: settings.public_url.clone(),

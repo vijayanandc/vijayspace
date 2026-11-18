@@ -38,6 +38,13 @@ pub enum ConnectorError {
     /// The connector does not implement this operation.
     #[error("not supported: {what}")]
     Unsupported { what: String },
+    /// A permanent failure with its own stable platform code (e.g. `script.error`).
+    #[error("{message}")]
+    Coded {
+        code: &'static str,
+        message: String,
+        details: Value,
+    },
 }
 
 impl ConnectorError {
@@ -82,6 +89,7 @@ impl ConnectorError {
             Self::InvalidInput { .. } => error_codes::APP_INVALID_INPUT,
             Self::NotFound { .. } => error_codes::APP_NOT_FOUND,
             Self::Permanent { .. } | Self::Unsupported { .. } => error_codes::APP_ERROR,
+            Self::Coded { code, .. } => code,
         }
     }
 
@@ -103,7 +111,8 @@ impl ConnectorError {
             | Self::InvalidInput { .. }
             | Self::NotFound { .. }
             | Self::Permanent { .. }
-            | Self::Unsupported { .. } => None,
+            | Self::Unsupported { .. }
+            | Self::Coded { .. } => None,
         }
     }
 
@@ -112,6 +121,7 @@ impl ConnectorError {
     pub fn details(&self) -> Value {
         match self {
             Self::InvalidInput { field: Some(f), .. } => serde_json::json!({"field": f}),
+            Self::Coded { details, .. } => details.clone(),
             Self::Permanent {
                 status: Some(s), ..
             } => serde_json::json!({"http_status": s}),

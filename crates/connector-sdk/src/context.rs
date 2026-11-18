@@ -44,6 +44,25 @@ pub trait Mailer: Send + Sync {
     async fn send(&self, message: &EmailMessage) -> Result<(), ConnectorError>;
 }
 
+/// What a custom function returns: the step output (an object) and its log lines.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScriptRun {
+    pub output: Value,
+    pub logs: Vec<String>,
+}
+
+/// Runs custom functions off the async threads, with the platform's sandbox limits (doc 08 §7).
+/// Failures are `ConnectorError::Coded` with `script.error` or `script.limit_exceeded`.
+#[async_trait]
+pub trait ScriptRunner: Send + Sync {
+    async fn run(
+        &self,
+        code: &str,
+        input: Value,
+        context: Value,
+    ) -> Result<ScriptRun, ConnectorError>;
+}
+
 /// Everything one action call may use.
 #[derive(Clone)]
 pub struct ActionCtx {
@@ -53,6 +72,8 @@ pub struct ActionCtx {
     /// `sha256(execution ‖ step ‖ iteration)`: forward it where the app supports idempotency keys.
     pub idempotency_key: String,
     pub mailer: Option<Arc<dyn Mailer>>,
+    /// Runs custom functions (`core.script`); `None` where scripts are not available.
+    pub scripts: Option<Arc<dyn ScriptRunner>>,
     pub timeout: Duration,
     /// The platform clock's current time (connectors never read the wall clock directly).
     pub now: DateTime<Utc>,

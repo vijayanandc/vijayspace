@@ -9,6 +9,7 @@
 
 mod app_events;
 mod connections;
+mod custom_functions;
 mod harness;
 mod lifecycle;
 mod order_alert;

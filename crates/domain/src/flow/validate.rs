@@ -20,6 +20,16 @@ pub trait Catalog {
     fn action(&self, connector: &str, action: &str) -> Option<ActionInfo>;
     /// `None` when the connector or trigger does not exist.
     fn trigger(&self, connector: &str, trigger: &str) -> Option<ActionInfo>;
+    /// Connector-specific checks of an action's input, as `(field, message)` pairs
+    /// (e.g. a custom function's syntax errors with line and column). Pure and fast.
+    fn check_input(
+        &self,
+        _connector: &str,
+        _action: &str,
+        _input: &serde_json::Value,
+    ) -> Vec<(String, String)> {
+        Vec::new()
+    }
 }
 
 /// The parts of an action or trigger spec that validation checks.
@@ -281,6 +291,11 @@ impl Validator<'_> {
                     );
                     self.required_fields(&format!("{path}/input"), &a.input, &info.required_fields);
                     self.templates(&format!("{path}/input"), &a.input, visible);
+                    for (field, message) in
+                        self.catalog.check_input(&a.connector, &a.action, &a.input)
+                    {
+                        self.error(&format!("{path}/input/{field}"), "field.invalid", &message);
+                    }
                 }
             },
             StepKind::Decision(d) => {

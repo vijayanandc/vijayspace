@@ -3,7 +3,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::Notify;
-use weft_connector_sdk::{ConnectorRegistry, HttpSender, Mailer, oauth::OAuthClient};
+use weft_connector_sdk::{ConnectorRegistry, HttpSender, Mailer, ScriptRunner, oauth::OAuthClient};
 use weft_domain::ids::OrgId;
 
 use crate::{
@@ -31,6 +31,8 @@ pub struct Deps {
     pub secrets: Arc<dyn SecretBox>,
     pub http: Arc<dyn HttpSender>,
     pub mailer: Option<Arc<dyn Mailer>>,
+    /// Runs custom functions off the async threads (`core.script`).
+    pub scripts: Option<Arc<dyn ScriptRunner>>,
     pub connectors: Arc<ConnectorRegistry>,
     pub config: Arc<AppConfig>,
     pub plans: Arc<PlanCache>,

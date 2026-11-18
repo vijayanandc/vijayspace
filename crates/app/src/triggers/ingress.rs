@@ -295,7 +295,8 @@ pub async fn ingest_app_event(
             | ConnectorError::AuthExpired { .. }
             | ConnectorError::NotFound { .. }
             | ConnectorError::Permanent { .. }
-            | ConnectorError::Unsupported { .. }) => AppError::new(
+            | ConnectorError::Unsupported { .. }
+            | ConnectorError::Coded { .. }) => AppError::new(
                 crate::ErrorKind::BadGateway,
                 other.code(),
                 other.to_string(),
