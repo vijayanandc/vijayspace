@@ -19,7 +19,7 @@ function renderCanvas() {
   const ctx: BuilderCtx = {
     flowId: 'flw_1', flow: { trigger: { kind: 'manual', token: 't', is_active: false } } as Flow, def, apply: vi.fn(), manifests: [],
     selected: null, select: vi.fn(), issues: new Map(), activePoint: null, setActivePoint: vi.fn(), drop: vi.fn(), insertItem: vi.fn(),
-    deleteStep: vi.fn(), flush: async () => true, readOnly: false, refetchFlow: vi.fn(),
+    deleteStep: vi.fn(), flush: async () => true, readOnly: false, moving: null, startMove: vi.fn(), refetchFlow: vi.fn(),
   };
   const view = renderWithProviders(
     <TestBuilderProvider value={ctx}>

@@ -23,6 +23,9 @@ export interface BuilderCtx {
   drop: (point: InsertionPoint, payload: DragPayload) => void;
   insertItem: (item: PaletteItem) => void;
   deleteStep: (key: string) => void;
+  /** The step being moved without dragging ("Move to…"): the next insertion point chosen places it. */
+  moving: string | null;
+  startMove: (key: string | null) => void;
   /** A viewer: the flow is shown, not edited (no palette, insert points, drag or delete). */
   readOnly: boolean;
   /** Saves pending changes now; resolves false when saving failed. */
@@ -33,7 +36,18 @@ export interface BuilderCtx {
 /** What canvas cards, insertion points and palette items read: stable while the definition is edited. */
 export type BuilderViewCtx = Pick<
   BuilderCtx,
-  'manifests' | 'selected' | 'select' | 'issues' | 'activePoint' | 'setActivePoint' | 'drop' | 'insertItem' | 'deleteStep' | 'readOnly'
+  | 'manifests'
+  | 'selected'
+  | 'select'
+  | 'issues'
+  | 'activePoint'
+  | 'setActivePoint'
+  | 'drop'
+  | 'insertItem'
+  | 'deleteStep'
+  | 'readOnly'
+  | 'moving'
+  | 'startMove'
 >;
 
 export const BuilderContext = createContext<BuilderCtx | null>(null);

@@ -31,7 +31,7 @@ function renderScript(code: string, issues: Issue[] = []) {
     latest = def;
     const ctx = {
       flowId: 'flw_1', flow: { trigger: { kind: 'webhook', token: 't', is_active: false } } as Flow, def, manifests: [script], selected: 'fn', select: vi.fn(),
-      apply: (d: FlowDefinition) => setDef(d), issues: new Map([['fn', issues]]), flush: async () => true, readOnly: false, deleteStep: vi.fn(),
+      apply: (d: FlowDefinition) => setDef(d), issues: new Map([['fn', issues]]), flush: async () => true, readOnly: false, moving: null, startMove: vi.fn(), deleteStep: vi.fn(),
     } as unknown as BuilderCtx;
     return (
       <TestBuilderProvider value={ctx}>

@@ -14,6 +14,7 @@ import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Switch } from '../../components/Switch';
 import { useToast } from '../../components/Toast';
+import { useDocumentTitle } from '../../lib/useDocumentTitle';
 import { useBuilder } from './BuilderContext';
 import { TestFlowDialog, VersionsDialog } from './FlowDialogs';
 import { SaveChip } from './SaveChip';
@@ -41,6 +42,7 @@ export function Toolbar(props: Props) {
   // The field follows the flow's name (renamed elsewhere, reloaded) until the user edits it.
   const [draftName, setName] = useState<string | null>(null);
   const name = draftName ?? flow.name;
+  useDocumentTitle(flow.name);
   const [testing, setTesting] = useState(false);
   const [versions, setVersions] = useState(false);
   const refresh = () => {

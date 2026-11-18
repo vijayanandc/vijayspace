@@ -26,7 +26,7 @@ function renderPanel(initial: FlowDefinition, selectedKey: string | null, childr
     latest = def;
     const ctx = {
       flowId: 'flw_1', flow: { trigger: { kind: 'manual', token: 't', is_active: false } } as Flow, def, manifests, selected, select,
-      apply: (d: FlowDefinition) => setDef(d), issues: new Map(), flush: async () => true, readOnly: false, deleteStep: vi.fn(),
+      apply: (d: FlowDefinition) => setDef(d), issues: new Map(), flush: async () => true, readOnly: false, moving: null, startMove: vi.fn(), deleteStep: vi.fn(),
     } as unknown as BuilderCtx;
     return (
       <TestBuilderProvider value={ctx}>
@@ -68,7 +68,7 @@ describe('side panel', () => {
     });
     renderPanel(flowOf(decision('first'), decision('second')), 'first');
     fireEvent.click(screen.getByText('Edit as JSON'));
-    expect((document.getElementById('condition-json') as HTMLTextAreaElement).value).toContain('"first"');
+    expect((screen.getByLabelText('Condition (JSON)') as HTMLTextAreaElement).value).toContain('"first"');
     fireEvent.click(screen.getByText('pick second'));
     expect(screen.getByLabelText('Condition 1 value')).toHaveValue('second');
     expect(screen.queryByText('Back to visual editor')).not.toBeInTheDocument();

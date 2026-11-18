@@ -146,8 +146,8 @@ describe('BuilderPage', () => {
     renderBuilder('viewer');
     expect(await screen.findByText(/View only/)).toBeInTheDocument();
     expect(document.querySelector('.palette')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Insert a step here' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Delete / })).not.toBeInTheDocument();
+    expect(document.querySelector('.insert-node[role="button"]')).toBeNull();
+    expect(document.querySelector('.node-delete')).toBeNull();
     expect(stepCards()[0]).not.toHaveAttribute('draggable', 'true');
     fireEvent.click(stepCards()[0] as HTMLElement);
     expect(await screen.findByRole('textbox', { name: 'Step name' })).toHaveAttribute('readonly');
@@ -155,4 +155,24 @@ describe('BuilderPage', () => {
     expect(panel.querySelector('fieldset')).toBeDisabled();
     expect(puts).toHaveLength(0);
   });
+
+  it('moves a step with the keyboard: Move to…, then a + on the canvas', async () => {
+    fakeServer([
+      { key: 'first', type: 'delay', seconds: 1 },
+      { key: 'second', type: 'delay', seconds: 2 },
+    ]);
+    renderBuilder();
+    await opened();
+    fireEvent.click(stepCards()[1] as HTMLElement);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move to…' }));
+    expect(screen.getByText(/Moving “second”/)).toBeInTheDocument();
+    const firstPlus = document.querySelector<HTMLElement>('.insert-node[aria-label="Insert a step here"]');
+    if (!firstPlus) throw new Error('no insertion point');
+    expect(firstPlus).toHaveFocus();
+    fireEvent.keyDown(firstPlus, { key: 'Enter' });
+    await waitFor(() => expect([...stepCards()].map((c) => c.textContent)).toEqual([expect.stringContaining('Wait 2 s'), expect.stringContaining('Wait 1 s')]));
+    expect(screen.queryByText(/Moving “second”/)).not.toBeInTheDocument();
+  });
 });
+

@@ -1,7 +1,7 @@
 // Visual condition editor: AND/OR rows with one level of sub-groups (JSON fallback otherwise).
 
 import { X } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import type { Condition, JsonValue, Op } from '../../../api/types';
 import { OPS } from '../../../api/types';
@@ -54,11 +54,15 @@ function ModeToggle({ mode, onChange, label }: { mode: Mode; onChange: (m: Mode)
 
 export function ConditionBuilder({ value, onChange, variables }: Props) {
   const [raw, setRaw] = useState(!isEditable(value));
+  const jsonId = useId();
   if (raw) {
     return (
       <div>
+        <label htmlFor={jsonId} className="field-label">
+          Condition (JSON)
+        </label>
         <JsonInput
-          id="condition-json"
+          id={jsonId}
           value={value as unknown as JsonValue}
           validate={(v) => conditionProblem(v)}
           onChange={(v) => {

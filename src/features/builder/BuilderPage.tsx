@@ -89,7 +89,8 @@ function LoadedBuilder({ flow, manifests, refetch, refreshError }: LoadedProps) 
     const kept = followSelection(shownDef, def, selected);
     if (kept !== selected) select(kept);
   }
-  const [activePoint, setActivePoint] = useState<InsertionPoint | null>(null);
+  const [activePoint, choosePoint] = useState<InsertionPoint | null>(null);
+  const [moving, startMove] = useState<string | null>(null);
   const [showIssues, setShowIssues] = useState(false);
   const issues = useStableIssues(useMemo(() => issuesByNode(def, autosave.issues), [def, autosave.issues]));
 
@@ -103,15 +104,29 @@ function LoadedBuilder({ flow, manifests, refetch, refreshError }: LoadedProps) 
   );
 
   // Callbacks read the latest state through refs, so they (and the canvas context) stay stable while typing.
-  const latest = useRef({ def, selected, activePoint, manifests });
-  latest.current = { def, selected, activePoint, manifests };
+  const latest = useRef({ def, selected, activePoint, manifests, moving });
+  latest.current = { def, selected, activePoint, manifests, moving };
+  // Choosing an insertion point while a step is being moved (keyboard alternative to dragging) places it there.
+  const setActivePoint = useCallback(
+    (point: InsertionPoint | null) => {
+      const key = latest.current.moving;
+      if (key === null) return choosePoint(point);
+      startMove(null);
+      if (point) {
+        apply(moveStep(latest.current.def, key, point));
+        select(key);
+      }
+      choosePoint(null);
+    },
+    [apply],
+  );
   const placeNew = useCallback(
     (point: InsertionPoint, item: PaletteItem) => {
       const { def: current, manifests: apps } = latest.current;
       const step = createStep(current, item, apps);
       apply(insertStep(current, point, step));
       select(step.key);
-      setActivePoint(null);
+      choosePoint(null);
     },
     [apply],
   );
@@ -140,8 +155,8 @@ function LoadedBuilder({ flow, manifests, refetch, refreshError }: LoadedProps) 
   );
   const refetchFlow = useCallback(() => void refetch(), [refetch]);
   const view: BuilderViewCtx = useMemo(
-    () => ({ manifests, selected, select, issues, activePoint, setActivePoint, drop, insertItem, deleteStep, readOnly }),
-    [manifests, selected, issues, activePoint, drop, insertItem, deleteStep, readOnly],
+    () => ({ manifests, selected, select, issues, activePoint, setActivePoint, drop, insertItem, deleteStep, readOnly, moving, startMove }),
+    [manifests, selected, issues, activePoint, setActivePoint, drop, insertItem, deleteStep, readOnly, moving],
   );
   const ctx: BuilderCtx = useMemo(
     () => ({ ...view, flowId: flow.id, flow, def, apply, flush: autosave.flush, refetchFlow }),
@@ -201,6 +216,11 @@ function LoadedBuilder({ flow, manifests, refetch, refreshError }: LoadedProps) 
         {refreshError && (
           <MessageBar intent="warning" role="status" className="builder-banner" actions={<Button size="sm" onClick={() => void refetch()}>Try again</Button>}>
             Could not refresh this flow from the server ({refreshError}). You can keep editing.
+          </MessageBar>
+        )}
+        {moving && (
+          <MessageBar intent="info" role="status" className="builder-banner" actions={<Button size="sm" onClick={() => setActivePoint(null)}>Cancel</Button>}>
+            Moving “{moving}”: choose a + on the canvas (Tab to it, then Enter) to place the step there.
           </MessageBar>
         )}
         {autosave.status === 'conflict' && (

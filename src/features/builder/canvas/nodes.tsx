@@ -27,9 +27,15 @@ function IssueDot({ id }: { id: string }) {
   const list = issues.get(id) ?? [];
   const errors = list.filter((i) => i.severity === 'error').length;
   if (list.length === 0) return null;
+  const warnings = list.length - errors;
+  const said = [errors ? `${errors} error${errors === 1 ? '' : 's'}` : '', warnings ? `${warnings} warning${warnings === 1 ? '' : 's'}` : '']
+    .filter(Boolean)
+    .join(', ');
   return (
     <span className={`node-issues ${errors ? 'node-issues-error' : 'node-issues-warning'}`} title={list.map((i) => i.message).join('\n')}>
-      {list.length}
+      {/* Errors are marked by shape (!) as well as colour. */}
+      <span aria-hidden="true">{errors ? `!${list.length}` : list.length}</span>
+      <span className="sr-only">{said}</span>
     </span>
   );
 }

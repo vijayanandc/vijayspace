@@ -87,6 +87,7 @@ a.row-title:hover { color: var(--brand); }
 
 /* ---------- Toasts (Fluent, top-right) ---------- */
 .toasts { position: fixed; z-index: 1000; top: calc(var(--header-h) + 64px); right: 16px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toast-region { display: flex; flex-direction: column; gap: 8px; }
 .toast {
   display: flex; align-items: flex-start; gap: 12px; width: 360px; padding: 12px 8px 12px 14px;
   border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-28); pointer-events: auto;

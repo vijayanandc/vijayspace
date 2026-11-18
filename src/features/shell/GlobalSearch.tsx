@@ -61,6 +61,7 @@ export function GlobalSearch() {
         role="combobox"
         aria-expanded={open}
         aria-controls={listId}
+        aria-activedescendant={open && results[active] ? `${listId}-${active}` : undefined}
         aria-autocomplete="list"
         autoComplete="off"
       />
@@ -71,6 +72,7 @@ export function GlobalSearch() {
           {results.map((f, i) => (
             <div
               key={f.id}
+              id={`${listId}-${i}`}
               role="option"
               aria-selected={i === active}
               className={`search-result${i === active ? ' search-result-active' : ''}`}

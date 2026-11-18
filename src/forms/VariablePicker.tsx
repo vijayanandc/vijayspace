@@ -22,7 +22,13 @@ function NodeRow({ node, depth, q, onPick }: { node: VarNode; depth: number; q: 
     <li>
       <div className="var-row" style={{ paddingLeft: depth * 12 }}>
         {hasChildren ? (
-          <button type="button" className="var-toggle" aria-label={expanded ? 'Collapse' : 'Expand'} onClick={() => setOpen(!expanded)}>
+          <button
+            type="button"
+            className="var-toggle"
+            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${node.label}`}
+            aria-expanded={expanded}
+            onClick={() => setOpen(!expanded)}
+          >
             {expanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
           </button>
         ) : (

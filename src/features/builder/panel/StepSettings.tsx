@@ -1,6 +1,6 @@
 // "Settings" tab of a step: the key (with safe rename), error handling for actions, and delete.
 
-import { Trash2 } from 'lucide-react';
+import { Move, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import type { ActionStep, Step } from '../../../api/types';
@@ -49,7 +49,7 @@ function ErrorHandling({ step }: { step: ActionStep }) {
 }
 
 export function StepSettings({ step, onRenamed }: { step: Step; onRenamed: (key: string) => void }) {
-  const { def, apply, select, deleteStep } = useBuilder();
+  const { def, apply, select, deleteStep, startMove } = useBuilder();
   const [key, setKey] = useState(step.key);
   const [keyError, setKeyError] = useState<string | null>(null);
   const commitKey = () => {
@@ -70,6 +70,19 @@ export function StepSettings({ step, onRenamed }: { step: Step; onRenamed: (key:
         </Field>
       </section>
       {step.type === 'action' && <ErrorHandling step={step} />}
+      <section className="panel-section">
+        <h3 className="section-title">Move</h3>
+        <p className="field-help">Place this step somewhere else without dragging: choose Move, then a + on the canvas.</p>
+        <Button
+          icon={Move}
+          onClick={() => {
+            startMove(step.key);
+            document.querySelector<HTMLElement>('.insert-node[role="button"]')?.focus();
+          }}
+        >
+          Move to…
+        </Button>
+      </section>
       <section className="panel-section">
         <h3 className="section-title">Delete</h3>
         <p className="field-help">Removes this step{step.type === 'decision' ? ' and every step inside its branches' : ''}. You can undo with Ctrl+Z.</p>
