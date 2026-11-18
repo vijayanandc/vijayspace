@@ -13,6 +13,7 @@ const ConnectionsPage = lazy(() => import('./features/connections').then((m) => 
 const FlowsPage = lazy(() => import('./features/flows').then((m) => ({ default: m.FlowsPage })));
 const ExecutionPage = lazy(() => import('./features/history').then((m) => ({ default: m.ExecutionPage })));
 const HistoryPage = lazy(() => import('./features/history').then((m) => ({ default: m.HistoryPage })));
+const PlatformPage = lazy(() => import('./features/platform').then((m) => ({ default: m.PlatformPage })));
 const RecipesPage = lazy(() => import('./features/recipes').then((m) => ({ default: m.RecipesPage })));
 const SettingsPage = lazy(() => import('./features/settings').then((m) => ({ default: m.SettingsPage })));
 
@@ -30,6 +31,7 @@ export function App() {
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/history/:executionId" element={<ExecutionPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/platform" element={<PlatformPage />} />
           <Route path="*" element={<Navigate to="/flows" replace />} />
         </Route>
       </Routes>

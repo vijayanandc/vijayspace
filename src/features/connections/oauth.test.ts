@@ -9,11 +9,13 @@ describe('OAuth return paths', () => {
     expect(oauthReturnUrl('http://localhost:5173', undefined, 'org_a')).toBe('http://localhost:5173/connections/callback?org=org_a');
   });
 
-  it('follows only https sign-in pages (or this app)', () => {
+  it('follows only https sign-in pages, this app, or a test double on this machine', () => {
     const here = 'http://127.0.0.1:3000/connections';
     expect(signInUrlAllowed('https://accounts.zoho.com/oauth/v2/auth?x=1', here)).toBe(true);
     expect(signInUrlAllowed('#signin', here)).toBe(true);
-    for (const bad of ['javascript:alert(1)', 'http://evil.example/auth', 'data:text/html,hi', '']) {
+    expect(signInUrlAllowed('http://127.0.0.1:9200/oauth/v2/auth', 'https://app.weft.test/x')).toBe(true);
+    expect(signInUrlAllowed('http://localhost:9200/oauth/v2/auth', 'https://app.weft.test/x')).toBe(true);
+    for (const bad of ['javascript:alert(1)', 'http://evil.example/auth', 'http://127.0.0.1.evil.example/auth', 'data:text/html,hi', '']) {
       expect(signInUrlAllowed(bad, 'https://app.weft.test/x')).toBe(false);
     }
   });

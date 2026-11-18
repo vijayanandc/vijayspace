@@ -145,12 +145,12 @@ export function SessionProvider({ me, signedIn, signOut, children }: Props) {
   );
 }
 
-/** For tests: a session with one org and the given role. */
-export function TestSession({ role, children, userId = 'usr_me' }: { role: Role; children: ReactNode; userId?: string }) {
+/** For tests: a session with one org and the given role (`staff`: an owner or admin of the operator's default org). */
+export function TestSession({ role, children, userId = 'usr_me', staff = false }: { role: Role; children: ReactNode; userId?: string; staff?: boolean }) {
   const org: Membership = {
     id: 'org_test', name: 'Test org', timezone: 'UTC', retention_days: null, retention_days_effective: 30, retention_days_default: 30, role,
   };
-  const me: Me = { user: { id: userId, email: 'me@example.com', email_verified: true, name: 'Me', created_at: '' }, orgs: [org], invitations: [], staff: false, can_create_orgs: true };
+  const me: Me = { user: { id: userId, email: 'me@example.com', email_verified: true, name: 'Me', created_at: '' }, orgs: [org], invitations: [], staff, can_create_orgs: true };
   const value: Session = { me, org, signedIn: true, switchOrg: () => undefined, signOut: () => undefined };
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

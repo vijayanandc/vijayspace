@@ -44,7 +44,7 @@ src/test/               render helper, fixtures (tests only)
 | `lib` | `lib` (and React for small hooks) |
 | tests (`*.test.ts(x)`) | anything their layer may, plus `src/test` |
 
-Feature dependencies form a tree, never a cycle (checked). Today: every feature uses `auth` (session, role, `can`); `builder` and `recipes` use `connections` (ConnectionDialog, ConnectionPicker); `history` uses `settings` (retention note); `App.tsx` uses every feature. When two features need the same thing, move it **down** (pure logic → `domain`, FieldSpec inputs → `forms`, presentational UI → `components`, helpers → `lib`) or pass it as a prop. Never import another feature's internal file.
+Feature dependencies form a tree, never a cycle (checked). Today: every feature uses `auth` (session, role, `can`); `builder` and `recipes` use `connections` (ConnectionDialog, ConnectionPicker); `history` uses `settings` (retention note); `platform` (staff: servers, queue lag, alerts) uses only `auth`; `App.tsx` uses every feature. When two features need the same thing, move it **down** (pure logic → `domain`, FieldSpec inputs → `forms`, presentational UI → `components`, helpers → `lib`) or pass it as a prop. Never import another feature's internal file.
 
 ## Map
 | Need to… | Go to |
@@ -58,7 +58,7 @@ Feature dependencies form a tree, never a cycle (checked). Today: every feature 
 | Dynamic forms | `forms/DynamicForm.tsx` (`FieldInput` switch), mapping input, variable picker, `CodeEditor` |
 | UI primitives | `components/` |
 | App shell | `features/shell/` (header, global search, nav rail in `nav.ts`, org switcher) |
-| Flows list / history / connections (usage, limits, OAuth) / recipes / settings | `features/{flows,history,connections,recipes,settings}/` |
+| Flows list / history / connections (usage, limits, OAuth) / recipes / settings / platform (staff) | `features/{flows,history,connections,recipes,settings,platform}/` |
 
 **Sign-in:** `AuthRoot` reads `/api/v1/auth/config`: Logto on, or sign-in off for local development. `LogtoGate` finishes the callback, registers the token hooks on the API client and handles sign-out (it waits for draft saves; afterwards requests fail with `auth.unavailable`). `session.tsx` holds the current org; switches are two-phase (the page closes and its draft save finishes first). `permissions.ts` mirrors the server's role matrix. Plain-HTTP origins: `webCrypto.ts` (SHA-256 fallback) and `logtoClient.ts` (ID tokens checked by claims).
 **OAuth connections:** `connections/oauth.ts` builds `return_to` (with `next` and the starting `org`); the provider's answer comes back as `?status=finish`, and `ConnectionCallbackPage` finishes it once with `endpoints.oauthFinish` in that org.

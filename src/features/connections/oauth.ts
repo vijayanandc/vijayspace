@@ -17,15 +17,19 @@ export function oauthReturnUrl(origin: string, next?: string, org?: string | nul
   return `${origin}${OAUTH_RETURN_PATH}${q ? `?${q}` : ''}`;
 }
 
+const LOOPBACK = new Set(['127.0.0.1', '[::1]', 'localhost']);
+
 /**
- * Whether the browser may be sent to `url` to sign in to an app: an https page, or this app itself. The URL comes
- * from the server; checking it keeps a `javascript:` or plain-http address from ever being followed.
+ * Whether the browser may be sent to `url` to sign in to an app: an https page, this app itself, or a plain-http
+ * page on this machine (a local test double of the app, e.g. the backend's `scripts/zoho_mock.py`). The URL comes
+ * from the server; checking it keeps a `javascript:` or plain-http address elsewhere from ever being followed.
  */
 export function signInUrlAllowed(url: string, here: string = window.location.href): boolean {
   if (!url.trim()) return false;
   try {
     const target = new URL(url, here);
-    return target.protocol === 'https:' || target.origin === new URL(here).origin;
+    if (target.protocol === 'https:' || target.origin === new URL(here).origin) return true;
+    return target.protocol === 'http:' && LOOPBACK.has(target.hostname);
   } catch {
     return false;
   }

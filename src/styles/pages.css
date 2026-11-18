@@ -113,6 +113,22 @@
   .run-log-step { margin-left: 0; }
 }
 
+/* ---------- Platform (staff) ---------- */
+.ops-ok { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--success); }
+.ops-alerts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ops-alert { display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--stroke); border-left-width: 3px; border-radius: var(--radius); }
+.ops-alert > svg { flex: none; margin-top: 2px; }
+.ops-alert p { margin: 2px 0 0; }
+.ops-critical { border-left-color: var(--danger); }
+.ops-critical > svg { color: var(--danger); }
+.ops-warning { border-left-color: var(--warning); }
+.ops-warning > svg { color: var(--warning); }
+.ops-counts { margin: 0 0 12px; border-radius: var(--radius); }
+.settings-link { display: flex; align-items: center; gap: 12px; color: var(--text); text-decoration: none; }
+.settings-link:hover { background: var(--surface-hover); text-decoration: none; }
+.settings-link > span { flex: 1; display: flex; flex-direction: column; }
+.settings-link svg { color: var(--text-2); }
+
 /* ---------- JSON view ---------- */
 .json-view { margin: 6px 0; border: 1px solid var(--stroke); border-radius: var(--radius); background: var(--surface); }
 .json-view-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 8px 0 4px; min-height: 30px; }
