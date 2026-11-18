@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use uuid::Uuid;
-use weft_domain::permissions::Permission;
 
 use crate::{
     AppError, Deps,
@@ -152,12 +151,7 @@ pub async fn status(deps: &Deps, actor: &Actor) -> Result<OpsStatus, AppError> {
 
 /// Staff are owners and admins of the default org (the operator's own org).
 pub fn require_staff(deps: &Deps, actor: &Actor) -> Result<(), AppError> {
-    if actor.org != deps.config.default_org_id {
-        return Err(AppError::forbidden(
-            "Only the operator's staff can see this",
-        ));
-    }
-    actor.require(Permission::OrgManage)
+    crate::tenancy::staff::require_staff(deps, actor)
 }
 
 #[cfg(test)]

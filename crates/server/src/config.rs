@@ -36,6 +36,10 @@ pub struct Settings {
     /// Database connections for this process (`WEFT_DB_POOL_SIZE`).
     pub db_pool_size: u32,
     pub oauth_clients: HashMap<String, OAuthClient>,
+    /// Connector settings (`WEFT_ZOHO_ACCOUNTS_URL`).
+    pub connector_options: weft_connectors::ConnectorOptions,
+    /// `WEFT_ORG_CREATION`: `staff` (default) or `anyone`.
+    pub org_creation: weft_app::tenancy::staff::OrgCreation,
 }
 
 /// `WEFT_RETENTION_DAYS`: 1..=30 (the platform cap), default 30.
@@ -46,6 +50,32 @@ fn retention_days(value: Option<&str>) -> Result<u32, String> {
             .filter(|d| (1..=weft_app::retention::MAX_DAYS).contains(d))
             .ok_or_else(|| "WEFT_RETENTION_DAYS must be a number of days from 1 to 30".to_owned())
     })
+}
+
+/// `WEFT_ZOHO_ACCOUNTS_URL`: a Zoho accounts server to use instead of Zoho's (testing against a mock). It
+/// receives the OAuth client secret, so it must be HTTPS unless it is on this machine.
+fn zoho_accounts_url(value: Option<String>) -> Result<Option<String>, String> {
+    let Some(raw) = value else {
+        return Ok(None);
+    };
+    let authority = |rest: &str| rest.split('/').next().unwrap_or_default().to_owned();
+    let ok = match (raw.strip_prefix("https://"), raw.strip_prefix("http://")) {
+        (Some(rest), _) => !authority(rest).is_empty() && !authority(rest).contains('@'),
+        (None, Some(rest)) => {
+            !authority(rest).contains('@') && crate::auth_settings::is_loopback(&authority(rest))
+        }
+        (None, None) => false,
+    };
+    if !ok {
+        return Err(format!(
+            "WEFT_ZOHO_ACCOUNTS_URL must be an https URL, or http on this machine: `{raw}`"
+        ));
+    }
+    tracing::warn!(
+        url = %raw,
+        "Zoho sign-in and tokens use WEFT_ZOHO_ACCOUNTS_URL instead of Zoho (testing only)"
+    );
+    Ok(Some(raw.trim_end_matches('/').to_owned()))
 }
 
 /// `WEFT_SCRIPT_MEMORY_MB`: 64..=65536, default 512.
@@ -151,6 +181,18 @@ impl Settings {
             worker_concurrency,
             db_pool_size,
             oauth_clients,
+            connector_options: weft_connectors::ConnectorOptions {
+                zoho_accounts_url: zoho_accounts_url(var("WEFT_ZOHO_ACCOUNTS_URL"))?,
+            },
+            org_creation: match var("WEFT_ORG_CREATION").as_deref() {
+                None | Some("staff") => weft_app::tenancy::staff::OrgCreation::Staff,
+                Some("anyone") => weft_app::tenancy::staff::OrgCreation::Anyone,
+                Some(other) => {
+                    return Err(format!(
+                        "WEFT_ORG_CREATION must be `staff` or `anyone`, not `{other}`"
+                    ));
+                }
+            },
         })
     }
 }
@@ -170,6 +212,24 @@ fn master_keys(
         )),
         _ => Err("set both WEFT_MASTER_KEYS and WEFT_ACTIVE_KEY_ID".into()),
     }
+}
+
+#[cfg(test)]
+#[test]
+fn a_zoho_accounts_override_is_https_or_on_this_machine() {
+    let ok = |v: &str| zoho_accounts_url(Some(v.to_owned()));
+    assert_eq!(
+        ok("http://127.0.0.1:9200/").unwrap().as_deref(),
+        Some("http://127.0.0.1:9200")
+    );
+    assert!(ok("https://accounts.zoho.example").is_ok());
+    assert!(
+        ok("http://zoho.example.com").is_err(),
+        "the client secret never goes out in clear text"
+    );
+    assert!(ok("http://user@127.0.0.1:9200").is_err());
+    assert!(ok("ftp://127.0.0.1").is_err());
+    assert_eq!(zoho_accounts_url(None).unwrap(), None);
 }
 
 /// A whole number in `min..=max`, or `default` when unset.

@@ -20,6 +20,10 @@ pub struct MeView {
     pub user: Option<User>,
     pub orgs: Vec<Membership>,
     pub invitations: Vec<Invitation>,
+    /// Owner or admin of the default org (the operator's staff).
+    pub staff: bool,
+    /// Whether this user may create an organisation (staff only unless `WEFT_ORG_CREATION=anyone`).
+    pub can_create_orgs: bool,
 }
 
 pub async fn me(deps: &Deps, user: Option<&User>) -> Result<MeView, AppError> {
@@ -36,6 +40,8 @@ pub async fn me(deps: &Deps, user: Option<&User>) -> Result<MeView, AppError> {
                 role: Role::Owner,
             }],
             invitations: Vec::new(),
+            staff: true,
+            can_create_orgs: false,
         });
     };
     // Picks up an owner email added to the configuration after the user first signed in.
@@ -50,9 +56,12 @@ pub async fn me(deps: &Deps, user: Option<&User>) -> Result<MeView, AppError> {
             .collect(),
         None => Vec::new(),
     };
+    let orgs = deps.store.memberships(user.id).await?;
     Ok(MeView {
         user: Some(user.clone()),
-        orgs: deps.store.memberships(user.id).await?,
+        staff: super::staff::is_staff(deps, &orgs),
+        can_create_orgs: super::staff::may_create_orgs(deps, &orgs),
+        orgs,
         invitations,
     })
 }
@@ -94,7 +103,13 @@ pub async fn create_org(
     };
     let name = checked_name(name)?;
     let timezone = checked_timezone(timezone.unwrap_or("UTC"))?;
-    if deps.store.memberships(user.id).await?.len() >= MAX_ORGS_PER_USER {
+    let memberships = deps.store.memberships(user.id).await?;
+    if !super::staff::may_create_orgs(deps, &memberships) {
+        return Err(AppError::forbidden(
+            "Organisations are set up by the operator's staff: ask your administrator for an invitation",
+        ));
+    }
+    if memberships.len() >= MAX_ORGS_PER_USER {
         return Err(AppError::validation(
             error_codes::VALIDATION_FAILED,
             format!("You can belong to at most {MAX_ORGS_PER_USER} organisations"),

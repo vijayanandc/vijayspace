@@ -88,7 +88,14 @@ pub async fn sync_registration(
                     let secs = app
                         .poll_interval_secs
                         .map_or(default, |s| i64::from(s).max(60));
-                    reg.next_fire_at = Some(now + Duration::seconds(secs));
+                    // A trigger with no cursor yet polls at once: its first poll records where changes
+                    // start, so nothing changed after the flow was switched on is missed.
+                    let fresh = reg.state.get("cursor").is_none_or(Value::is_null);
+                    reg.next_fire_at = Some(if fresh {
+                        now
+                    } else {
+                        now + Duration::seconds(secs)
+                    });
                 }
             }
             TriggerNode::Webhook(_) | TriggerNode::Manual => {}

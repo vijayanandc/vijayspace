@@ -41,7 +41,8 @@ The run appears under **History** with each step's input and output.
 | `WEFT_LOGTO_RESOURCE` | none | An API resource: the client then gets JWTs, verified locally (JWKS, `iss`, `aud`); without it, opaque tokens are introspected |
 | `WEFT_LOGTO_SCOPES` | `openid,profile,email` | Scopes an opaque token must carry (the client also asks for `offline_access`) |
 | `WEFT_LOGTO_CACHE_SECS` | `300` | How long a checked token is trusted before Logto is asked again (never past its expiry) |
-| `WEFT_OWNER_EMAILS` | none | Verified emails that become owners of the default org when they sign in (comma-separated) |
+| `WEFT_OWNER_EMAILS` | none | Verified emails that become owners of the default org when they sign in (comma-separated). Owners and admins of the default org are the operator's **staff**. |
+| `WEFT_ORG_CREATION` | `staff` | Who may create organisations: `staff`, or `anyone` signed in. The Logto tenant is shared with other apps, so keep `staff`: staff set up each customer's org and invite its people. |
 | `WEFT_APP_URL` | `http://127.0.0.1:3000` | Where people open Weft (links in invitation emails) |
 | `WEFT_MASTER_KEYS`, `WEFT_ACTIVE_KEY_ID` | development key on a loopback `WEFT_BIND` only | `id:base64key,…` for encrypting connection secrets. Required otherwise: the server does not start without them. |
 | `WEFT_ALLOW_PRIVATE_NETWORKS` | `false` | Let HTTP steps reach private/loopback addresses (local testing only) |
@@ -55,10 +56,11 @@ The run appears under **History** with each step's input and output.
 | `WEFT_SCRIPT_MEMORY_MB` | `512` | Memory a custom-function process may use (64–65536; its 64 MB stack comes on top) |
 | `WEFT_OAUTH_ZOHO_CRM_CLIENT_ID` / `_SECRET` | — | Zoho CRM OAuth app (redirect URI: `<public url>/oauth/callback`) |
 | `WEFT_OAUTH_AUTODESK_FORMA_CLIENT_ID` / `_SECRET` | — | Autodesk APS app (same redirect URI) |
+| `WEFT_ZOHO_ACCOUNTS_URL` | Zoho's data centres | **Testing only:** the one Zoho accounts server for sign-in and tokens, e.g. `scripts/zoho_mock.py` on `http://127.0.0.1:9200`. Must be HTTPS unless on this machine (it receives the client secret). |
 
 The binary has subcommands: `weft serve` (API + worker), `weft api`, `weft worker` and `weft migrate`.
 
-Authentication is not wired yet (Logto is planned, doc 13 §6). Every request runs as the default org, or as the org in the `X-Org-ID` header. **Do not expose this server to the internet.**
+Sign-in is through Logto (doc 13 §6): every request carries a Logto access token and acts in the org named by its `X-Org-ID` header. `WEFT_AUTH=off` turns sign-in off for local development only: every request then acts as an owner, and the server refuses to start unless it listens on a loopback address. See [`docs/operations.md`](docs/operations.md) for running it in production.
 
 ## Develop
 ```sh

@@ -18,6 +18,7 @@ mod lifecycle;
 mod limits;
 mod oauth;
 mod order_alert;
+mod polling;
 mod recipes;
 mod retention;
 mod roles;

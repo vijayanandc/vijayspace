@@ -272,9 +272,9 @@ Roles: `owner | admin | member | viewer`. The matrix (doc 08 §2): owners do eve
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | GET | `/api/v1/auth/config` | — (public) | `{sign_in: {endpoint, app_id, resource, scopes} \| null}`. `null` = sign-in turned off. The client signs in with Logto (`app_id` is the web app; `resource` null = opaque tokens). |
-| GET | `/api/v1/me` | — (no X-Org-ID) | `{user: {id, email, email_verified, name, created_at} \| null, orgs: OrgMembership[], invitations: Invitation[]}`. A user is created on first sign-in; `WEFT_OWNER_EMAILS` own the default org. |
+| GET | `/api/v1/me` | — (no X-Org-ID) | `{user: {id, email, email_verified, name, created_at} \| null, orgs: OrgMembership[], invitations: Invitation[], staff, can_create_orgs}`. A user is created on first sign-in; `WEFT_OWNER_EMAILS` own the default org. `staff`: an owner or admin of the default org. `can_create_orgs`: staff only, unless the server sets `WEFT_ORG_CREATION=anyone`. With sign-in off it is false. |
 | GET | `/api/v1/orgs` | — | `OrgMembership[]` (org settings as in `GET /org`, plus `role`) |
-| POST | `/api/v1/orgs` | `{name (1–120), timezone? (IANA, default UTC)}` | 201 `OrgMembership` (the caller is its owner) |
+| POST | `/api/v1/orgs` | `{name (1–120), timezone? (IANA, default UTC)}` | 201 `OrgMembership` (the caller is its owner). 403 `auth.forbidden` unless `can_create_orgs`: staff set up each customer's org and invite its people. |
 | POST | `/api/v1/me/invitations/{id}/accept` | — | `OrgMembership`. Only with a **verified** email equal to the invited address (else 404; unverified email 403). An existing membership keeps its role. |
 | POST | `/api/v1/me/invitations/{id}/decline` | — | 204 |
 | GET | `/api/v1/members` | — | `[{org_id, user, role, joined_at}]` (any member) |

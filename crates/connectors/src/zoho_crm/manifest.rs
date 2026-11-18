@@ -99,9 +99,13 @@ fn triggers() -> Vec<TriggerSpec> {
     ]
 }
 
-pub(super) fn manifest() -> ConnectorManifest {
+/// The manifest; `accounts`: the operator's accounts server override (testing), else Zoho's (US) sign-in page.
+pub(super) fn manifest(accounts: Option<&str>) -> ConnectorManifest {
     let oauth2 = OAuth2Spec {
-        authorize_url: "https://accounts.zoho.com/oauth/v2/auth".into(),
+        authorize_url: format!(
+            "{}/oauth/v2/auth",
+            accounts.unwrap_or("https://accounts.zoho.com")
+        ),
         token_url: "{{ config.accounts_server }}/oauth/v2/token".into(),
         scopes: [
             "ZohoCRM.modules.ALL",

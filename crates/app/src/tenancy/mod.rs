@@ -6,6 +6,7 @@ pub mod invitations;
 pub mod members;
 pub mod orgs;
 pub mod session;
+pub mod staff;
 
 pub use actor::Actor;
 pub use session::{actor, normalize_email, signed_in};

@@ -16,15 +16,32 @@ pub(crate) mod list_cursor;
 mod util;
 pub mod zoho_crm;
 
+/// Operator settings some connectors take.
+#[derive(Debug, Clone, Default)]
+pub struct ConnectorOptions {
+    /// Zoho accounts server to use instead of Zoho's (`WEFT_ZOHO_ACCOUNTS_URL`; testing against a mock).
+    pub zoho_accounts_url: Option<String>,
+}
+
 /// Every built-in connector, in catalog order.
 #[must_use]
 pub fn builtin_connectors() -> Vec<Arc<dyn Connector>> {
+    builtin_connectors_with(&ConnectorOptions::default())
+}
+
+/// Every built-in connector, with operator settings.
+#[must_use]
+pub fn builtin_connectors_with(options: &ConnectorOptions) -> Vec<Arc<dyn Connector>> {
+    let zoho = options.zoho_accounts_url.as_deref().map_or_else(
+        zoho_crm::ZohoCrmConnector::new,
+        zoho_crm::ZohoCrmConnector::with_accounts_server,
+    );
     vec![
         Arc::new(core::http::HttpConnector::new()),
         Arc::new(core::formatter::FormatterConnector::new()),
         Arc::new(core::email::EmailConnector::new()),
         Arc::new(core::script::ScriptConnector::new()),
-        Arc::new(zoho_crm::ZohoCrmConnector::new()),
+        Arc::new(zoho),
         Arc::new(appblocks::AppblocksConnector::new()),
         Arc::new(autodesk_forma::FormaConnector::new()),
     ]

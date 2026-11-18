@@ -1,4 +1,5 @@
-//! `zoho_crm` OAuth callback: the accounts server (which receives the client secret) is allowlisted.
+//! `zoho_crm` OAuth callback: the accounts server (which receives the client secret) is allowlisted, or is the
+//! operator's override (`WEFT_ZOHO_ACCOUNTS_URL`, testing against a mock) and nothing else.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::BTreeMap;
@@ -37,5 +38,29 @@ fn oauth_callback_only_accepts_zoho_accounts_servers() {
     assert_eq!(
         zoho.oauth_callback_config(&BTreeMap::new())["accounts_server"],
         "https://accounts.zoho.com"
+    );
+}
+
+#[test]
+fn an_operator_accounts_override_is_the_only_accounts_server_used() {
+    let zoho = ZohoCrmConnector::with_accounts_server("http://127.0.0.1:9200/");
+    let spec = zoho.manifest().auth.oauth2.as_ref().unwrap();
+    assert_eq!(spec.authorize_url, "http://127.0.0.1:9200/oauth/v2/auth");
+    for server in ["https://accounts.zoho.eu", "https://attacker.example"] {
+        let query = BTreeMap::from([("accounts-server".to_owned(), server.to_owned())]);
+        assert_eq!(
+            zoho.oauth_callback_config(&query)["accounts_server"],
+            "http://127.0.0.1:9200"
+        );
+    }
+    assert_eq!(
+        ZohoCrmConnector::new()
+            .manifest()
+            .auth
+            .oauth2
+            .as_ref()
+            .unwrap()
+            .authorize_url,
+        "https://accounts.zoho.com/oauth/v2/auth"
     );
 }

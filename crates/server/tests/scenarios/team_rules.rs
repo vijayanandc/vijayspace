@@ -1,5 +1,5 @@
-//! Membership rules through the real API: an org always keeps an owner, anyone may leave, and
-//! viewers see runs without their data (doc 08 §2).
+//! Membership rules through the real API: an org always keeps an owner, anyone may leave, viewers see runs
+//! without their data (doc 08 §2), and only staff create organisations.
 
 use serde_json::json;
 
@@ -227,5 +227,82 @@ async fn an_invitation_matches_its_exact_address_only() {
         )
         .await;
     assert_eq!(status.as_u16(), 404);
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn only_staff_create_organisations_by_default() {
+    let app = TestApp::spawn_staff_only().await;
+    let idp = app.idp.as_ref().unwrap();
+    idp.issue("eve", "eve@example.com", "Eve");
+    idp.issue("staff", "owner@weft.test", "Owner");
+    // Someone from another app on the shared sign-in tenant: no org, no way to make one.
+    let (_, me) = app.req_as("eve", None, "GET", "/api/v1/me", None).await;
+    assert_eq!(
+        (me["staff"].clone(), me["can_create_orgs"].clone()),
+        (json!(false), json!(false)),
+        "{me}"
+    );
+    let (status, body) = app
+        .req_as(
+            "eve",
+            None,
+            "POST",
+            "/api/v1/orgs",
+            Some(json!({"name": "Eve's"})),
+        )
+        .await;
+    assert_eq!(
+        (status.as_u16(), body["code"].as_str()),
+        (403, Some("auth.forbidden")),
+        "{body}"
+    );
+    // Staff (an owner of the default org) set up the customer's org and invite its people.
+    let (_, me) = app.req_as("staff", None, "GET", "/api/v1/me", None).await;
+    assert_eq!(
+        (me["staff"].clone(), me["can_create_orgs"].clone()),
+        (json!(true), json!(true)),
+        "{me}"
+    );
+    let (status, org) = app
+        .req_as(
+            "staff",
+            None,
+            "POST",
+            "/api/v1/orgs",
+            Some(json!({"name": "Acme"})),
+        )
+        .await;
+    assert_eq!(status.as_u16(), 201, "{org}");
+    let acme = org["id"].as_str().unwrap();
+    let (status, _) = app
+        .req_as(
+            "staff",
+            Some(acme),
+            "POST",
+            "/api/v1/invitations",
+            Some(json!({"email": "eve@example.com", "role": "admin"})),
+        )
+        .await;
+    assert_eq!(status.as_u16(), 201);
+    let (_, me) = app.req_as("eve", None, "GET", "/api/v1/me", None).await;
+    let invitation = me["invitations"][0]["id"].as_str().unwrap().to_owned();
+    let (status, _) = app
+        .req_as(
+            "eve",
+            None,
+            "POST",
+            &format!("/api/v1/me/invitations/{invitation}/accept"),
+            None,
+        )
+        .await;
+    assert_eq!(status.as_u16(), 200);
+    // An admin of a customer org is not staff: still no new orgs, and no platform status.
+    let (_, me) = app.req_as("eve", None, "GET", "/api/v1/me", None).await;
+    assert_eq!(me["can_create_orgs"], false, "{me}");
+    let (status, _) = app
+        .req_as("eve", Some(acme), "GET", "/api/v1/ops/status", None)
+        .await;
+    assert_eq!(status.as_u16(), 403);
     app.cleanup().await;
 }

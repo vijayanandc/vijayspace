@@ -61,6 +61,8 @@ async fn me(State(s): State<ApiState>, SignedIn(user): SignedIn) -> ApiResult<Js
         "user": view.user,
         "orgs": memberships,
         "invitations": view.invitations,
+        "staff": view.staff,
+        "can_create_orgs": view.can_create_orgs,
     })))
 }
 

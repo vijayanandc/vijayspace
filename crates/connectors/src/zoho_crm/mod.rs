@@ -33,13 +33,27 @@ pub(crate) const ACCOUNTS_SERVERS: [&str; 9] = [
 #[derive(Debug)]
 pub struct ZohoCrmConnector {
     manifest: ConnectorManifest,
+    /// The only accounts server used, instead of Zoho's data centres (testing against a mock).
+    accounts_override: Option<String>,
 }
 
 impl ZohoCrmConnector {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            manifest: manifest::manifest(),
+            manifest: manifest::manifest(None),
+            accounts_override: None,
+        }
+    }
+
+    /// Signs in and gets tokens at `accounts` only (an operator setting, for testing against a Zoho mock):
+    /// the authorize page is `{accounts}/oauth/v2/auth` and no other accounts server is accepted.
+    #[must_use]
+    pub fn with_accounts_server(accounts: &str) -> Self {
+        let accounts = accounts.trim_end_matches('/').to_owned();
+        Self {
+            manifest: manifest::manifest(Some(&accounts)),
+            accounts_override: Some(accounts),
         }
     }
 }
@@ -316,7 +330,10 @@ impl Connector for ZohoCrmConnector {
 
     fn oauth_callback_config(&self, query: &BTreeMap<String, String>) -> Value {
         // The token request carries the platform's client secret, so the accounts server must
-        // be one of Zoho's own data centres, never whatever the callback URL says.
+        // be one of Zoho's own data centres (or the operator's override), never whatever the callback URL says.
+        if let Some(only) = &self.accounts_override {
+            return json!({"accounts_server": only, "location": query.get("location")});
+        }
         let accounts = query
             .get("accounts-server")
             .map(|s| s.trim_end_matches('/'))

@@ -12,7 +12,10 @@ use serde_json::{Value, json};
 use sqlx::Executor as _;
 use tokio::sync::Notify;
 use tower::ServiceExt as _;
-use weft_app::{AppConfig, Deps, connections::handle::RefreshLocks, runner::plan_cache::PlanCache};
+use weft_app::{
+    AppConfig, Deps, connections::handle::RefreshLocks, runner::plan_cache::PlanCache,
+    tenancy::staff::OrgCreation,
+};
 use weft_connector_sdk::testing::CapturingMailer;
 use weft_domain::ids::OrgId;
 use weft_http::{ReqwestSender, SsrfPolicy};
@@ -42,16 +45,21 @@ pub struct TestApp {
 impl TestApp {
     /// Sign-in turned off: every request acts as an owner of the default org.
     pub async fn spawn() -> Self {
-        Self::build(None).await
+        Self::build(None, OrgCreation::Anyone).await
     }
 
     /// Sign-in turned on with an in-process identity provider (`owner@weft.test` becomes an owner
     /// of the default org when it signs in).
     pub async fn spawn_signed_in() -> Self {
-        Self::build(Some(FakeIdentityProvider::default())).await
+        Self::build(Some(FakeIdentityProvider::default()), OrgCreation::Anyone).await
     }
 
-    async fn build(idp: Option<FakeIdentityProvider>) -> Self {
+    /// Signed in, with the production default: only staff (owners and admins of the default org) create orgs.
+    pub async fn spawn_staff_only() -> Self {
+        Self::build(Some(FakeIdentityProvider::default()), OrgCreation::Staff).await
+    }
+
+    async fn build(idp: Option<FakeIdentityProvider>, org_creation: OrgCreation) -> Self {
         let base = std::env::var("WEFT_TEST_DATABASE_URL")
             .unwrap_or_else(|_| "mysql://weft:weft@127.0.0.1:3306".into());
         let db = format!("weft_test_{}", uuid::Uuid::new_v4().simple());
@@ -125,6 +133,7 @@ impl TestApp {
                     "http://app.weft.test".into(),
                 ],
                 owner_emails: vec!["owner@weft.test".into()],
+                org_creation,
                 sign_in: idp.as_ref().map(|_| weft_app::SignInConfig {
                     endpoint: "https://tenant.logto.test".into(),
                     app_id: "web-app".into(),

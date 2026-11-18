@@ -26,11 +26,17 @@ use crate::{
 pub const DEFAULT_ORG: uuid::Uuid =
     uuid::Uuid::from_u128(0x0190_0000_0000_7000_8000_0000_0000_0001);
 
-/// Every connector available on this server.
+/// Every connector available on this server (default settings).
 #[must_use]
 pub fn registry() -> ConnectorRegistry {
+    registry_with(&weft_connectors::ConnectorOptions::default())
+}
+
+/// Every connector available on this server, with the operator's connector settings.
+#[must_use]
+pub fn registry_with(options: &weft_connectors::ConnectorOptions) -> ConnectorRegistry {
     let mut registry = ConnectorRegistry::new();
-    for c in weft_connectors::builtin_connectors() {
+    for c in weft_connectors::builtin_connectors_with(options) {
         registry.register(c);
     }
     registry.register(Arc::new(weft_app::sync::SyncConnector::new()));
@@ -67,7 +73,7 @@ pub fn build(settings: &Settings, store: MySqlStore) -> anyhow::Result<Deps> {
         ),
         mailer: Some(mailer),
         scripts: Some(script_runner(settings)?),
-        connectors: Arc::new(registry()),
+        connectors: Arc::new(registry_with(&settings.connector_options)),
         config: Arc::new(AppConfig {
             public_url: settings.public_url.clone(),
             default_retention_days: settings.retention_days,
@@ -76,6 +82,7 @@ pub fn build(settings: &Settings, store: MySqlStore) -> anyhow::Result<Deps> {
             app_url: settings.app_url.clone(),
             client_origins: settings.client_origins.clone(),
             owner_emails: settings.owner_emails.clone(),
+            org_creation: settings.org_creation,
             sign_in: settings.sign_in.as_ref().map(|s| SignInConfig {
                 endpoint: s.endpoint.clone(),
                 app_id: s.client_app_id.clone(),
