@@ -280,4 +280,30 @@ fn rhai_dead_ends_explain_what_to_do() {
     // A limit hit inside a function is still a limit.
     let e = fail("fn spin() { loop {} } spin()");
     assert_eq!(e.code(), "script.limit_exceeded", "{e}");
+    // An error without a position of its own keeps the call's position.
+    let e = fail("let n = 0;\nfor i in range(0, 10, 0) {}");
+    assert_eq!(e.position().0, Some(2), "{e}");
+    // A closure inside a named function still names the function.
+    let e = fail("fn g(items) {\n  items.map(|x| x.nope())\n}\ng(input.items)");
+    assert!(e.to_string().contains("(in function `g`)"), "{e}");
+    assert_eq!(e.position().0, Some(2), "{e}");
+}
+
+#[test]
+fn deeply_nested_values_run_on_the_script_stack_but_results_stay_shallow() {
+    let on_script_stack = |code: &'static str| {
+        std::thread::Builder::new()
+            .stack_size(crate::STACK_BYTES)
+            .spawn(move || run(code, &json!({}), &json!({}), &Limits::default()))
+            .unwrap()
+            .join()
+            .unwrap()
+    };
+    let built = on_script_stack("let a = #{}; for i in 0..1000 { a = #{x: a}; } a.len()").unwrap();
+    assert_eq!(built.value, json!({"result": 1}));
+    let e = on_script_stack("let a = #{}; for i in 0..1000 { a = #{x: a}; } a").unwrap_err();
+    assert_eq!(e.code(), "script.limit_exceeded");
+    assert!(e.to_string().contains("nested more than 64 levels"), "{e}");
+    let ok = on_script_stack("let a = 1; for i in 0..60 { a = [a]; } a").unwrap();
+    assert!(ok.value["result"].is_array());
 }

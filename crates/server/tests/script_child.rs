@@ -50,6 +50,18 @@ async fn scripts_run_in_a_child_process() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), "script.error", "{err}");
+    // Deeply nested values need more than a default thread stack; results stay shallow.
+    let deep = "let a = #{}; for i in 0..1000 { a = #{x: a}; }";
+    let nested = runner()
+        .run(&format!("{deep} a.len()"), json!({}), json!({}))
+        .await
+        .unwrap();
+    assert_eq!(nested.output, json!({"result": 1}));
+    let err = runner()
+        .run(&format!("{deep} a"), json!({}), json!({}))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "script.limit_exceeded", "{err}");
 }
 
 #[tokio::test]

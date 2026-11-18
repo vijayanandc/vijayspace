@@ -43,14 +43,15 @@ impl MySqlStore {
         }
         let mut step_runs = 0;
         loop {
-            // Re-checked per chunk: a run retried since it was selected keeps its history.
+            // Re-checked per chunk: a run retried since it was selected keeps its history. The id
+            // list stays on the outer query so MySQL uses the `execution_id` index (a LIMIT keeps
+            // a single-table DELETE from turning `IN (SELECT …)` into a semijoin: it would scan).
             let mut qb = QueryBuilder::new("DELETE FROM step_runs WHERE org_id = ");
-            qb.push_bind(org.as_uuid())
-                .push(" AND execution_id IN (SELECT id FROM executions WHERE org_id = ")
-                .push_bind(org.as_uuid())
-                .push(" AND status IN ('succeeded', 'failed', 'cancelled') AND id IN");
+            qb.push_bind(org.as_uuid()).push(" AND execution_id IN");
             id_list(&mut qb, &ids);
-            qb.push(")");
+            qb.push(" AND EXISTS (SELECT 1 FROM executions e WHERE e.id = step_runs.execution_id AND e.org_id = ")
+                .push_bind(org.as_uuid())
+                .push(" AND e.status IN ('succeeded', 'failed', 'cancelled'))");
             qb.push(" LIMIT ").push_bind(STEP_CHUNK);
             let n = qb
                 .build()

@@ -30,7 +30,13 @@ pub fn run() -> anyhow::Result<()> {
     std::io::stdin()
         .take(MAX_REQUEST_BYTES)
         .read_to_string(&mut request)?;
-    let response = child::respond(&request, &Limits::default());
+    // A large stack for deeply nested values; a failure to start the thread is an error exit.
+    let response = std::thread::Builder::new()
+        .name("weft-script".into())
+        .stack_size(weft_script::STACK_BYTES)
+        .spawn(move || child::respond(&request, &Limits::default()))?
+        .join()
+        .map_err(|_| anyhow::anyhow!("the script thread panicked"))?;
     let mut out = std::io::stdout().lock();
     serde_json::to_writer(&mut out, &response)?;
     out.flush()?;

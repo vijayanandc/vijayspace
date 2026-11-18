@@ -110,18 +110,25 @@ impl From<ParseError> for ScriptError {
     }
 }
 
-/// An error raised inside a script function is reported as the inner error, at its own position,
-/// with the function's name (closures have no useful name).
-fn innermost(e: Box<EvalAltResult>) -> (Box<EvalAltResult>, Option<String>) {
-    let mut e = e;
+/// An error raised inside a script function is reported as the inner error, with the innermost
+/// known position and the outermost named function, i.e. the script's own `fn` rather than a
+/// built-in such as `map` it passed a closure to (closures have no useful name).
+fn innermost(e: Box<EvalAltResult>) -> (Box<EvalAltResult>, Option<String>, Position) {
+    let mut position = e.position();
     let mut function = None;
+    let mut e = e;
     while matches!(*e, EvalAltResult::ErrorInFunctionCall(..)) {
         if let EvalAltResult::ErrorInFunctionCall(name, _, inner, _) = *e {
-            function = (!name.starts_with("anon$")).then_some(name);
+            if function.is_none() && !name.starts_with("anon$") {
+                function = Some(name);
+            }
+            if !inner.position().is_none() {
+                position = inner.position();
+            }
             e = inner;
         }
     }
-    (e, function)
+    (e, function, position)
 }
 
 /// The message for an evaluation error, with a hint where Rhai's own wording leaves users stuck.
@@ -152,8 +159,8 @@ fn eval_message(e: &EvalAltResult, in_function: bool) -> String {
 
 impl From<Box<EvalAltResult>> for ScriptError {
     fn from(e: Box<EvalAltResult>) -> Self {
-        let (e, function) = innermost(e);
-        let (line, column) = pos(e.position());
+        let (e, function, position) = innermost(e);
+        let (line, column) = pos(position);
         let limit = matches!(
             *e,
             EvalAltResult::ErrorTooManyOperations(..)

@@ -61,16 +61,23 @@ impl ScriptRunner for PooledScriptRunner {
             .await
             .map_err(|_| ConnectorError::transient("the script runner is shutting down"))?;
         let (code, limits) = (code.to_owned(), self.limits.clone());
-        let joined =
-            tokio::task::spawn_blocking(move || weft_script::run(&code, &input, &context, &limits))
-                .await;
-        match joined {
+        // Its own thread with a large stack (the blocking pool's 2 MB is too small for deeply
+        // nested values); the permit above bounds how many run at once.
+        let (done, result) = tokio::sync::oneshot::channel();
+        std::thread::Builder::new()
+            .name("weft-script".into())
+            .stack_size(weft_script::STACK_BYTES)
+            .spawn(move || {
+                let _ = done.send(weft_script::run(&code, &input, &context, &limits));
+            })
+            .map_err(|e| ConnectorError::transient(format!("starting a script thread: {e}")))?;
+        match result.await {
             Ok(Ok(out)) => Ok(ScriptRun {
                 output: out.value,
                 logs: out.logs,
             }),
             Ok(Err(e)) => Err(script_error(&e)),
-            Err(e) => Err(crashed(format!("the script crashed: {e}"))),
+            Err(_) => Err(crashed("the script crashed".to_owned())),
         }
     }
 }
@@ -112,13 +119,21 @@ fn crashed(message: String) -> ConnectorError {
     }
 }
 
-/// A child that exits without a response. Killed by a signal: the OS memory or CPU cap (or a
-/// stack overflow) stopped it, which is a limit. Any other exit is an engine failure.
+/// Signals that stop a child from outside (a shutdown or Ctrl-C), not because of the script.
+#[cfg(unix)]
+const OUTSIDE_SIGNALS: [i32; 3] = [1, 2, 15]; // SIGHUP, SIGINT, SIGTERM
+
+/// A child that exits without a response. Stopped by a shutdown signal: try again later. Killed by
+/// any other signal: the OS memory or CPU cap (or a stack overflow) stopped it, which is a limit.
+/// Any other exit is an engine failure.
 fn child_failed(status: std::process::ExitStatus) -> ConnectorError {
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt as _;
-        if status.signal().is_some() {
+        if let Some(signal) = status.signal() {
+            if OUTSIDE_SIGNALS.contains(&signal) {
+                return ConnectorError::transient("the script runner was stopped");
+            }
             return resources_exceeded();
         }
     }
@@ -243,12 +258,27 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn deeply_nested_values_do_not_overflow_the_script_thread() {
+        let runner = PooledScriptRunner::new(1, Limits::default());
+        let out = runner
+            .run(
+                "let a = #{}; for i in 0..1000 { a = #{x: a}; } a.len()",
+                json!({}),
+                json!({}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.output, json!({"result": 1}));
+    }
+
     #[cfg(unix)]
     #[test]
     fn a_killed_child_hit_a_limit_and_any_other_exit_is_a_script_error() {
         use std::os::unix::process::ExitStatusExt as _;
         let code = |e: ConnectorError| e.code().to_owned();
-        // Raw wait statuses: 9 = killed by SIGKILL, 6 = SIGABRT (allocation failure), 256 = exit 1.
+        // Raw wait statuses: 9 = killed by SIGKILL, 6 = SIGABRT (allocation failure), 256 = exit 1,
+        // 15 = SIGTERM (a shutdown, retried later).
         assert_eq!(
             code(child_failed(std::process::ExitStatus::from_raw(9))),
             "script.limit_exceeded"
@@ -260,6 +290,10 @@ mod tests {
         assert_eq!(
             code(child_failed(std::process::ExitStatus::from_raw(256))),
             "script.error"
+        );
+        assert_eq!(
+            code(child_failed(std::process::ExitStatus::from_raw(15))),
+            "app.unavailable"
         );
     }
 }

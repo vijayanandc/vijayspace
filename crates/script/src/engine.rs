@@ -24,6 +24,8 @@ pub struct Limits {
     pub max_map_size: usize,
     pub max_source_bytes: usize,
     pub max_output_bytes: usize,
+    /// Nesting depth of the result (stored as JSON: MySQL allows 100 levels, `serde_json` 128).
+    pub max_output_depth: usize,
     pub max_log_lines: usize,
     pub max_log_bytes: usize,
     pub max_wall_time: Duration,
@@ -41,6 +43,7 @@ impl Default for Limits {
             max_map_size: 10_000,
             max_source_bytes: 64 * 1024,
             max_output_bytes: 1 << 20,
+            max_output_depth: 64,
             max_log_lines: 100,
             max_log_bytes: 10 * 1024,
             max_wall_time: Duration::from_secs(2),
@@ -182,6 +185,12 @@ pub fn run(
         Ok(engine.eval_ast_with_scope(&mut scope, &ast)?)
     })?;
     let value = output(&result)?;
+    if depth(&value) > limits.max_output_depth {
+        return Err(ScriptError::limit(format!(
+            "the result is nested more than {} levels deep",
+            limits.max_output_depth
+        )));
+    }
     let size = value.to_string().len();
     if size > limits.max_output_bytes {
         return Err(ScriptError::limit(format!(
@@ -196,6 +205,21 @@ pub fn run(
         .map(Log::finish)
         .unwrap_or_default();
     Ok(ScriptOutput { value, logs })
+}
+
+/// Nesting depth of a JSON value (a scalar is 0), without recursion.
+fn depth(value: &Value) -> usize {
+    let mut deepest = 0;
+    let mut stack = vec![(value, 0_usize)];
+    while let Some((v, d)) = stack.pop() {
+        deepest = deepest.max(d);
+        if let Value::Array(items) = v {
+            stack.extend(items.iter().map(|i| (i, d + 1)));
+        } else if let Value::Object(fields) = v {
+            stack.extend(fields.values().map(|i| (i, d + 1)));
+        }
+    }
+    deepest
 }
 
 pub(crate) fn to_dynamic(value: &Value) -> Result<Dynamic, ScriptError> {
