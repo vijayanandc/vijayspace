@@ -57,6 +57,16 @@ pub(super) async fn send(
     let conn = ctx.conn()?;
     let token = conn.access_token().await?;
     let mut resp = ctx.http.send(build(&token).timeout(ctx.timeout)).await?;
+    // A missing permission is also a 401, but a new token does not help: the connection must be signed in
+    // again with the scope.
+    if resp.status == 401 && missing_scope(&resp) {
+        return Err(ConnectorError::AuthExpired {
+            message: format!(
+                "Zoho refused: the connection lacks a permission; reconnect it ({})",
+                resp.text()
+            ),
+        });
+    }
     if resp.status == 401 {
         let fresh = conn.force_refresh().await?;
         resp = ctx.http.send(build(&fresh).timeout(ctx.timeout)).await?;
@@ -66,13 +76,23 @@ pub(super) async fn send(
             });
         }
     }
-    if resp.status == 204 {
+    // 204: nothing found; 304: nothing modified since `If-Modified-Since`.
+    if resp.status == 204 || resp.status == 304 {
         return Ok(Value::Null);
     }
     if resp.is_success() {
         return resp.json();
     }
     Err(map_error(&resp))
+}
+
+fn missing_scope(resp: &HttpResponse) -> bool {
+    resp.json().ok().is_some_and(|b: Value| {
+        matches!(
+            b.get("code").and_then(Value::as_str),
+            Some("OAUTH_SCOPE_MISMATCH" | "NO_PERMISSION")
+        )
+    })
 }
 
 /// A request with the Zoho auth header.
@@ -132,16 +152,24 @@ pub(super) fn map_error(resp: &HttpResponse) -> ConnectorError {
             message: resp.text(),
         };
     }
-    match body.get("code").and_then(Value::as_str) {
+    // A single-record write that fails comes back as 400 with the error in `data[0]`.
+    let entry = if body.get("code").is_some() {
+        &body
+    } else {
+        body.get("data")
+            .and_then(|d| d.get(0))
+            .unwrap_or(&Value::Null)
+    };
+    match entry.get("code").and_then(Value::as_str) {
         Some(code) if resp.status < 500 => {
-            let message = body
+            let message = entry
                 .get("message")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
             error_from_code(
                 code,
                 message,
-                body.get("details").unwrap_or(&Value::Null),
+                entry.get("details").unwrap_or(&Value::Null),
                 Some(resp.status),
             )
         }

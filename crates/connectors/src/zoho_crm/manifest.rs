@@ -113,6 +113,8 @@ pub(super) fn manifest(accounts: Option<&str>) -> ConnectorManifest {
             "ZohoCRM.notifications.ALL",
             "ZohoCRM.coql.READ",
             "ZohoCRM.users.READ",
+            // The connection test reads the org (`GET /org`).
+            "ZohoCRM.org.READ",
         ]
         .iter()
         .map(|s| (*s).to_owned())

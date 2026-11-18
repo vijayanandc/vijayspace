@@ -219,11 +219,26 @@ fn item(module: &str, operation: &str, rec: Value, affected: &Value) -> Option<E
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_owned();
+    let fields = affected_for(affected, &id);
     Some(EventItem {
         dedupe_key: format!("{id}:{modified}"),
         record_id: Some(id.clone()),
-        data: json!({"module": module, "operation": operation, "id": id, "record": rec, "affected_fields": affected}),
+        data: json!({"module": module, "operation": operation, "id": id, "record": rec, "affected_fields": fields}),
     })
+}
+
+/// The changed fields of one record. Zoho sends one object per record (`[{"<id>": ["Stage"]}]`); a plain list
+/// of names is taken as is.
+fn affected_for(affected: &Value, id: &str) -> Value {
+    let Some(list) = affected.as_array() else {
+        return Value::Null;
+    };
+    if list.iter().all(Value::is_string) {
+        return affected.clone();
+    }
+    list.iter()
+        .find_map(|entry| entry.get(id).cloned())
+        .unwrap_or(Value::Null)
 }
 
 /// Reconciliation / polling: records modified since the cursor. The first poll is a baseline.
@@ -243,13 +258,24 @@ pub(super) async fn poll(
     };
     let rows = modified_since(ctx, &module, Some(cursor), PAGE_LIMIT, 1).await?;
     let mut next = cursor.to_owned();
+    // Polling sees creates and edits (never deletes): a record whose created and modified times are equal is new.
+    let wanted = events(input, &module);
     let items: Vec<EventItem> = rows
         .into_iter()
         .filter_map(|rec| {
             if let Some(m) = rec.get("Modified_Time").and_then(Value::as_str) {
                 m.clone_into(&mut next);
             }
-            item(&module, "edit", rec, &Value::Null)
+            let created = rec
+                .get("Created_Time")
+                .is_some_and(|c| Some(c) == rec.get("Modified_Time"));
+            let operation = if created { "create" } else { "edit" };
+            let subscribed = wanted
+                .iter()
+                .any(|e| *e == format!("{module}.all") || *e == format!("{module}.{operation}"));
+            subscribed
+                .then(|| item(&module, operation, rec, &Value::Null))
+                .flatten()
         })
         .collect();
     Ok(PollResult {

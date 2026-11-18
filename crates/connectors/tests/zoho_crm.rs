@@ -186,6 +186,44 @@ async fn record_and_rate_limit_errors_are_mapped() {
     assert!(
         matches!(create("Deals").await.unwrap_err(), ConnectorError::InvalidInput { field: Some(f), .. } if f == "Deal_Name")
     );
+    // A single-record write that fails with 400 carries its error in `data[0]` (Zoho v8).
+    Mock::given(method("POST")).and(path("/crm/v8/Accounts"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({"data": [{"code": "INVALID_DATA", "status": "error", "message": "invalid data", "details": {"api_name": "Annual_Revenue"}}]})))
+        .mount(&server).await;
+    assert!(
+        matches!(create("Accounts").await.unwrap_err(), ConnectorError::InvalidInput { field: Some(f), .. } if f == "Annual_Revenue")
+    );
+}
+
+#[tokio::test]
+async fn a_missing_permission_asks_for_a_reconnect_without_a_pointless_refresh() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/crm/v8/org"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(
+            json!({"code": "OAUTH_SCOPE_MISMATCH", "message": "invalid oauth scope to access this URL", "status": "error"}),
+        ))
+        .mount(&server)
+        .await;
+    let (cx, conn) = zoho_ctx(&server);
+    let err = ZohoCrmConnector::new()
+        .test_connection(&cx)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ConnectorError::AuthExpired { .. }), "{err:?}");
+    assert!(err.to_string().contains("lacks a permission"), "{err}");
+    assert_eq!(conn.refreshes.load(Ordering::SeqCst), 0);
+    let scopes = &ZohoCrmConnector::new()
+        .manifest()
+        .auth
+        .oauth2
+        .clone()
+        .unwrap()
+        .scopes;
+    assert!(
+        scopes.iter().any(|s| s == "ZohoCRM.org.READ"),
+        "the connection test reads the org"
+    );
 }
 
 #[tokio::test]

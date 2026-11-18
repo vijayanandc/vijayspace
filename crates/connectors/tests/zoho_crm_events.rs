@@ -124,7 +124,8 @@ async fn notifications_are_verified_then_records_fetched() {
     let (cx, _) = zoho_ctx(&server);
     let c = ZohoCrmConnector::new();
     let input = json!({"module": "Deals", "events": ["edit", "delete"]});
-    let body = json!({"module": "Deals", "operation": "update", "ids": ["4876"], "token": "tok123", "channel_id": "42", "affected_fields": ["Stage"]});
+    // Zoho lists the changed fields per record.
+    let body = json!({"module": "Deals", "operation": "update", "ids": ["4876"], "token": "tok123", "channel_id": "42", "affected_fields": [{"4876": ["Stage"]}]});
     let mut forged = body.clone();
     forged["token"] = json!("wrong");
     assert!(
@@ -139,6 +140,7 @@ async fn notifications_are_verified_then_records_fetched() {
     assert_eq!(batch.items[0].dedupe_key, "4876:2026-01-01T10:00:00+05:30");
     assert_eq!(batch.items[0].data["record"]["Stage"], "Closed Won");
     assert_eq!(batch.items[0].data["operation"], "edit");
+    assert_eq!(batch.items[0].data["affected_fields"], json!(["Stage"]));
     let deleted = c
         .handle_event(
             &cx,
@@ -180,9 +182,16 @@ async fn polling_baseline_then_modified_records() {
         .and(query_param("sort_order", "asc"))
         .and(header("if-modified-since", "2026-01-01T00:00:00+00:00"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": [
-            {"id": "1", "Modified_Time": "2026-01-01T05:31:00+05:30"},
-            {"id": "2", "Modified_Time": "2026-01-01T05:32:00+05:30"}
+            {"id": "1", "Created_Time": "2026-01-01T05:31:00+05:30", "Modified_Time": "2026-01-01T05:31:00+05:30"},
+            {"id": "2", "Created_Time": "2025-12-01T09:00:00+05:30", "Modified_Time": "2026-01-01T05:32:00+05:30"}
         ]})))
+        .mount(&server)
+        .await;
+    // Nothing modified since the last record: Zoho answers 304.
+    Mock::given(method("GET"))
+        .and(path("/crm/v8/Deals"))
+        .and(header("if-modified-since", "2026-01-01T05:32:00+05:30"))
+        .respond_with(ResponseTemplate::new(304))
         .mount(&server)
         .await;
     let (cx, _) = zoho_ctx(&server);
@@ -196,7 +205,34 @@ async fn polling_baseline_then_modified_records() {
         .await
         .unwrap();
     assert_eq!(next.items.len(), 2);
+    assert_eq!(
+        (
+            next.items[0].data["operation"].clone(),
+            next.items[1].data["operation"].clone()
+        ),
+        (json!("create"), json!("edit")),
+        "created equals modified: a new record"
+    );
     assert_eq!(next.cursor, Some(json!("2026-01-01T05:32:00+05:30")));
+    let created_only = json!({"module": "Deals", "events": ["create"]});
+    let only = c
+        .poll(&cx, "record_event", &created_only, baseline.cursor.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(
+        only.items.len(),
+        1,
+        "the trigger's events filter polled records too"
+    );
+    let idle = c
+        .poll(&cx, "record_event", &input, next.cursor.as_ref())
+        .await
+        .unwrap();
+    assert!(
+        idle.items.is_empty(),
+        "304 Not Modified is an empty poll, not an error"
+    );
+    assert_eq!(idle.cursor, next.cursor);
 }
 
 #[tokio::test]

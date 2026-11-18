@@ -93,8 +93,30 @@ What is built on the `backend` and `client` branches, how it deviates from the p
   - where the project ID appears in payloads;
   - the cost event names;
   - polling filters.
-- **Zoho CRM:** the notification channel payload and the renewal limits, tested with a real org.
-- **Appblocks:** the webhook payload shape (`record` vs top-level fields), and how lookup fields such as `request_id` are serialised.
+- **Zoho CRM:** tested end to end against a local mock built from Zoho's documentation (`scripts/zoho_mock.py`, 2026-11-18):
+  - the OAuth code flow in the browser, the connection test and a notification channel;
+  - a Deal → FSM account and request run, and token expiry → refresh.
+
+  The live checks found and fixed these:
+  - the missing `ZohoCRM.org.READ` scope;
+  - a 304 on idle polls treated as an error;
+  - scope errors triggering a refresh;
+  - per-record `affected_fields`;
+  - write errors in `data[0]`;
+  - polls not telling creates from edits.
+
+  Still to confirm with a real org:
+  - whether `If-Modified-Since` is inclusive (polling re-reads the anchor second, assuming it is);
+  - whether lookups may be sent as a bare ID (`"Account_Name": "123"`) or must be `{"id": …}`;
+  - the channel renewal limits;
+  - the 204 vs 404 answer for a missing record ID.
+
+  Polling cannot see deletes (only notification channels can).
+- **Appblocks:** checked live against a local FSM server (`scripts/live_fsm_check.py`, 22 checks, 2026-11-18):
+  - actions, the workflow webhook trigger with `X-Weft-Key`, write-back without loops (`?trigger=`) and polling;
+  - lookups are sent and returned as the target's `api_id` string.
+
+  The FSM requires a service request to name an account or contact (its own validation message is shown on the step).
 - **Recipes:**
   - custom fields assumed in Zoho: `FSM_Request_Number`, `Payment_Status`, `Paid_On`, `Forma_Project_ID`, `Contract_Value`, `UHID`;
   - the HMS `crm_consent` field (AB-6);

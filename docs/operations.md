@@ -186,6 +186,25 @@ by new rows, and it returns to the operating system when the day's partition is 
 - dedupe keys and unused test snapshots older than 30 days;
 - server instances not seen for a day.
 
+## Testing against the apps
+
+Run these on a development machine, never against production data.
+
+- **FSM.** `scripts/live_fsm_check.py` runs 22 checks against a real Appblocks FSM server:
+  - actions;
+  - the workflow webhook trigger;
+  - write-back without loops;
+  - polling.
+
+  It needs FSM credentials in the environment (see the script's docstring).
+- **Zoho CRM.** `scripts/zoho_mock.py` is a local mock of Zoho's accounts server, CRM API v8 and notification
+  channels. Point Weft at it with `WEFT_ZOHO_ACCOUNTS_URL=http://127.0.0.1:9200` and the same OAuth client, then
+  connect Zoho CRM in the web client: the browser goes through the mock's consent page.
+  - `scripts/live_zoho_fsm_check.py` then checks a Deal → FSM account and request flow, including a forced token
+    expiry and refresh.
+  - `GET /_mock/calls` shows what Weft sent.
+- **Load.** `scripts/scale_out.py` measures throughput and queue lag with 1, 2 and 4 workers (see Scaling out).
+
 ## Backups
 
 - Back up the whole MySQL database, for example with a nightly `mysqldump --single-transaction --routines` or
