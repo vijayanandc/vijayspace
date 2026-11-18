@@ -41,7 +41,12 @@ pub(super) fn split_fields(
 ) -> Result<SplitFields, AppError> {
     let mut config = Map::new();
     let mut secrets = Map::new();
-    for spec in &connector.manifest().auth.fields {
+    let all = &connector.manifest().auth.fields;
+    for spec in all {
+        // A field another setting hides (e.g. a password with `auth = bearer`) is neither stored nor required.
+        if !spec.applies(fields, all) {
+            continue;
+        }
         let value = fields
             .get(&spec.key)
             .filter(|v| !v.is_null() && v.as_str() != Some(""));

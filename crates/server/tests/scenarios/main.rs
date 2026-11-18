@@ -8,6 +8,7 @@
 )]
 
 mod abuse;
+mod any_app;
 mod app_events;
 mod connections;
 mod custom_functions;

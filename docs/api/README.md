@@ -108,12 +108,28 @@ Clients switch on `code` (see `crates/domain/src/error_codes.rs`). A step that f
   "options_from": "modules?",
   "fields_from": "module_fields?",
   "depends_on": ["module"],
-  "mappable": true, "multiple": false, "advanced": false, "secret": false, "read_only": false
+  "mappable": true, "multiple": false, "advanced": false, "secret": false, "read_only": false,
+  "show_when": {"field": "auth", "in": ["bearer"]}
 }
 ```
+- **`show_when`:** the field applies only while the field `field` holds one of the values in `in`. When that field has no value, its `default` is used. A field that does not apply is hidden. The server neither stores it nor requires it; for example, a password field is ignored when the connection uses a bearer token.
 - **`options_from`:** load the dropdown with `POST /connectors/{key}/options/{source}`, sending `input` = the current values of the step's fields. Reload when any `depends_on` field changes.
 - **`type: "object"` with `fields_from`:** the value is an object. Load its sub-fields with `POST /connectors/{key}/fields/{source}` and render each sub-field as a mappable input.
 - **`key_value`:** the value is an object `{"k": "v"}`. The server also accepts `[{key, value}]`.
+
+**Any app (`http_api`).** Connects any app with a REST API, like Zoho Flow's custom apps. The credentials live in the connection, encrypted, never in a flow.
+- **Connection fields:**
+  - `base_url`;
+  - `auth`: `none`, `api_key_header` (`header_name`, `api_key`), `api_key_query` (`query_name`, `api_key`), `bearer` (`token`), `basic` (`username`, `password`), or `oauth2_client_credentials` (`token_url`, `client_id`, `client_secret`, `scope`);
+  - `test_path`: a GET that needs valid credentials, run as the connection test;
+  - `default_headers`.
+- **Action `api_call`:** `{method, path, query, headers, body_type, body}`.
+  - `path` is relative to `base_url` and may not leave its scheme, host or port.
+  - The output is `{status, headers, body}`.
+  - A timeout of a POST or PATCH is not retried automatically.
+- **Trigger `new_items` (polling):** `{path, query, items_path (dotted), id_field}`. The first poll records the items there now. Later polls start one run per item ID not seen before, with `trigger = {id, item}`.
+- **Apps that push events:** use the Webhook trigger.
+- **Run log:** an API key sent in the query string is shown as `***` whatever the parameter is called.
 
 ---
 

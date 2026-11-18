@@ -54,6 +54,8 @@ pub struct HttpRequest {
     pub headers: Vec<(String, String)>,
     pub body: Option<Vec<u8>>,
     pub timeout: Option<Duration>,
+    /// Query parameters that carry credentials (an app's API key): never shown in the run log.
+    pub secret_query: Vec<String>,
 }
 
 impl HttpRequest {
@@ -65,6 +67,7 @@ impl HttpRequest {
             headers: Vec::new(),
             body: None,
             timeout: None,
+            secret_query: Vec::new(),
         }
     }
 
@@ -82,6 +85,13 @@ impl HttpRequest {
     pub fn header(mut self, name: &str, value: impl Into<String>) -> Self {
         self.headers.push((name.to_owned(), value.into()));
         self
+    }
+
+    /// Adds a query parameter that carries a credential (kept out of the run log).
+    #[must_use]
+    pub fn secret_query(mut self, name: &str, value: &str) -> Self {
+        self.secret_query.push(name.to_owned());
+        self.query(&[(name, value)])
     }
 
     #[must_use]

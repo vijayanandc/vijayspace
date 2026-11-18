@@ -1,6 +1,7 @@
 //! weft-connectors: built-in connectors. `builtin_connectors()` is the ONLY registration list.
 //!
 //! - `core.*`: utilities that need no connection (HTTP request, formatter, email).
+//! - `http_api`: any app with a REST API (a connection with a base URL and credentials; like Zoho Flow's custom apps).
 //! - `zoho_crm`, `appblocks`, `autodesk_forma`: app connectors (see `docs/plan/13-mvp-zoho-crm-appblocks.md`).
 //!
 //! `core.sync` lives in `weft-app` because it needs platform ports (record links, leases).
@@ -12,6 +13,7 @@ use weft_connector_sdk::Connector;
 pub mod appblocks;
 pub mod autodesk_forma;
 pub mod core;
+pub mod http_api;
 pub(crate) mod list_cursor;
 mod util;
 pub mod zoho_crm;
@@ -41,6 +43,7 @@ pub fn builtin_connectors_with(options: &ConnectorOptions) -> Vec<Arc<dyn Connec
         Arc::new(core::formatter::FormatterConnector::new()),
         Arc::new(core::email::EmailConnector::new()),
         Arc::new(core::script::ScriptConnector::new()),
+        Arc::new(http_api::HttpApiConnector::new()),
         Arc::new(zoho),
         Arc::new(appblocks::AppblocksConnector::new()),
         Arc::new(autodesk_forma::FormaConnector::new()),

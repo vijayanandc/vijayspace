@@ -78,6 +78,18 @@ pub struct FieldSpec {
     /// Read-only in the target app (shown as a source, never as a mapping target).
     #[serde(default)]
     pub read_only: bool,
+    /// Shown (and required, if `required`) only while another field holds one of these values; hidden fields
+    /// are not stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_when: Option<ShowWhen>,
+}
+
+/// `{"field": "auth", "in": ["bearer"]}`: show a field only while `auth` is `bearer`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShowWhen {
+    pub field: String,
+    #[serde(rename = "in")]
+    pub values: Vec<String>,
 }
 
 const fn yes() -> bool {
@@ -104,6 +116,7 @@ impl FieldSpec {
             advanced: false,
             secret: false,
             read_only: false,
+            show_when: None,
         }
     }
 
@@ -177,6 +190,38 @@ impl FieldSpec {
     pub const fn not_mappable(mut self) -> Self {
         self.mappable = false;
         self
+    }
+
+    /// Shows the field only while `field` holds one of `values` (see [`ShowWhen`]).
+    #[must_use]
+    pub fn show_when(mut self, field: &str, values: &[&str]) -> Self {
+        self.show_when = Some(ShowWhen {
+            field: field.to_owned(),
+            values: values.iter().map(|v| (*v).to_owned()).collect(),
+        });
+        self
+    }
+
+    /// Whether the field applies to these values (always, unless `show_when` says otherwise). A missing
+    /// controlling value takes that field's default.
+    #[must_use]
+    pub fn applies(&self, values: &serde_json::Map<String, Value>, all: &[Self]) -> bool {
+        let Some(rule) = &self.show_when else {
+            return true;
+        };
+        let current = values
+            .get(&rule.field)
+            .filter(|v| !v.is_null())
+            .cloned()
+            .or_else(|| {
+                all.iter()
+                    .find(|f| f.key == rule.field)
+                    .and_then(|f| f.default.clone())
+            });
+        current
+            .as_ref()
+            .and_then(Value::as_str)
+            .is_some_and(|v| rule.values.iter().any(|w| w == v))
     }
 
     #[must_use]

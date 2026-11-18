@@ -168,7 +168,7 @@ impl HttpSender for Recorder {
     async fn send(&self, request: HttpRequest) -> Result<HttpResponse, ConnectorError> {
         let at = self.deps.clock.now();
         let method = request.method.as_str();
-        let url = redact_url(&request.url);
+        let url = redact_url_with(&request.url, &request.secret_query);
         let request_bytes = request.body.as_ref().map_or(0, Vec::len);
         let result = self.inner.send(request).await;
         let duration_ms = (self.deps.clock.now() - at).num_milliseconds().max(0);
@@ -214,6 +214,12 @@ fn excerpt(body: &[u8]) -> String {
 /// The URL without user info, fragment or secret query values (`?token=***`).
 #[must_use]
 pub fn redact_url(raw: &str) -> String {
+    redact_url_with(raw, &[])
+}
+
+/// [`redact_url`], also hiding the values of `extra` parameters (a connection's own credential parameter).
+#[must_use]
+pub fn redact_url_with(raw: &str, extra: &[String]) -> String {
     let Ok(mut url) = url::Url::parse(raw) else {
         return raw.split(['?', '#']).next().unwrap_or_default().to_owned();
     };
@@ -223,7 +229,9 @@ pub fn redact_url(raw: &str) -> String {
     let pairs: Vec<(String, String)> = url
         .query_pairs()
         .map(|(k, v)| {
-            let secret = SECRET_PARAMS.contains(&k.to_ascii_lowercase().as_str());
+            let lower = k.to_ascii_lowercase();
+            let secret = SECRET_PARAMS.contains(&lower.as_str())
+                || extra.iter().any(|e| e.eq_ignore_ascii_case(&k));
             (
                 k.into_owned(),
                 // `***` needs no percent-encoding, so the logged URL stays readable.
