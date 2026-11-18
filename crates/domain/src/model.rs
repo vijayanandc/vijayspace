@@ -18,6 +18,9 @@ pub struct Org {
     pub id: OrgId,
     pub name: String,
     pub timezone: String,
+    /// How long finished runs are kept; `None` = the server default.
+    #[serde(default)]
+    pub retention_days: Option<u32>,
     pub created_at: Timestamp,
 }
 

@@ -235,7 +235,8 @@ For a `decision` step run, `output` is `{"branch": "big"}`; when no branch match
 ## Misc
 | Method | Path | Response |
 |---|---|---|
-| GET | `/api/v1/org` | `{id, name, timezone}` |
+| GET | `/api/v1/org` | `{id, name, timezone, retention_days (the org's setting, or null), retention_days_effective, retention_days_default}` |
+| PATCH | `/api/v1/org` with `{retention_days: 1..3650 \| null}` | the org (as above). Finished runs older than this are deleted hourly with their step history; queued, running and waiting runs are kept. `null` = the server default (`WEFT_RETENTION_DAYS`, 30). |
 | GET | `/api/v1/usage` | `{period: "2026-11", tasks_used, executions}` |
 | GET | `/healthz`, `/readyz` | `ok` |
 

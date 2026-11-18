@@ -15,5 +15,6 @@ mod lifecycle;
 mod limits;
 mod order_alert;
 mod recipes;
+mod retention;
 mod schedule;
 mod sync;

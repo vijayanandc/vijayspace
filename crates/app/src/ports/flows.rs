@@ -22,6 +22,10 @@ pub trait OrgRepo: Send + Sync {
     /// Returns the default org, creating it on first use.
     async fn ensure_default_org(&self, id: OrgId, now: DateTime<Utc>) -> Res<Org>;
     async fn get_org(&self, id: OrgId) -> Res<Option<Org>>;
+    async fn list_orgs(&self) -> Res<Vec<Org>>;
+    /// `None` = the server default.
+    async fn set_retention_days(&self, id: OrgId, days: Option<u32>, now: DateTime<Utc>)
+    -> Res<()>;
 }
 
 #[async_trait]

@@ -18,6 +18,8 @@ pub struct AppConfig {
     pub public_url: String,
     /// The org used when a request has no `X-Org-ID` (authentication is not enabled yet).
     pub default_org_id: OrgId,
+    /// Days finished runs are kept when an org has no setting of its own.
+    pub default_retention_days: u32,
     /// OAuth apps per connector key.
     pub oauth_clients: HashMap<String, OAuthClient>,
 }

@@ -69,6 +69,7 @@ impl TestApp {
             connectors: Arc::new(registry),
             config: Arc::new(AppConfig {
                 public_url: "http://weft.test".into(),
+                default_retention_days: 30,
                 default_org_id: OrgId::from_uuid(weft_server::wiring::DEFAULT_ORG),
                 oauth_clients: std::collections::HashMap::from([(
                     "zoho_crm".to_owned(),

@@ -38,6 +38,7 @@ The run appears under **History** with each step's input and output.
 | `WEFT_HTTP_PROXY` | none | Egress proxy for calls to apps (`HTTP(S)_PROXY` is ignored on purpose). With a proxy set, Weft no longer checks the addresses that hostnames resolve to (only literal IPs and redirects), so the proxy must block private destinations itself. |
 | `WEFT_SMTP_URL`, `WEFT_MAIL_FROM` | log only | Email step delivery (Mailpit: `smtp://localhost:1025`) |
 | `WEFT_WORKER_CONCURRENCY` | `16` | Jobs processed in parallel |
+| `WEFT_RETENTION_DAYS` | `30` | Days finished runs are kept (orgs can set their own, 1–3650) |
 | `WEFT_OAUTH_ZOHO_CRM_CLIENT_ID` / `_SECRET` | — | Zoho CRM OAuth app (redirect URI: `<public url>/oauth/callback`) |
 | `WEFT_OAUTH_AUTODESK_FORMA_CLIENT_ID` / `_SECRET` | — | Autodesk APS app (same redirect URI) |
 

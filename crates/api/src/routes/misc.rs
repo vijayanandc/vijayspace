@@ -9,7 +9,7 @@ pub fn router() -> Router<ApiState> {
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/readyz", get(ready))
-        .route("/api/v1/org", get(org))
+        .route("/api/v1/org", get(org).patch(update_org))
         .route("/api/v1/usage", get(usage))
 }
 
@@ -18,9 +18,32 @@ async fn ready(State(s): State<ApiState>) -> ApiResult<&'static str> {
     Ok("ok")
 }
 
+/// The org plus its effective retention and the server default.
+fn org_json(deps: &weft_app::Deps, o: &weft_domain::model::Org) -> Value {
+    let mut v = json!(o);
+    v["retention_days_effective"] = json!(weft_app::retention::effective_days(deps, o));
+    v["retention_days_default"] = json!(deps.config.default_retention_days);
+    v
+}
+
 async fn org(State(s): State<ApiState>, Org(org): Org) -> ApiResult<Json<Value>> {
     let o = s.deps.store.get_org(org).await?;
-    Ok(Json(json!(o)))
+    Ok(Json(o.map_or(Value::Null, |o| org_json(&s.deps, &o))))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct OrgBody {
+    /// `null` = the server default.
+    retention_days: Option<u32>,
+}
+
+async fn update_org(
+    State(s): State<ApiState>,
+    Org(org): Org,
+    Json(b): Json<OrgBody>,
+) -> ApiResult<Json<Value>> {
+    let o = weft_app::retention::set_retention_days(&s.deps, org, b.retention_days).await?;
+    Ok(Json(org_json(&s.deps, &o)))
 }
 
 async fn usage(State(s): State<ApiState>, Org(org): Org) -> ApiResult<Json<Value>> {

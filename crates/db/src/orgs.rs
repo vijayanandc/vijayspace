@@ -30,12 +30,39 @@ impl OrgRepo for MySqlStore {
     }
 
     async fn get_org(&self, id: OrgId) -> Res<Option<Org>> {
-        let row: Option<OrgRow> =
-            sqlx::query_as("SELECT id, name, timezone, created_at FROM orgs WHERE id = ?")
-                .bind(id.as_uuid())
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(db_err)?;
+        let row: Option<OrgRow> = sqlx::query_as(
+            "SELECT id, name, timezone, retention_days, created_at FROM orgs WHERE id = ?",
+        )
+        .bind(id.as_uuid())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(db_err)?;
         Ok(row.map(Org::from))
+    }
+
+    async fn list_orgs(&self) -> Res<Vec<Org>> {
+        let rows: Vec<OrgRow> = sqlx::query_as(
+            "SELECT id, name, timezone, retention_days, created_at FROM orgs ORDER BY created_at",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(rows.into_iter().map(Org::from).collect())
+    }
+
+    async fn set_retention_days(
+        &self,
+        id: OrgId,
+        days: Option<u32>,
+        now: DateTime<Utc>,
+    ) -> Res<()> {
+        sqlx::query("UPDATE orgs SET retention_days = ?, updated_at = ? WHERE id = ?")
+            .bind(days)
+            .bind(now)
+            .bind(id.as_uuid())
+            .execute(&self.pool)
+            .await
+            .map_err(db_err)?;
+        Ok(())
     }
 }

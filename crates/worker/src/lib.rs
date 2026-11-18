@@ -45,6 +45,14 @@ pub async fn tick(deps: &Deps) {
     }
 }
 
+/// Deletes run history past each org's retention (hourly, in small batches).
+pub async fn sweep(deps: &Deps) {
+    match weft_app::retention::sweep(deps).await {
+        Ok(report) => tracing::info!(?report, "retention sweep"),
+        Err(e) => tracing::warn!(error = %e, "retention sweep"),
+    }
+}
+
 /// Renews or retries app subscriptions (network calls to providers), on its own loop.
 pub async fn renew(deps: &Deps) {
     if let Err(e) = renew_due_subscriptions(deps).await {
@@ -244,6 +252,19 @@ pub async fn run(deps: Deps, config: WorkerConfig, shutdown: CancellationToken) 
             }
         })
     };
+    let retention = {
+        let deps = deps.clone();
+        let shutdown = shutdown.clone();
+        tokio::spawn(async move {
+            let mut every = tokio::time::interval(Duration::from_hours(1));
+            loop {
+                tokio::select! {
+                    () = shutdown.cancelled() => break,
+                    _ = every.tick() => sweep(&deps).await,
+                }
+            }
+        })
+    };
     let permits = Arc::new(Semaphore::new(config.concurrency.max(1)));
     let mut idle = Duration::from_millis(200);
     while !shutdown.is_cancelled() {
@@ -295,6 +316,7 @@ pub async fn run(deps: Deps, config: WorkerConfig, shutdown: CancellationToken) 
     .await;
     sched.abort();
     renewals.abort();
+    retention.abort();
 }
 
 #[cfg(test)]

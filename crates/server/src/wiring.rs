@@ -67,6 +67,7 @@ pub fn build(settings: &Settings, store: MySqlStore) -> anyhow::Result<Deps> {
         connectors: Arc::new(registry()),
         config: Arc::new(AppConfig {
             public_url: settings.public_url.clone(),
+            default_retention_days: settings.retention_days,
             default_org_id: OrgId::from_uuid(DEFAULT_ORG),
             oauth_clients: settings.oauth_clients.clone(),
         }),

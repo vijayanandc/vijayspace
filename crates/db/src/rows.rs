@@ -23,6 +23,7 @@ pub(crate) struct OrgRow {
     pub id: Uuid,
     pub name: String,
     pub timezone: String,
+    pub retention_days: Option<u32>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -32,6 +33,7 @@ impl From<OrgRow> for Org {
             id: OrgId::from_uuid(r.id),
             name: r.name,
             timezone: r.timezone,
+            retention_days: r.retention_days,
             created_at: r.created_at,
         }
     }

@@ -31,6 +31,7 @@ mod flows;
 mod jobs;
 mod limits;
 mod links;
+mod retention;
 mod triggers;
 
 pub use connections::*;
@@ -39,6 +40,7 @@ pub use flows::*;
 pub use jobs::*;
 pub use limits::*;
 pub use links::*;
+pub use retention::*;
 pub use triggers::*;
 
 /// Everything persistent, implemented by one MySQL adapter.
@@ -51,6 +53,7 @@ pub trait Store:
     + ConnectionRepo
     + LinkRepo
     + LimitRepo
+    + RetentionRepo
     + Send
     + Sync
 {
@@ -65,6 +68,7 @@ impl<T> Store for T where
         + ConnectionRepo
         + LinkRepo
         + LimitRepo
+        + RetentionRepo
         + Send
         + Sync
 {

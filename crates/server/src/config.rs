@@ -15,6 +15,8 @@ pub struct Settings {
     pub allow_private_networks: bool,
     /// Egress proxy for outbound app calls (`WEFT_HTTP_PROXY`); environment proxies are ignored.
     pub http_proxy: Option<String>,
+    /// Days finished runs are kept unless an org sets its own (`WEFT_RETENTION_DAYS`, default 30).
+    pub retention_days: u32,
     pub smtp_url: Option<String>,
     pub mail_from: String,
     pub worker_concurrency: usize,
@@ -69,6 +71,9 @@ impl Settings {
                 .collect(),
             public_url,
             master_keys,
+            retention_days: var("WEFT_RETENTION_DAYS")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(30),
             http_proxy: var("WEFT_HTTP_PROXY"),
             allow_private_networks: var("WEFT_ALLOW_PRIVATE_NETWORKS")
                 .is_some_and(|v| v == "true" || v == "1"),
