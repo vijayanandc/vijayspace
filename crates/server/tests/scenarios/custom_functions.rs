@@ -147,5 +147,25 @@ async fn test_step_runs_the_script_once_with_sample_data() {
         .await;
     assert_eq!(tested["output"]["total"], json!(30.0), "{tested}");
     assert_eq!(tested["input"]["input"]["items"][0]["qty"], json!(3));
+    // A failing test step reports where the script failed.
+    let broken = app
+        .ok(
+            "POST",
+            "/api/v1/flows",
+            Some(json!({"name": "Thrower", "definition": flow("let a = 1;\nthrow \"no\"")})),
+        )
+        .await;
+    let failed = app
+        .ok(
+            "POST",
+            &format!(
+                "/api/v1/flows/{}/steps/fn/test",
+                broken["id"].as_str().unwrap()
+            ),
+            Some(json!({"context": {"trigger": {"body": {"items": []}}, "steps": {}, "vars": {}}})),
+        )
+        .await;
+    assert_eq!(failed["error"]["code"], "script.error", "{failed}");
+    assert_eq!(failed["error"]["details"]["line"], 2, "{failed}");
     app.cleanup().await;
 }

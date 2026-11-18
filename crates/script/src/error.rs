@@ -66,6 +66,14 @@ impl ScriptError {
     }
 }
 
+/// Rhai appends `(line N, position M)` to many messages; the position is reported separately.
+fn without_position(message: &str) -> String {
+    match message.rfind(" (line ") {
+        Some(i) if message.ends_with(')') => message[..i].to_owned(),
+        Some(_) | None => message.to_owned(),
+    }
+}
+
 fn pos(p: Position) -> (Option<usize>, Option<usize>) {
     (p.line(), p.position())
 }
@@ -106,7 +114,7 @@ impl From<Box<EvalAltResult>> for ScriptError {
         } else if matches!(*e, EvalAltResult::ErrorTerminated(..)) {
             "the script ran for too long".to_owned()
         } else {
-            e.to_string()
+            without_position(&e.to_string())
         };
         if limit {
             Self::LimitExceeded {

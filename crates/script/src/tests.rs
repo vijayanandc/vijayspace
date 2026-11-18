@@ -120,6 +120,10 @@ fn throw_and_runtime_errors_are_script_errors_with_a_position() {
     assert!(e.to_string().contains("bad input"), "{e}");
     assert_eq!(e.position().0, Some(2));
     assert_eq!(err("undefined_fn(1)").code(), "script.error");
+    // The position is reported once, not repeated inside the message.
+    let runtime = err("let x = 1;\nfor i in x { }").to_string();
+    assert_eq!(runtime.matches("line 2").count(), 1, "{runtime}");
+    assert!(!runtime.contains("position"), "{runtime}");
     assert_eq!(err("\"a\" - 1").code(), "script.error");
     assert_eq!(err(r#"regex_replace("x", "(", "")"#).code(), "script.error");
 }

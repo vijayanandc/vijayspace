@@ -160,7 +160,7 @@ pub async fn test_step(
         Err(err) => {
             let e = step_error(&err);
             Ok(
-                json!({"input": input, "error": {"code": e.code, "message": e.message, "retryable": e.retryable}}),
+                json!({"input": input, "error": {"code": e.code, "message": e.message, "retryable": e.retryable, "details": e.details}}),
             )
         }
     }
