@@ -38,7 +38,9 @@ export function ConnectionDialog({ open, onClose, connector, onCreated, returnTo
   const qc = useQueryClient();
   const manifest = manifests.find((m) => m.key === key);
   const isOauth = manifest?.auth.kind === 'oauth2';
-  const formFields = (manifest?.auth.fields ?? []).filter((f) => !(isOauth && f.secret));
+  // OAuth apps with their own client ("Any app (OAuth 2.0 sign-in)") take its secret here; the server keeps it encrypted
+  // with the sign-in and never sends it to the browser again. Built-in OAuth apps have no secret fields.
+  const formFields = manifest?.auth.fields ?? [];
 
   const create = useMutation({
     mutationFn: async () => {
