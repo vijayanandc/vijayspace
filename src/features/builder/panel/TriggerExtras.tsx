@@ -67,21 +67,25 @@ export function TriggerSettings() {
 function SampleSection() {
   const { flowId, flow, refetchFlow } = useBuilder();
   const sample = flow.trigger?.sample;
-  const sampleJson = JSON.stringify(sample ?? null);
-  // Listening ends when a new sample arrives (compared by value) or after five minutes.
-  const [listening, setListening] = useState<{ until: number; base: string } | null>(null);
-  const listen = useMutation({ mutationFn: () => endpoints.listen(flowId), onSuccess: () => setListening({ until: Date.now() + 5 * 60_000, base: sampleJson }) });
+  // Listening ends when a new sample arrives or after five minutes. The query cache keeps an unchanged sample's object
+  // (structural sharing), so identity tells a new one without serialising it on every render.
+  const [listening, setListening] = useState<{ until: number; base: unknown } | null>(null);
+  const listen = useMutation({ mutationFn: () => endpoints.listen(flowId), onSuccess: () => setListening({ until: Date.now() + 5 * 60_000, base: sample }) });
   const refetchRef = useRef(refetchFlow);
   refetchRef.current = refetchFlow;
   useEffect(() => {
     if (!listening) return undefined;
-    if (sampleJson !== listening.base) {
+    if (sample !== listening.base) {
       setListening(null);
       return undefined;
     }
-    const t = window.setInterval(() => (Date.now() > listening.until ? setListening(null) : refetchRef.current()), 2000);
+    const t = window.setInterval(() => {
+      if (Date.now() > listening.until) setListening(null);
+      // A background tab waits; it looks again when shown (the window is short anyway).
+      else if (document.visibilityState === 'visible') refetchRef.current();
+    }, 2000);
     return () => window.clearInterval(t);
-  }, [listening, sampleJson]);
+  }, [listening, sample]);
   const until = listening?.until ?? null;
   return (
     <section className="panel-section">

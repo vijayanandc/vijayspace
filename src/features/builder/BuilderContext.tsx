@@ -1,6 +1,7 @@
-// Shared builder state for the canvas nodes and side panels.
+// Shared builder state. `BuilderContext` (everything, for panels and dialogs) changes with every edit;
+// `BuilderViewContext` (what canvas cards and palette items need) does not change while a panel field is typed in.
 
-import { createContext, useContext } from 'react';
+import { type ReactNode, createContext, useContext } from 'react';
 
 import type { ConnectorManifest, Flow, FlowDefinition, Issue } from '../../api/types';
 import type { DragPayload, PaletteItem } from '../../domain/factories';
@@ -22,12 +23,27 @@ export interface BuilderCtx {
   drop: (point: InsertionPoint, payload: DragPayload) => void;
   insertItem: (item: PaletteItem) => void;
   deleteStep: (key: string) => void;
+  /** A viewer: the flow is shown, not edited (no palette, insert points, drag or delete). */
+  readOnly: boolean;
   /** Saves pending changes now; resolves false when saving failed. */
   flush: () => Promise<boolean>;
   refetchFlow: () => void;
 }
 
+/** What canvas cards, insertion points and palette items read: stable while the definition is edited. */
+export type BuilderViewCtx = Pick<
+  BuilderCtx,
+  'manifests' | 'selected' | 'select' | 'issues' | 'activePoint' | 'setActivePoint' | 'drop' | 'insertItem' | 'deleteStep' | 'readOnly'
+>;
+
 export const BuilderContext = createContext<BuilderCtx | null>(null);
+export const BuilderViewContext = createContext<BuilderViewCtx | null>(null);
+
+export function useBuilderView(): BuilderViewCtx {
+  const ctx = useContext(BuilderViewContext);
+  if (!ctx) throw new Error('useBuilderView must be used inside the builder');
+  return ctx;
+}
 
 /** The builder context when rendered inside the builder, else null (for components shared with other pages). */
 export function useOptionalBuilder(): BuilderCtx | null {
@@ -38,4 +54,13 @@ export function useBuilder(): BuilderCtx {
   const ctx = useContext(BuilderContext);
   if (!ctx) throw new Error('useBuilder must be used inside the builder');
   return ctx;
+}
+
+/** For tests: both contexts from one value. */
+export function TestBuilderProvider({ value, children }: { value: BuilderCtx; children: ReactNode }) {
+  return (
+    <BuilderContext.Provider value={value}>
+      <BuilderViewContext.Provider value={value}>{children}</BuilderViewContext.Provider>
+    </BuilderContext.Provider>
+  );
 }

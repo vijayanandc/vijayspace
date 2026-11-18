@@ -9,7 +9,7 @@ import { ApiError, errorMessage, getCurrentOrg } from '../../api/client';
 import { useToast } from '../../components/Toast';
 import { endpoints } from '../../api/endpoints';
 import { mk, qk } from '../../api/hooks';
-import type { Flow, FlowDefinition, Issue } from '../../api/types';
+import type { Flow, FlowDefinition, Issue, SaveDraftResult } from '../../api/types';
 
 export type SaveStatus = 'saved' | 'pending' | 'saving' | 'error' | 'conflict';
 
@@ -20,12 +20,19 @@ interface DraftSave {
   revision: number;
 }
 
-/** Puts a saved draft into the flow cache, then refreshes what the server derives from it (badges, the flow list). */
-async function adoptSavedDraft(qc: QueryClient, flowId: string, draft: FlowDefinition, revision: number): Promise<void> {
+/**
+ * Puts a saved draft into the flow cache with what the save returned, so reopening never starts from a pre-save
+ * draft. The flow is downloaded again only when the trigger type changed (its URL and registration come from the
+ * server); the flows list is only marked stale.
+ */
+async function adoptSavedDraft(qc: QueryClient, flowId: string, draft: FlowDefinition, res: SaveDraftResult): Promise<void> {
   // A refetch started before this save would bring back the old draft: drop it.
   await qc.cancelQueries({ queryKey: qk.flow(flowId) });
-  qc.setQueryData<Flow>(qk.flow(flowId), (old) => (old ? { ...old, draft, draft_revision: revision } : old));
-  void qc.invalidateQueries({ queryKey: qk.flow(flowId) });
+  const before = qc.getQueryData<Flow>(qk.flow(flowId));
+  qc.setQueryData<Flow>(qk.flow(flowId), (old) =>
+    old ? { ...old, draft, draft_revision: res.revision, has_unpublished_changes: res.has_unpublished_changes } : old,
+  );
+  if (!before || before.draft.trigger.type !== draft.trigger.type) void qc.invalidateQueries({ queryKey: qk.flow(flowId) });
   void qc.invalidateQueries({ queryKey: qk.flows });
 }
 
@@ -37,13 +44,15 @@ export function useAutosave(flowId: string, def: FlowDefinition, initialRevision
   const { mutateAsync } = useMutation({
     mutationKey: mk.saveDraft(flowId),
     mutationFn: (v: DraftSave) => endpoints.saveDraft(flowId, v.definition, v.revision, org),
-    onSuccess: (res, v) => adoptSavedDraft(qc, flowId, v.definition, res.revision),
+    onSuccess: (res, v) => adoptSavedDraft(qc, flowId, v.definition, res),
   });
   const [status, setStatus] = useState<SaveStatus>('saved');
   const [issues, setIssues] = useState<Issue[]>([]);
   const [error, setError] = useState<string | null>(null);
   const revision = useRef(initialRevision);
-  const savedJson = useRef(JSON.stringify(def));
+  // The last saved definition. Edits create new objects and undo returns the stored ones, so identity tells
+  // whether anything is unsaved without serialising the draft on every keystroke.
+  const savedDef = useRef(def);
   const defRef = useRef(def);
   const timer = useRef<number | undefined>(undefined);
   const inFlight = useRef<Promise<boolean> | null>(null);
@@ -63,8 +72,7 @@ export function useAutosave(flowId: string, def: FlowDefinition, initialRevision
   const save = useCallback(async (): Promise<boolean> => {
     if (conflict.current) return false;
     const current = defRef.current;
-    const json = JSON.stringify(current);
-    if (json === savedJson.current) {
+    if (current === savedDef.current) {
       setStatus('saved');
       return true;
     }
@@ -72,10 +80,10 @@ export function useAutosave(flowId: string, def: FlowDefinition, initialRevision
     try {
       const res = await mutateAsync({ definition: current, revision: revision.current });
       revision.current = res.revision;
-      savedJson.current = json;
+      savedDef.current = current;
       setIssues(res.issues);
       setError(null);
-      if (JSON.stringify(defRef.current) === json) {
+      if (defRef.current === current) {
         setStatus('saved');
       } else {
         // Edited, or undone back to the old state, while the request ran: save the current state too.
@@ -132,7 +140,7 @@ export function useAutosave(flowId: string, def: FlowDefinition, initialRevision
   }, [flowId]);
 
   useEffect(() => {
-    if (JSON.stringify(def) === savedJson.current) {
+    if (def === savedDef.current) {
       // e.g. undo back to the saved state: nothing to save.
       window.clearTimeout(timer.current);
       if (!conflict.current) setStatus((s) => (s === 'pending' ? 'saved' : s));
@@ -146,7 +154,7 @@ export function useAutosave(flowId: string, def: FlowDefinition, initialRevision
   useEffect(() => {
     // Leaving the builder (back link, another flow) saves what the debounce has not saved yet;
     // closing or reloading the tab asks first while anything is unsaved.
-    const unsaved = () => inFlight.current !== null || JSON.stringify(defRef.current) !== savedJson.current;
+    const unsaved = () => inFlight.current !== null || defRef.current !== savedDef.current;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!unsaved()) return;
       void runRef.current();
@@ -170,7 +178,7 @@ export function useAutosave(flowId: string, def: FlowDefinition, initialRevision
     window.clearTimeout(timer.current);
     conflict.current = false;
     revision.current = nextRevision;
-    savedJson.current = JSON.stringify(next);
+    savedDef.current = next;
     setStatus('saved');
     setError(null);
   }, []);

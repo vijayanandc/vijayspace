@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Flow, FlowDefinition } from '../../../api/types';
 import { renderWithProviders } from '../../../test/render';
-import { BuilderContext, type BuilderCtx } from '../BuilderContext';
+import { type BuilderCtx, TestBuilderProvider } from '../BuilderContext';
 import { ROOT } from '../../../domain/tree';
 import { FlowCanvas } from './FlowCanvas';
 
@@ -19,12 +19,12 @@ function renderCanvas() {
   const ctx: BuilderCtx = {
     flowId: 'flw_1', flow: { trigger: { kind: 'manual', token: 't', is_active: false } } as Flow, def, apply: vi.fn(), manifests: [],
     selected: null, select: vi.fn(), issues: new Map(), activePoint: null, setActivePoint: vi.fn(), drop: vi.fn(), insertItem: vi.fn(),
-    deleteStep: vi.fn(), flush: async () => true, refetchFlow: vi.fn(),
+    deleteStep: vi.fn(), flush: async () => true, readOnly: false, refetchFlow: vi.fn(),
   };
   const view = renderWithProviders(
-    <BuilderContext.Provider value={ctx}>
+    <TestBuilderProvider value={ctx}>
       <FlowCanvas />
-    </BuilderContext.Provider>,
+    </TestBuilderProvider>,
   );
   const wrapper = (id: string) => {
     const el = view.container.querySelector<HTMLElement>(`.react-flow__node[data-id="${id}"]`);

@@ -4,8 +4,10 @@ import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { qk } from '../../api/hooks';
+import type { Role } from '../../api/tenancy';
 import type { Flow, FlowDefinition, Step } from '../../api/types';
 import { ToastProvider } from '../../components/Toast';
+import { TestSession } from '../auth';
 import { BuilderPage } from './BuilderPage';
 
 class NoResize {
@@ -45,7 +47,7 @@ function fakeServer(steps: Step[] = []) {
   return { server, puts };
 }
 
-function renderBuilder() {
+function renderBuilder(role?: Role) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
   const view = render(
     <QueryClientProvider client={client}>
@@ -53,7 +55,7 @@ function renderBuilder() {
         <MemoryRouter initialEntries={['/flows/flw_1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             <Route path="/flows" element={<Link to="/flows/flw_1">Open demo</Link>} />
-            <Route path="/flows/:flowId" element={<BuilderPage />} />
+            <Route path="/flows/:flowId" element={role ? <TestSession role={role}><BuilderPage /></TestSession> : <BuilderPage />} />
           </Routes>
         </MemoryRouter>
       </ToastProvider>
@@ -137,5 +139,20 @@ describe('BuilderPage', () => {
     const panel = screen.getByRole('complementary', { name: 'Step settings' });
     fireEvent.click(within(panel).getByRole('tab', { name: 'Settings' }));
     expect(within(panel).getByLabelText(/Step key/)).toHaveValue('wait');
+  });
+
+  it('shows a viewer the flow without any way to change it', async () => {
+    const { puts } = fakeServer([{ key: 'wait', type: 'delay', seconds: 60 }]);
+    renderBuilder('viewer');
+    expect(await screen.findByText(/View only/)).toBeInTheDocument();
+    expect(document.querySelector('.palette')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Insert a step here' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Delete / })).not.toBeInTheDocument();
+    expect(stepCards()[0]).not.toHaveAttribute('draggable', 'true');
+    fireEvent.click(stepCards()[0] as HTMLElement);
+    expect(await screen.findByRole('textbox', { name: 'Step name' })).toHaveAttribute('readonly');
+    const panel = screen.getByRole('complementary', { name: 'Step settings' });
+    expect(panel.querySelector('fieldset')).toBeDisabled();
+    expect(puts).toHaveLength(0);
   });
 });

@@ -7,7 +7,7 @@ import { TRIGGER_CHOICES } from '../../../domain/triggers';
 import { useBuilder } from '../BuilderContext';
 import { DynamicForm } from '../../../forms/DynamicForm';
 import { defaultTrigger } from '../../../domain/factories';
-import { buildVariableTree } from '../../../domain/variables';
+import { useVariables } from './useVariables';
 import { StepConnectionPicker } from './StepConnectionPicker';
 import { CopyField } from './CopyField';
 import { SchedulePanel } from './SchedulePanel';
@@ -31,11 +31,11 @@ function WebhookSection({ trigger, onChange }: { trigger: WebhookTriggerNode; on
 }
 
 function AppSection({ trigger, onChange }: { trigger: AppTriggerNode; onChange: (t: TriggerNode, tag?: string) => void }) {
-  const { manifests, def, flow } = useBuilder();
+  const { manifests, flow } = useBuilder();
   const withTriggers = manifests.filter((m) => m.triggers.length > 0);
   const manifest = manifests.find((m) => m.key === trigger.connector);
   const spec = manifest?.triggers.find((t) => t.key === trigger.trigger);
-  const variables = buildVariableTree(def, undefined, manifests, flow.trigger?.sample);
+  const variables = useVariables(undefined);
   return (
     <>
       <section className="panel-section">

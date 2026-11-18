@@ -4,7 +4,7 @@ import { GripVertical } from 'lucide-react';
 import type { DragEvent } from 'react';
 
 import { AppIcon } from '../../components/AppIcon';
-import { useBuilder } from './BuilderContext';
+import { useBuilderView } from './BuilderContext';
 import { type PaletteItem as Item, writePaletteDrag } from '../../domain/factories';
 
 interface Props {
@@ -16,7 +16,7 @@ interface Props {
 }
 
 export function PaletteItem({ item, icon, label, description }: Props) {
-  const { insertItem } = useBuilder();
+  const { insertItem } = useBuilderView();
   const onDragStart = (e: DragEvent) => writePaletteDrag(e.dataTransfer, item);
   return (
     <button type="button" className="palette-item" draggable onDragStart={onDragStart} onClick={() => insertItem(item)} title={`${description}\nDrag onto a + or click to add`}>

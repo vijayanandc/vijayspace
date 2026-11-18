@@ -6,11 +6,11 @@ import type { DecisionStep } from '../../../api/types';
 import { useBuilder } from '../BuilderContext';
 import { ConditionBuilder } from '../condition/ConditionBuilder';
 import { addBranch, moveBranch, removeBranch, updateBranch } from '../../../domain/tree';
-import { buildVariableTree } from '../../../domain/variables';
+import { useVariables } from './useVariables';
 
 export function DecisionPanel({ step }: { step: DecisionStep }) {
-  const { def, apply, manifests, flow } = useBuilder();
-  const variables = buildVariableTree(def, step.key, manifests, flow.trigger?.sample);
+  const { def, apply } = useBuilder();
+  const variables = useVariables(step.key);
   return (
     <div className="panel-body">
       <p className="field-help panel-intro">Branches are checked in order; the first that matches runs. Otherwise runs when none match.</p>

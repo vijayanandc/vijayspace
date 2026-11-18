@@ -14,7 +14,8 @@ export const INSERT_SIZE = 28;
 export const GAP = 26;
 
 export type TriggerNodeData = { kind: 'trigger'; trigger: TriggerNode };
-export type StepNodeData = { kind: 'step'; step: Step; list: ListRef; index: number };
+/** `number`: the step's position in reading order (1-based), shown on its card. */
+export type StepNodeData = { kind: 'step'; step: Step; list: ListRef; index: number; number: number };
 export type InsertNodeData = { kind: 'insert'; point: InsertionPoint };
 export type EndNodeData = { kind: 'end' };
 export type BuilderNodeData = TriggerNodeData | StepNodeData | InsertNodeData | EndNodeData;
@@ -48,6 +49,8 @@ interface Incoming {
 class Builder {
   nodes: BuilderNode[] = [];
   edges: BuilderEdge[] = [];
+  /** Steps placed so far: steps are placed in reading order (pre-order, as `allSteps`). */
+  steps = 0;
 
   node(id: string, type: string, x: number, y: number, data: BuilderNodeData): void {
     this.nodes.push({ id, type, position: { x, y }, data, draggable: false, selectable: data.kind !== 'insert' });
@@ -79,7 +82,7 @@ class Builder {
       const step = steps[i];
       if (!step) break;
       const id = stepNodeId(step.key);
-      this.node(id, 'step', cx - NODE_WIDTH / 2, y, { kind: 'step', step, list: ref, index: i });
+      this.node(id, 'step', cx - NODE_WIDTH / 2, y, { kind: 'step', step, list: ref, index: i, number: ++this.steps });
       this.connect(prev, id);
       y += NODE_HEIGHT + GAP;
       if (step.type === 'decision') {

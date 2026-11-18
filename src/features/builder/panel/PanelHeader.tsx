@@ -9,7 +9,7 @@ import type { NodeLabel } from '../canvas/labels';
 import { updateStep } from '../../../domain/tree';
 
 export function PanelHeader({ label, step, onClose }: { label: NodeLabel; step?: Step; onClose: () => void }) {
-  const { def, apply } = useBuilder();
+  const { def, apply, readOnly } = useBuilder();
   const kicker = label.iconName && label.iconName !== label.kind ? `${label.kind} · ${label.iconName}` : label.kind;
   return (
     <div className="panel-head">
@@ -21,6 +21,7 @@ export function PanelHeader({ label, step, onClose }: { label: NodeLabel; step?:
             className="title-input panel-title"
             aria-label="Step name"
             title="Rename step"
+            readOnly={readOnly}
             value={step.name ?? ''}
             placeholder={label.title}
             onChange={(e) => apply(updateStep(def, step.key, (s) => ({ ...s, name: e.target.value })), `name:${step.key}`)}

@@ -1,7 +1,8 @@
-// Collapsible JSON section with a summary and a copy button.
+// Collapsible JSON section with a summary and a copy button. Large values are formatted only when opened and shown
+// in part (with "Show all"), so a multi-megabyte payload does not lay out tens of thousands of lines.
 
 import { Check, ChevronDown, ChevronRight, Copy } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { JsonValue } from '../api/types';
 import { COPY_FAILED, copyText } from '../lib/clipboard';
@@ -16,15 +17,22 @@ function summary(value: JsonValue): string {
   return typeof value;
 }
 
+/** Characters shown before "Show all". */
+export const JSON_PREVIEW_CHARS = 100_000;
+
+const format = (value: JsonValue | undefined) => JSON.stringify(value, null, 2);
+
 /** Collapsible JSON tree with copy. */
 export function JsonView({ value, label, collapsed = false }: { value: JsonValue | undefined; label?: string; collapsed?: boolean }) {
   const [open, setOpen] = useState(!collapsed);
+  const [all, setAll] = useState(false);
   const [copied, setCopied] = useState(false);
   const toast = useToast();
+  const text = useMemo(() => (open && value !== undefined ? format(value) : ''), [open, value]);
   if (value === undefined) return null;
-  const text = JSON.stringify(value, null, 2);
+  const cut = !all && text.length > JSON_PREVIEW_CHARS;
   const copy = () => {
-    copyText(text).then(
+    copyText(text || format(value)).then(
       () => {
         setCopied(true);
         window.setTimeout(() => setCopied(false), 1500);
@@ -45,7 +53,12 @@ export function JsonView({ value, label, collapsed = false }: { value: JsonValue
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      {open && <pre className="json-view-body">{text}</pre>}
+      {open && <pre className="json-view-body">{cut ? `${text.slice(0, JSON_PREVIEW_CHARS)}\n…` : text}</pre>}
+      {open && cut && (
+        <button type="button" className="link-btn json-more" onClick={() => setAll(true)}>
+          Show all ({Math.round(text.length / 1024).toLocaleString()} KB)
+        </button>
+      )}
     </div>
   );
 }

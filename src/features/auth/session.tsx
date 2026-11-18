@@ -45,21 +45,30 @@ export function pickOrg(orgs: Membership[], chosen: string | null): Membership |
   return orgs.find((o) => o.id === chosen) ?? orgs[0];
 }
 
-/** Resolves once no flow draft is being saved (or after `maxMs`), a macrotask after being called. */
-export function draftSavesSettled(qc: QueryClient, maxMs = 10_000): Promise<void> {
+/**
+ * Resolves once nothing is being saved (a draft, org settings…; or after `maxMs`), a macrotask after being called.
+ * Org switches and sign-out wait for it, so every save goes out in the org and sign-in it was made in, and nothing
+ * it writes back into the cache lands in the next org.
+ */
+export function mutationsSettled(qc: QueryClient, maxMs = 10_000): Promise<void> {
   return new Promise((resolve) => {
     let unsubscribe = () => undefined as void;
+    let finished = false;
     const giveUp = window.setTimeout(done, maxMs);
     function done() {
+      if (finished) return;
+      finished = true;
       window.clearTimeout(giveUp);
       unsubscribe();
       resolve();
     }
-    // A save a page starts as it closes begins a few microtasks later: look after a macrotask.
+    const idle = () => qc.isMutating() === 0;
+    // A save a page starts as it closes, or one queued behind a save that just finished, begins a few microtasks
+    // later: an idle cache counts only once it is still idle a macrotask later.
+    const check = () => {
+      if (idle()) window.setTimeout(() => idle() && done(), 0);
+    };
     window.setTimeout(() => {
-      const check = () => {
-        if (qc.isMutating({ mutationKey: ['save-draft'] }) === 0) done();
-      };
       unsubscribe = qc.getMutationCache().subscribe(check);
       check();
     }, 0);
@@ -96,7 +105,7 @@ export function SessionProvider({ me, signedIn, signOut, children }: Props) {
   useEffect(() => {
     if (!pending) return undefined;
     let cancelled = false;
-    void draftSavesSettled(queryClient).then(() => {
+    void mutationsSettled(queryClient).then(() => {
       if (cancelled) return;
       write(ORG_KEY, pending);
       setCurrentOrg(pending);

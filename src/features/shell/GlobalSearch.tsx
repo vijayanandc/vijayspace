@@ -1,11 +1,9 @@
 // Global header search: finds flows by name or description and opens them in the builder.
 
-import { useQuery } from '@tanstack/react-query';
 import { type KeyboardEvent, useId, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-import { endpoints } from '../../api/endpoints';
-import { qk } from '../../api/hooks';
+import { useFlows } from '../../api/hooks';
 import type { FlowSummary } from '../../api/types';
 import { AppIcon } from '../../components/AppIcon';
 import { useDismiss } from '../../components/Popover';
@@ -24,7 +22,7 @@ export function GlobalSearch() {
   const listId = useId();
   const navigate = useNavigate();
   useDismiss(ref, open, () => setOpen(false));
-  const flows = useQuery({ queryKey: qk.flows, queryFn: endpoints.flows, enabled: open });
+  const flows = useFlows({ enabled: open });
   const q = query.trim().toLowerCase();
   const results = (flows.data ?? [])
     .filter((f) => !q || f.name.toLowerCase().includes(q) || (f.description ?? '').toLowerCase().includes(q))

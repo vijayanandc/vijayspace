@@ -4,15 +4,14 @@ import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import type { VarNode } from '../domain/variables';
+import { previewJson } from '../lib/format';
 
 function matches(node: VarNode, q: string): boolean {
   return node.label.toLowerCase().includes(q) || node.path.toLowerCase().includes(q) || node.children.some((c) => matches(c, q));
 }
 
 function preview(sample: unknown): string {
-  if (sample === undefined) return '';
-  const text = typeof sample === 'string' ? sample : JSON.stringify(sample);
-  return text.length > 40 ? `${text.slice(0, 40)}…` : text;
+  return sample === undefined ? '' : previewJson(sample);
 }
 
 function NodeRow({ node, depth, q, onPick }: { node: VarNode; depth: number; q: string; onPick: (path: string) => void }) {

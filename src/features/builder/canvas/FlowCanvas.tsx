@@ -1,7 +1,9 @@
 // The flow canvas: React Flow rendering of the layout computed from the definition (dotted background,
 // zoom controls, drop targets highlighted while a palette item or step is being dragged).
 
-import { Background, BackgroundVariant, Controls, Panel, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
+// React Flow's own styles load with the builder; the overrides in styles/canvas.css are more specific.
+import '@xyflow/react/dist/style.css';
+import { Background, BackgroundVariant, Controls, type Edge, Panel, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import { MousePointerClick } from 'lucide-react';
 import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef } from 'react';
 
@@ -11,7 +13,7 @@ import { type BuilderNode, layoutDefinition, stepNodeId } from '../model/layout'
 import { TRIGGER_ID } from '../model/paths';
 import { edgeTypes } from './edges';
 import { nodeTypes } from './nodes';
-import { CARD_WIDTH, toViewEdges, toViewNodes } from './viewLayout';
+import { CARD_WIDTH, reuseEdges, reuseNodes, toViewEdges, toViewNodes } from './viewLayout';
 
 /** Adds `canvas-dragging` to the canvas while a Weft drag is in progress (no re-render needed). */
 function useDragHighlight(ref: RefObject<HTMLDivElement>) {
@@ -58,11 +60,21 @@ function useKeepSelectionVisible(selected: string | null, ref: RefObject<HTMLDiv
   }, [selected, ref, getNode, getViewport, setViewport]);
 }
 
+const FIT_VIEW = { padding: 0.2, maxZoom: 1 };
+const PRO_OPTIONS = { hideAttribution: true };
+
 function Canvas() {
   const { def, select, selected, deleteStep, setActivePoint } = useBuilder();
+  // Unchanged nodes and edges keep their objects (and so their measurements) across edits.
+  const previous = useRef<{ nodes: BuilderNode[]; edges: Edge[] }>({ nodes: [], edges: [] });
   const { nodes, edges } = useMemo(() => {
     const model = layoutDefinition(def);
-    return { nodes: toViewNodes(model.nodes), edges: toViewEdges(model.edges) };
+    const next = {
+      nodes: reuseNodes(previous.current.nodes, toViewNodes(model.nodes)),
+      edges: reuseEdges(previous.current.edges, toViewEdges(model.edges)),
+    };
+    previous.current = next;
+    return next;
   }, [def]);
   const { fitView } = useReactFlow();
   const nodeCount = useRef(nodes.length);
@@ -120,7 +132,7 @@ function Canvas() {
         elementsSelectable
         deleteKeyCode={null}
         fitView
-        fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
+        fitViewOptions={FIT_VIEW}
         minZoom={0.2}
         maxZoom={1.5}
         onNodeClick={(_, node) => openNode(node)}
@@ -128,7 +140,7 @@ function Canvas() {
           select(null);
           setActivePoint(null);
         }}
-        proOptions={{ hideAttribution: true }}
+        proOptions={PRO_OPTIONS}
       >
         <Background variant={BackgroundVariant.Dots} gap={18} size={1.4} color="#c2c2c2" />
         {def.steps.length === 0 && (

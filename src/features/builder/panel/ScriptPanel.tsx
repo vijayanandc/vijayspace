@@ -8,13 +8,13 @@ import { useBuilder } from '../BuilderContext';
 import { DynamicForm } from '../../../forms/DynamicForm';
 import { SCRIPT_CONNECTOR, type ScriptExample, hasOwnCode, withExample } from '../../../domain/script';
 import { updateStep } from '../../../domain/tree';
-import { buildVariableTree } from '../../../domain/variables';
+import { useVariables } from './useVariables';
 import { ScriptHelp } from './ScriptHelp';
 
 export function ScriptPanel({ step }: { step: ActionStep }) {
-  const { def, apply, manifests, flow, issues } = useBuilder();
+  const { def, apply, manifests, issues } = useBuilder();
   const spec = manifests.find((m) => m.key === SCRIPT_CONNECTOR)?.actions.find((a) => a.key === step.action);
-  const variables = buildVariableTree(def, step.key, manifests, flow.trigger?.sample);
+  const variables = useVariables(step.key);
   const input: JsonObject = step.input ?? {};
   const setInput = (next: JsonObject, tag?: string) => apply(updateStep(def, step.key, (s) => (s.type === 'action' ? { ...s, input: next } : s)), tag);
   const form = useRef<HTMLElement>(null);

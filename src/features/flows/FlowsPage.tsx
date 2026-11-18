@@ -1,12 +1,10 @@
 // "My flows": page header, command bar (search, filter, view toggle, refresh) and the table or grid.
 
-import { useQuery } from '@tanstack/react-query';
 import { LayoutGrid, List, Plus, RefreshCw, Workflow } from 'lucide-react';
 import { useState } from 'react';
 
 import { errorMessage } from '../../api/client';
-import { endpoints } from '../../api/endpoints';
-import { qk } from '../../api/hooks';
+import { useFlows } from '../../api/hooks';
 import type { FlowSummary } from '../../api/types';
 import { Button, LinkButton } from '../../components/Button';
 import { EmptyState, ErrorBox, Loading } from '../../components/Empty';
@@ -40,7 +38,7 @@ export function FlowsPage() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [view, setView] = useStoredChoice('weft.flows.view', 'list', VIEWS);
-  const flows = useQuery({ queryKey: qk.flows, queryFn: endpoints.flows, refetchInterval: 15_000 });
+  const flows = useFlows({ refetchInterval: 15_000 });
   const all = flows.data ?? [];
   const q = query.trim().toLowerCase();
   const visible = all.filter((f) => matches(f, q, filter));

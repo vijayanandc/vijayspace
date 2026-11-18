@@ -35,6 +35,44 @@ export function toViewNodes(nodes: BuilderNode[]): BuilderNode[] {
   });
 }
 
+function sameData(a: BuilderNode['data'], b: BuilderNode['data']): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'step' && b.kind === 'step') {
+    return a.step === b.step && a.index === b.index && a.number === b.number && JSON.stringify(a.list) === JSON.stringify(b.list);
+  }
+  if (a.kind === 'trigger' && b.kind === 'trigger') return a.trigger === b.trigger;
+  if (a.kind === 'insert' && b.kind === 'insert') return JSON.stringify(a.point) === JSON.stringify(b.point);
+  return true;
+}
+
+/**
+ * Keeps the previous object for every node whose position and data did not change. React Flow keeps a node's
+ * measurements only when it gets the same object back; a new object is hidden, measured again and its edges redrawn.
+ */
+export function reuseNodes(prev: BuilderNode[], next: BuilderNode[]): BuilderNode[] {
+  const old = new Map(prev.map((n) => [n.id, n]));
+  return next.map((n) => {
+    const p = old.get(n.id);
+    const same =
+      p !== undefined &&
+      p.type === n.type &&
+      p.position.x === n.position.x &&
+      p.position.y === n.position.y &&
+      p.focusable === n.focusable &&
+      sameData(p.data, n.data);
+    return same ? p : n;
+  });
+}
+
+/** Keeps the previous object for every edge that did not change (edges are small: compared by value). */
+export function reuseEdges(prev: Edge[], next: Edge[]): Edge[] {
+  const old = new Map(prev.map((e) => [e.id, e]));
+  return next.map((e) => {
+    const p = old.get(e.id);
+    return p && JSON.stringify(p) === JSON.stringify(e) ? p : e;
+  });
+}
+
 /** Branch edges get the pill label edge; edges into cards and the End get an arrowhead. */
 export function toViewEdges(edges: BuilderEdge[]): Edge[] {
   return edges.map((e) => {

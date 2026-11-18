@@ -1,6 +1,6 @@
 // The variable picker tree: what a step can reference (`trigger.*`, `steps.<key>.*`, `vars.*`).
 
-import type { ConnectorManifest, FlowDefinition, JsonValue, Step } from '../api/types';
+import type { ConnectorManifest, FlowDefinition, JsonObject, JsonValue, Step } from '../api/types';
 
 export interface VarNode {
   label: string;
@@ -22,9 +22,23 @@ export function childPath(prefix: string, key: string | number): string {
   return `${prefix}[${JSON.stringify(key)}]`;
 }
 
+// Samples are immutable: their nodes are built once per (sample object, path), not on every edit of the flow.
+const cache = new WeakMap<object, Map<string, VarNode[]>>();
+
 /** Children of a JSON sample as variable nodes (arrays show their first element as `[0]`). */
 export function jsonToVarNodes(prefix: string, value: JsonValue | undefined, depth = 0): VarNode[] {
   if (value === null || value === undefined || typeof value !== 'object' || depth >= MAX_DEPTH) return [];
+  const byPath = cache.get(value) ?? new Map<string, VarNode[]>();
+  const key = `${depth}:${prefix}`;
+  const cached = byPath.get(key);
+  if (cached) return cached;
+  const nodes = buildNodes(prefix, value, depth);
+  byPath.set(key, nodes);
+  cache.set(value, byPath);
+  return nodes;
+}
+
+function buildNodes(prefix: string, value: JsonObject | JsonValue[], depth: number): VarNode[] {
   if (Array.isArray(value)) {
     if (value.length === 0) return [];
     const path = childPath(prefix, 0);

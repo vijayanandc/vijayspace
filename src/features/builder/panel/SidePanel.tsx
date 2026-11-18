@@ -29,7 +29,7 @@ const ALL_TABS: Tab<PanelTab>[] = [
 
 export function SidePanel() {
   const role = useRole();
-  const { selected, def, manifests, select } = useBuilder();
+  const { selected, def, manifests, select, readOnly } = useBuilder();
   // The tab belongs to the node it was chosen on: selecting another node (or none) starts again on Configure.
   // A key rename keeps the tab because StepSettings reports the new key before selecting it.
   const [state, setState] = useState<{ id: string | null; tab: PanelTab }>({ id: selected, tab: 'configure' });
@@ -47,7 +47,7 @@ export function SidePanel() {
       <aside className="side-panel" aria-label="Trigger settings">
         <PanelHeader label={triggerLabel(def.trigger, manifests)} onClose={close} />
         <Tabs label="Trigger panel" tabs={visible} value={tab} onChange={setTab} className="panel-tabs" />
-        <div className="panel-scroll">
+        <fieldset className="panel-scroll panel-fieldset" disabled={readOnly}>
           {tab === 'configure' && (
             <>
               <NodeIssues id={TRIGGER_ID} />
@@ -56,7 +56,7 @@ export function SidePanel() {
           )}
           {tab === 'settings' && <TriggerSettings />}
           {tab === 'test' && canTest && <TriggerTest />}
-        </div>
+        </fieldset>
       </aside>
     );
   }
@@ -70,7 +70,8 @@ export function SidePanel() {
     <aside key={step.key} className="side-panel" aria-label="Step settings">
       <PanelHeader label={stepLabel(step, manifests)} step={step} onClose={close} />
       <Tabs label="Step panel" tabs={tabs} value={shown} onChange={setTab} className="panel-tabs" />
-      <div className="panel-scroll">
+      {/* Viewers read the settings; a disabled fieldset disables every control inside it. */}
+      <fieldset className="panel-scroll panel-fieldset" disabled={readOnly}>
         {shown === 'configure' && (
           <>
             <NodeIssues id={step.key} />
@@ -83,7 +84,7 @@ export function SidePanel() {
         )}
         {shown === 'settings' && <StepSettings key={step.key} step={step} onRenamed={(key) => setState({ id: key, tab: 'settings' })} />}
         {shown === 'test' && step.type === 'action' && <TestStepBox stepKey={step.key} />}
-      </div>
+      </fieldset>
     </aside>
   );
 }

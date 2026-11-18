@@ -1,6 +1,6 @@
 // Flows as a dense, sortable table (default view) or as a card grid.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import type { FlowSummary } from '../../api/types';
@@ -76,7 +76,7 @@ function FlowRow({ flow }: { flow: FlowSummary }) {
 
 export function FlowTable({ flows }: { flows: FlowSummary[] }) {
   const [sort, setSort] = useState<SortState<Column>>({ key: 'updated', dir: 'desc' });
-  const rows = sortRows(flows, sort, sortValue);
+  const rows = useMemo(() => sortRows(flows, sort, sortValue), [flows, sort]);
   const onSort = (column: Column) => setSort((s) => nextSort(s, column));
   return (
     <table className="table">

@@ -1,6 +1,5 @@
 // Entry point: global styles, the query client, the router and the app.
 
-import '@xyflow/react/dist/style.css';
 import './styles.css';
 
 import { QueryClientProvider } from '@tanstack/react-query';

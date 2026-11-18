@@ -2,15 +2,15 @@
 
 import { Handle, type NodeProps, Position } from '@xyflow/react';
 import { Plus, Trash2, Zap } from 'lucide-react';
-import { type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode, useMemo, useState } from 'react';
+import { type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode, useState } from 'react';
 
 import { AppIcon, tileColor } from '../../../components/AppIcon';
-import { useBuilder } from '../BuilderContext';
+import { useBuilderView } from '../BuilderContext';
 import { isWeftDrag, readDrag, writeMoveDrag } from '../../../domain/factories';
 import { isScriptStep } from '../../../domain/script';
 import type { BuilderNode } from '../model/layout';
 import { TRIGGER_ID } from '../model/paths';
-import { allSteps, sameList } from '../../../domain/tree';
+import { sameList } from '../../../domain/tree';
 import { type NodeLabel, stepLabel, triggerLabel } from './labels';
 
 function Handles() {
@@ -23,7 +23,7 @@ function Handles() {
 }
 
 function IssueDot({ id }: { id: string }) {
-  const { issues } = useBuilder();
+  const { issues } = useBuilderView();
   const list = issues.get(id) ?? [];
   const errors = list.filter((i) => i.severity === 'error').length;
   if (list.length === 0) return null;
@@ -57,7 +57,7 @@ function accent(icon: string): CSSProperties {
 }
 
 export function TriggerNodeView({ data }: NodeProps<BuilderNode>) {
-  const { selected, manifests } = useBuilder();
+  const { selected, manifests } = useBuilderView();
   if (data.kind !== 'trigger') return null;
   const label = triggerLabel(data.trigger, manifests);
   return (
@@ -70,22 +70,21 @@ export function TriggerNodeView({ data }: NodeProps<BuilderNode>) {
 }
 
 export function StepNodeView({ data }: NodeProps<BuilderNode>) {
-  const { selected, manifests, deleteStep, def } = useBuilder();
-  const stepKey = data.kind === 'step' ? data.step.key : '';
-  const number = useMemo(() => allSteps(def).findIndex((s) => s.key === stepKey) + 1, [def, stepKey]);
+  const { selected, manifests, deleteStep, readOnly } = useBuilderView();
   if (data.kind !== 'step') return null;
-  const { step } = data;
+  const { step, number } = data;
   const label = stepLabel(step, manifests);
   const onDragStart = (e: DragEvent) => writeMoveDrag(e.dataTransfer, step.key);
   return (
     <div
       className={`node node-step node-${step.type}${isScriptStep(step) ? ' node-script' : ''}${selected === step.key ? ' node-selected' : ''} nodrag nopan`}
       style={accent(label.icon)}
-      draggable
-      onDragStart={onDragStart}
-      title="Drag onto a + to move"
+      draggable={!readOnly}
+      onDragStart={readOnly ? undefined : onDragStart}
+      title={readOnly ? undefined : 'Drag onto a + to move'}
     >
       <CardBody label={label} number={number}>
+        {!readOnly && (
         <button
           type="button"
           className="node-delete"
@@ -98,6 +97,7 @@ export function StepNodeView({ data }: NodeProps<BuilderNode>) {
         >
           <Trash2 size={14} aria-hidden="true" />
         </button>
+        )}
       </CardBody>
       <IssueDot id={step.key} />
       <Handles />
@@ -106,9 +106,17 @@ export function StepNodeView({ data }: NodeProps<BuilderNode>) {
 }
 
 export function InsertNodeView({ data }: NodeProps<BuilderNode>) {
-  const { drop, activePoint, setActivePoint } = useBuilder();
+  const { drop, activePoint, setActivePoint, readOnly } = useBuilderView();
   const [over, setOver] = useState(false);
   if (data.kind !== 'insert') return null;
+  // Viewers see the flow's shape; nothing can be inserted.
+  if (readOnly) {
+    return (
+      <div className="insert-node insert-node-inert" aria-hidden="true">
+        <Handles />
+      </div>
+    );
+  }
   const { point } = data;
   const active = activePoint !== null && sameList(activePoint.list, point.list) && activePoint.index === point.index;
   const onDragOver = (e: DragEvent) => {

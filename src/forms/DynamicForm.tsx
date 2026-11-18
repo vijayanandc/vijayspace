@@ -15,6 +15,7 @@ import { KeyValueInput } from './KeyValueInput';
 import { MappingInput } from './MappingInput';
 import { ParsedMappingInput } from './ParsedMappingInput';
 import { SelectInput } from './SelectInput';
+import { dependenciesReady, useDependencyKey } from './dependencies';
 
 interface FieldProps {
   field: FieldSpec;
@@ -22,6 +23,8 @@ interface FieldProps {
   onChange: (v: JsonValue) => void;
   env: FormEnv;
   siblings: JsonObject;
+  /** The specs of the fields `siblings` holds (which dependencies are required). */
+  siblingFields: FieldSpec[];
 }
 
 function asText(v: JsonValue | undefined): string {
@@ -29,14 +32,16 @@ function asText(v: JsonValue | undefined): string {
   return typeof v === 'string' ? v : JSON.stringify(v);
 }
 
-function ObjectFields({ field, value, onChange, env, siblings }: FieldProps) {
-  const ready = Boolean(field.fields_from) && (!env.requiresConnection || Boolean(env.connectionId));
-  const deps = (field.depends_on ?? []).map((k) => siblings[k] ?? null);
+function ObjectFields({ field, value, onChange, env, siblings, siblingFields }: FieldProps) {
+  const ready =
+    Boolean(field.fields_from) && (!env.requiresConnection || Boolean(env.connectionId)) && dependenciesReady(field, siblings, siblingFields);
+  const deps = useDependencyKey(field, siblings);
   const q = useQuery({
     queryKey: ['fields', env.connector, field.fields_from, env.connectionId ?? null, deps],
     queryFn: () => endpoints.fields(env.connector, field.fields_from ?? '', { connection_id: env.connectionId ?? null, input: siblings }),
     enabled: ready,
     staleTime: 60_000,
+    gcTime: 60_000,
     retry: false,
   });
   const obj: JsonObject = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -52,14 +57,14 @@ function ObjectFields({ field, value, onChange, env, siblings }: FieldProps) {
   );
 }
 
-export function FieldInput({ field, value, onChange, env, siblings }: FieldProps) {
+export function FieldInput({ field, value, onChange, env, siblings, siblingFields }: FieldProps) {
   const mappable = field.mappable !== false;
   return (
     <Field label={field.label} required={field.required} help={field.help}>
       {(id) => {
         switch (field.type) {
           case 'select':
-            return <SelectInput id={id} field={field} value={value} onChange={onChange} env={env} siblings={siblings} />;
+            return <SelectInput id={id} field={field} value={value} onChange={onChange} env={env} siblings={siblings} siblingFields={siblingFields} />;
           case 'boolean':
             if (typeof value === 'string' && value.includes('{{')) {
               return <MappingInput id={id} value={value} onChange={onChange} variables={env.variables} />;
@@ -75,7 +80,7 @@ export function FieldInput({ field, value, onChange, env, siblings }: FieldProps
           case 'key_value':
             return <KeyValueInput label={field.label} value={value} onChange={onChange} variables={env.variables} />;
           case 'object':
-            return <ObjectFields field={field} value={value} onChange={onChange} env={env} siblings={siblings} />;
+            return <ObjectFields field={field} value={value} onChange={onChange} env={env} siblings={siblings} siblingFields={siblingFields} />;
           case 'password':
             return <input id={id} className="input" type="password" autoComplete="new-password" value={asText(value)} onChange={(e) => onChange(e.target.value)} />;
           case 'number':
@@ -106,7 +111,7 @@ export function DynamicForm({ fields, values, onChange, env }: { fields: FieldSp
   const set = (key: string, v: JsonValue) => onChange({ ...values, [key]: v });
   const basic = fields.filter((f) => !f.advanced);
   const advanced = fields.filter((f) => f.advanced);
-  const render = (f: FieldSpec) => <FieldInput key={f.key} field={f} value={values[f.key]} onChange={(v) => set(f.key, v)} env={env} siblings={values} />;
+  const render = (f: FieldSpec) => <FieldInput key={f.key} field={f} value={values[f.key]} onChange={(v) => set(f.key, v)} env={env} siblings={values} siblingFields={fields} />;
   return (
     <div className="dynamic-form">
       {basic.map(render)}

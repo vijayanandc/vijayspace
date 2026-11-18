@@ -16,6 +16,7 @@ import { MessageBar } from '../../components/MessageBar';
 import { useToast } from '../../components/Toast';
 import { formatDuration, formatTime, isTerminal } from '../../lib/format';
 import { MODE_LABELS } from './labels';
+import { executionPollMs } from './polling';
 import { StepTimeline } from './StepTimeline';
 import { can, useRole } from '../auth';
 
@@ -24,7 +25,9 @@ export function ExecutionPage() {
   const exec = useQuery({
     queryKey: qk.execution(executionId),
     queryFn: () => endpoints.execution(executionId),
-    refetchInterval: (q) => (q.state.data && isTerminal(q.state.data.status) ? false : 2000),
+    refetchInterval: (q) => executionPollMs(q.state.data?.status, q.state.status === 'error', q.state.data?.waiting_until ?? null, Date.now()),
+    // Payloads can be large: not kept long after leaving the page.
+    gcTime: 30_000,
   });
   if (exec.isLoading) return <Loading />;
   if (exec.error) {

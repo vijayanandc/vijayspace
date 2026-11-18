@@ -1,7 +1,7 @@
 // The flow builder: top bar, then palette | canvas | side panel, with autosave and undo/redo.
 
 import { useIsMutating, useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
 import { errorMessage } from '../../api/client';
@@ -11,7 +11,7 @@ import type { ConnectorManifest, Flow, FlowDefinition } from '../../api/types';
 import { Button } from '../../components/Button';
 import { ErrorBox, Loading } from '../../components/Empty';
 import { MessageBar } from '../../components/MessageBar';
-import { BuilderContext, type BuilderCtx } from './BuilderContext';
+import { BuilderContext, type BuilderCtx, BuilderViewContext, type BuilderViewCtx } from './BuilderContext';
 import { FlowCanvas } from './canvas/FlowCanvas';
 import { IssuesPanel } from './IssuesPanel';
 import { createStep, type DragPayload, type PaletteItem } from '../../domain/factories';
@@ -19,6 +19,7 @@ import { historyReducer, initHistory } from './model/history';
 import { issuesByNode } from './model/paths';
 import { followSelection } from './model/selection';
 import { type InsertionPoint, ROOT, deleteStep as removeStep, findStep, insertStep, moveStep } from '../../domain/tree';
+import type { Issue } from '../../api/types';
 import { Palette } from './Palette';
 import { SidePanel } from './panel/SidePanel';
 import { Toolbar } from './Toolbar';
@@ -90,7 +91,7 @@ function LoadedBuilder({ flow, manifests, refetch, refreshError }: LoadedProps) 
   }
   const [activePoint, setActivePoint] = useState<InsertionPoint | null>(null);
   const [showIssues, setShowIssues] = useState(false);
-  const issues = useMemo(() => issuesByNode(def, autosave.issues), [def, autosave.issues]);
+  const issues = useStableIssues(useMemo(() => issuesByNode(def, autosave.issues), [def, autosave.issues]));
 
   // Viewers look at flows without changing them: edits are not applied (and so never saved).
   const readOnly = !can(useRole(), 'flow.edit');
@@ -101,48 +102,57 @@ function LoadedBuilder({ flow, manifests, refetch, refreshError }: LoadedProps) 
     [readOnly],
   );
 
+  // Callbacks read the latest state through refs, so they (and the canvas context) stay stable while typing.
+  const latest = useRef({ def, selected, activePoint, manifests });
+  latest.current = { def, selected, activePoint, manifests };
   const placeNew = useCallback(
     (point: InsertionPoint, item: PaletteItem) => {
-      const step = createStep(def, item, manifests);
-      apply(insertStep(def, point, step));
+      const { def: current, manifests: apps } = latest.current;
+      const step = createStep(current, item, apps);
+      apply(insertStep(current, point, step));
       select(step.key);
       setActivePoint(null);
     },
-    [def, manifests, apply],
+    [apply],
   );
-
-  const ctx: BuilderCtx = {
-    flowId: flow.id,
-    flow,
-    def,
-    apply,
-    manifests,
-    selected,
-    select,
-    issues,
-    activePoint,
-    setActivePoint,
-    drop: (point: InsertionPoint, payload: DragPayload) => {
+  const drop = useCallback(
+    (point: InsertionPoint, payload: DragPayload) => {
       if (payload.kind === 'palette') placeNew(point, payload.item);
-      else apply(moveStep(def, payload.key, point));
+      else apply(moveStep(latest.current.def, payload.key, point));
     },
-    insertItem: (item: PaletteItem) => placeNew(activePoint ?? { list: ROOT, index: def.steps.length }, item),
-    deleteStep: (key: string) => {
-      const step = findStep(def, key);
-      if (!step) return;
+    [placeNew, apply],
+  );
+  const insertItem = useCallback(
+    (item: PaletteItem) => placeNew(latest.current.activePoint ?? { list: ROOT, index: latest.current.def.steps.length }, item),
+    [placeNew],
+  );
+  const deleteStep = useCallback(
+    (key: string) => {
+      const { def: current, selected: chosen } = latest.current;
+      const step = findStep(current, key);
+      if (!step || readOnly) return;
       const nested = step.type === 'decision' ? step.branches.reduce((n, b) => n + b.steps.length, step.otherwise.length) : 0;
       if (nested > 0 && !window.confirm(`Delete “${step.name ?? key}” and the ${nested} step(s) inside it?`)) return;
-      apply(removeStep(def, key));
-      if (selected === key) select(null);
+      apply(removeStep(current, key));
+      if (chosen === key) select(null);
     },
-    flush: autosave.flush,
-    refetchFlow: () => void refetch(),
-  };
+    [apply, readOnly],
+  );
+  const refetchFlow = useCallback(() => void refetch(), [refetch]);
+  const view: BuilderViewCtx = useMemo(
+    () => ({ manifests, selected, select, issues, activePoint, setActivePoint, drop, insertItem, deleteStep, readOnly }),
+    [manifests, selected, issues, activePoint, drop, insertItem, deleteStep, readOnly],
+  );
+  const ctx: BuilderCtx = useMemo(
+    () => ({ ...view, flowId: flow.id, flow, def, apply, flush: autosave.flush, refetchFlow }),
+    [view, flow, def, apply, autosave.flush, refetchFlow],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target?.closest('input, textarea, select')) return;
+      // Typing, and dialogs over the builder, keep their own undo (or none).
+      if (target?.closest('input, textarea, select, [contenteditable], [role="dialog"]')) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         dispatch({ type: e.shiftKey ? 'redo' : 'undo' });
@@ -165,6 +175,7 @@ function LoadedBuilder({ flow, manifests, refetch, refreshError }: LoadedProps) 
 
   return (
     <BuilderContext.Provider value={ctx}>
+      <BuilderViewContext.Provider value={view}>
       <div className="builder">
         <Toolbar
           saveStatus={autosave.status}
@@ -198,7 +209,7 @@ function LoadedBuilder({ flow, manifests, refetch, refreshError }: LoadedProps) 
           </MessageBar>
         )}
         <div className="builder-body">
-          <Palette />
+          {!readOnly && <Palette />}
           <div className="builder-stage">
             <FlowCanvas />
             {showIssues && <IssuesPanel issues={autosave.issues} onClose={() => setShowIssues(false)} />}
@@ -206,6 +217,15 @@ function LoadedBuilder({ flow, manifests, refetch, refreshError }: LoadedProps) 
           <SidePanel />
         </div>
       </div>
+      </BuilderViewContext.Provider>
     </BuilderContext.Provider>
   );
+}
+
+/** The previous map while the issues are the same (by content): canvas cards re-render only when theirs change. */
+function useStableIssues(next: Map<string, Issue[]>): Map<string, Issue[]> {
+  const kept = useRef<{ key: string; map: Map<string, Issue[]> } | null>(null);
+  const key = JSON.stringify([...next]);
+  if (kept.current?.key !== key) kept.current = { key, map: next };
+  return kept.current.map;
 }

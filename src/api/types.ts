@@ -179,6 +179,7 @@ export interface Flow extends Omit<FlowSummary, 'apps'> {
 export interface SaveDraftResult {
   revision: number;
   issues: Issue[];
+  has_unpublished_changes: boolean;
 }
 
 export interface PublishResult {

@@ -14,7 +14,7 @@ import { MeGate } from './MeGate';
 import { SignInPage } from './SignInPage';
 import { read, remove, write } from '../../lib/storage';
 import { safeNextPath } from '../../lib/safePath';
-import { draftSavesSettled } from './session';
+import { mutationsSettled } from './session';
 import { Splash } from './Splash';
 
 const RETURN_KEY = 'weft.return';
@@ -128,7 +128,7 @@ export function LogtoGate({ signIn: settings, children }: { signIn: SignInConfig
     if (!leaving) return undefined;
     let cancelled = false;
     let timer: number | undefined;
-    void draftSavesSettled(qc).then(async () => {
+    void mutationsSettled(qc).then(async () => {
       if (cancelled) return;
       signedOut.current = true;
       void qc.cancelQueries();
@@ -142,6 +142,10 @@ export function LogtoGate({ signIn: settings, children }: { signIn: SignInConfig
       window.clearTimeout(timer);
     };
   }, [leaving, qc, signOut, uris.signOut, endLocally]);
+
+  // Stable: the session context (and every `useRole` consumer) must not change when the SDK flips its loading
+  // state around each token request.
+  const leave = useCallback(() => setLeaving(true), []);
 
   // Registered while rendering so the first queries of the page already carry the token.
   if (isAuthenticated && !leaving && !signedOut.current) {
@@ -162,7 +166,7 @@ export function LogtoGate({ signIn: settings, children }: { signIn: SignInConfig
     return <SignInPage onSignIn={startSignIn} busy={opening} error={error && !sessionEnded(error) ? error.message : undefined} />;
   }
   return (
-    <MeGate signedIn signOut={() => setLeaving(true)}>
+    <MeGate signedIn signOut={leave}>
       {children}
     </MeGate>
   );

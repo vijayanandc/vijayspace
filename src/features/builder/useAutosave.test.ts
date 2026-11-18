@@ -107,15 +107,26 @@ describe('useAutosave', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('writes each saved draft and revision into the cached flow, so reopening starts from it', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => (isValidate(url) ? noIssues() : new Response(JSON.stringify({ revision: 7, issues: [] }), { status: 200 }))));
-    client.setQueryData<Partial<Flow>>(qk.flow('flw_1'), { id: 'flw_1', draft: d0, draft_revision: 1 });
+  it('writes each saved draft, revision and publish state into the cached flow, without downloading it again', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (isValidate(url) ? noIssues() : new Response(JSON.stringify({ revision: 7, issues: [], has_unpublished_changes: false }), { status: 200 }))));
+    client.setQueryData<Partial<Flow>>(qk.flow('flw_1'), { id: 'flw_1', draft: d0, draft_revision: 1, has_unpublished_changes: true });
     const { rerender } = renderAutosave(d0);
     rerender({ def: d1 });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1600);
     });
-    expect(client.getQueryData(qk.flow('flw_1'))).toMatchObject({ draft: d1, draft_revision: 7 });
+    expect(client.getQueryData(qk.flow('flw_1'))).toMatchObject({ draft: d1, draft_revision: 7, has_unpublished_changes: false });
+    expect(client.getQueryState(qk.flow('flw_1'))?.isInvalidated).toBe(false);
+  });
+
+  it('downloads the flow again when the trigger type changed (its URL comes from the server)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (isValidate(url) ? noIssues() : new Response(JSON.stringify({ revision: 7, issues: [], has_unpublished_changes: true }), { status: 200 }))));
+    client.setQueryData<Partial<Flow>>(qk.flow('flw_1'), { id: 'flw_1', draft: d0, draft_revision: 1 });
+    const { rerender } = renderAutosave(d0);
+    rerender({ def: { ...d0, trigger: { type: 'webhook' } } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1600);
+    });
     expect(client.getQueryState(qk.flow('flw_1'))?.isInvalidated).toBe(true);
   });
 

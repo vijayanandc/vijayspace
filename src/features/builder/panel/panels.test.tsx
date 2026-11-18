@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AppTriggerNode, ConnectorManifest, Flow, FlowDefinition, Step } from '../../../api/types';
 import { renderWithProviders } from '../../../test/render';
-import { BuilderContext, type BuilderCtx } from '../BuilderContext';
+import { type BuilderCtx, TestBuilderProvider } from '../BuilderContext';
 import { allSteps } from '../../../domain/tree';
 import { SidePanel } from './SidePanel';
 import { TriggerSettings } from './TriggerExtras';
@@ -26,17 +26,17 @@ function renderPanel(initial: FlowDefinition, selectedKey: string | null, childr
     latest = def;
     const ctx = {
       flowId: 'flw_1', flow: { trigger: { kind: 'manual', token: 't', is_active: false } } as Flow, def, manifests, selected, select,
-      apply: (d: FlowDefinition) => setDef(d), issues: new Map(), flush: async () => true, deleteStep: vi.fn(),
+      apply: (d: FlowDefinition) => setDef(d), issues: new Map(), flush: async () => true, readOnly: false, deleteStep: vi.fn(),
     } as unknown as BuilderCtx;
     return (
-      <BuilderContext.Provider value={ctx}>
+      <TestBuilderProvider value={ctx}>
         {allSteps(def).map((s) => (
           <button key={s.key} type="button" onClick={() => select(s.key)}>
             pick {s.key}
           </button>
         ))}
         {children ?? <SidePanel />}
-      </BuilderContext.Provider>
+      </TestBuilderProvider>
     );
   }
   renderWithProviders(<Harness />);

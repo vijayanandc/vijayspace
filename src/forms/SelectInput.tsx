@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { errorMessage } from '../api/client';
 import { endpoints } from '../api/endpoints';
 import type { FieldSpec, JsonObject, JsonValue, OptionItem } from '../api/types';
+import { dependenciesReady, useDependencyKey } from './dependencies';
 import type { FormEnv } from './env';
 import { MappingInput } from './MappingInput';
 
@@ -17,22 +18,25 @@ interface Props {
   onChange: (v: JsonValue) => void;
   env: FormEnv;
   siblings: JsonObject;
+  siblingFields: FieldSpec[];
 }
 
-export function useDynamicOptions(field: FieldSpec, env: FormEnv, siblings: JsonObject) {
-  const deps = (field.depends_on ?? []).map((k) => siblings[k] ?? null);
-  const ready = Boolean(field.options_from) && (!env.requiresConnection || Boolean(env.connectionId));
+export function useDynamicOptions(field: FieldSpec, env: FormEnv, siblings: JsonObject, siblingFields: FieldSpec[]) {
+  const deps = useDependencyKey(field, siblings);
+  const ready =
+    Boolean(field.options_from) && (!env.requiresConnection || Boolean(env.connectionId)) && dependenciesReady(field, siblings, siblingFields);
   return useQuery({
     queryKey: ['options', env.connector, field.options_from, env.connectionId ?? null, deps],
     queryFn: () => endpoints.options(env.connector, field.options_from ?? '', { connection_id: env.connectionId ?? null, input: siblings }),
     enabled: ready,
     staleTime: 60_000,
+    gcTime: 60_000,
     retry: false,
   });
 }
 
-export function SelectInput({ id, field, value, onChange, env, siblings }: Props) {
-  const dynamic = useDynamicOptions(field, env, siblings);
+export function SelectInput({ id, field, value, onChange, env, siblings, siblingFields }: Props) {
+  const dynamic = useDynamicOptions(field, env, siblings, siblingFields);
   const options: OptionItem[] = field.options_from ? (dynamic.data?.options ?? []) : (field.options ?? []);
   const current = typeof value === 'string' ? value : value === undefined || value === null ? '' : JSON.stringify(value);
   const isCustom = current !== '' && !options.some((o) => o.value === current) && (current.includes('{{') || !field.options_from || dynamic.isSuccess);

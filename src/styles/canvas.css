@@ -37,6 +37,8 @@
   cursor: pointer; box-shadow: var(--shadow-2); transition: transform 0.12s, background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
 }
 .insert-node:hover, .insert-node:focus-visible { transform: scale(1.25); border-color: var(--brand); color: var(--brand); background: var(--brand-tint); }
+.insert-node-inert { width: 8px; height: 8px; margin: 10px; cursor: default; box-shadow: none; }
+.insert-node-inert:hover { transform: none; background: var(--surface); border-color: var(--stroke-accessible); }
 .canvas-dragging .insert-node { border: 2px dashed var(--brand); color: var(--brand); background: var(--brand-tint); box-shadow: 0 0 0 4px rgba(15, 108, 189, 0.12); }
 .canvas-dragging .insert-node.insert-over, .insert-over {
   transform: scale(1.45); border: 2px solid var(--brand); background: var(--brand); color: #fff; box-shadow: 0 0 0 6px rgba(15, 108, 189, 0.2);

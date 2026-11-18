@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 import { SearchBox } from '../../components/SearchBox';
 import { Tabs } from '../../components/Tabs';
-import { useBuilder } from './BuilderContext';
+import { useBuilderView } from './BuilderContext';
 import { LOGIC_ITEMS } from '../../domain/factories';
 import { PaletteApps } from './PaletteApps';
 import { PaletteItem } from './PaletteItem';
@@ -34,7 +34,7 @@ function LogicList({ query }: { query: string }) {
 }
 
 export function Palette() {
-  const { manifests, activePoint, setActivePoint } = useBuilder();
+  const { manifests, activePoint, setActivePoint } = useBuilderView();
   const [tab, setTab] = useState<PaletteTab>('apps');
   const [query, setQuery] = useState('');
   const [drill, setDrill] = useState<string | null>(null);

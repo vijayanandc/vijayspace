@@ -10,6 +10,20 @@ import {
 const keys = (steps: { key: string }[]) => steps.map((s) => s.key);
 
 describe('tree operations', () => {
+  it('keeps the objects of everything an update does not change', () => {
+    const def = sampleDefinition();
+    const next = updateStep(def, 'first', (s) => ({ ...s, name: 'Fetch' }));
+    expect(next.steps[0]).not.toBe(def.steps[0]);
+    expect(next.steps[1]).toBe(def.steps[1]);
+    const untouched = updateStep(def, 'missing', (s) => ({ ...s, name: 'x' }));
+    expect(untouched.steps).toBe(def.steps);
+    const inBranch = updateStep(def, 'notify', (s) => ({ ...s, name: 'Tell' }));
+    const before = def.steps[1];
+    const after = inBranch.steps[1];
+    expect(after).not.toBe(before);
+    if (before?.type === 'decision' && after?.type === 'decision') expect(after.otherwise).toBe(before.otherwise);
+  });
+
   it('inserts into root and nested lists', () => {
     const def = sampleDefinition();
     const a = insertStep(def, { list: { kind: 'root' }, index: 1 }, action('x'));

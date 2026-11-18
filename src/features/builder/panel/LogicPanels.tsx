@@ -11,13 +11,13 @@ import { MappingInput } from '../../../forms/MappingInput';
 import { ParsedMappingInput } from '../../../forms/ParsedMappingInput';
 import { updateStep } from '../../../domain/tree';
 import { DELAY_UNITS, MAX_DELAY_SECS, bestDelayUnit, changeDelayUnit, delaySeconds, delayUnit, parseLooseValue } from '../../../domain/values';
-import { buildVariableTree } from '../../../domain/variables';
+import { useVariables } from './useVariables';
 
 const UNIT_LABELS: Record<number, string> = { 1: 'seconds', 60: 'minutes', 3600: 'hours', 86_400: 'days' };
 
 export function DelayPanel({ step }: { step: DelayStep }) {
-  const { def, apply, manifests, flow } = useBuilder();
-  const variables = buildVariableTree(def, step.key, manifests, flow.trigger?.sample);
+  const { def, apply } = useBuilder();
+  const variables = useVariables(step.key);
   const mode = step.until !== undefined ? 'until' : 'for';
   const seconds = step.seconds ?? 3600;
   // The unit sticks once chosen, so typing 120 (minutes) is not re-shown as 2 hours mid-edit.
@@ -78,8 +78,8 @@ export function DelayPanel({ step }: { step: DelayStep }) {
 const assignmentText = (v: JsonValue | undefined) => (typeof v === 'string' ? v : JSON.stringify(v ?? ''));
 
 export function SetVariablePanel({ step }: { step: SetVariableStep }) {
-  const { def, apply, manifests, flow } = useBuilder();
-  const variables = buildVariableTree(def, step.key, manifests, flow.trigger?.sample);
+  const { def, apply } = useBuilder();
+  const variables = useVariables(step.key);
   const setAssignments = (assignments: SetVariableStep['assignments'], tag?: string) =>
     apply(updateStep(def, step.key, (s) => (s.type === 'set_variable' ? { ...s, assignments } : s)), tag);
   return (

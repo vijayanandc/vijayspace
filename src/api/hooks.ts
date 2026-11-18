@@ -39,8 +39,16 @@ export function useConnector(key: string | undefined): ConnectorManifest | undef
   return key ? data?.find((c) => c.key === key) : undefined;
 }
 
+/** Lists change only through this app's own mutations (which invalidate them): reused for 30 s across pages. */
+const LIST_STALE_MS = 30_000;
+
 export function useConnections() {
-  return useQuery({ queryKey: qk.connections, queryFn: endpoints.connections });
+  return useQuery({ queryKey: qk.connections, queryFn: endpoints.connections, staleTime: LIST_STALE_MS });
+}
+
+/** The org's flows (the flows page polls on top of this; search and filters reuse it). */
+export function useFlows(options: { enabled?: boolean; refetchInterval?: number } = {}) {
+  return useQuery({ queryKey: qk.flows, queryFn: endpoints.flows, staleTime: LIST_STALE_MS, ...options });
 }
 
 /** Today's usage of every connection (refreshed every 30 s while shown). */

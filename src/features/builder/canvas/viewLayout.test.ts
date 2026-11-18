@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { sampleDefinition } from '../../../test/flowFixtures';
 import { INSERT_SIZE, layoutDefinition } from '../model/layout';
-import { CARD_WIDTH, COLUMN_PITCH, ROW_STRETCH, toViewEdges, toViewNodes } from './viewLayout';
+import { updateStep } from '../../../domain/tree';
+import { CARD_WIDTH, COLUMN_PITCH, ROW_STRETCH, reuseEdges, reuseNodes, toViewEdges, toViewNodes } from './viewLayout';
 
 describe('viewLayout', () => {
   const { nodes, edges } = layoutDefinition(sampleDefinition());
@@ -44,5 +45,30 @@ describe('viewLayout', () => {
     expect(view.get('ins:root:0')?.focusable).toBe(false);
     expect(view.get('end')?.focusable).toBe(false);
     expect(view.get('trigger')?.focusable).toBeUndefined();
+  });
+});
+
+describe('reusing unchanged nodes', () => {
+  it('keeps the objects of nodes an edit did not touch, so React Flow keeps their measurements', () => {
+    const before = sampleDefinition();
+    const first = layoutDefinition(before);
+    const prevNodes = toViewNodes(first.nodes);
+    const prevEdges = toViewEdges(first.edges);
+    const after = updateStep(before, 'notify', (s) => ({ ...s, name: 'Tell the team' }));
+    const second = layoutDefinition(after);
+    const nodes = reuseNodes(prevNodes, toViewNodes(second.nodes));
+    const edges = reuseEdges(prevEdges, toViewEdges(second.edges));
+    const same = (id: string) => nodes.find((n) => n.id === id) === prevNodes.find((n) => n.id === id);
+    expect(same('trigger')).toBe(true);
+    expect(same('step:first')).toBe(true);
+    expect(same('step:notify')).toBe(false);
+    expect(edges.every((e, i) => e === prevEdges[i])).toBe(true);
+  });
+
+  it('numbers steps in reading order', () => {
+    const numbers = layoutDefinition(sampleDefinition())
+      .nodes.flatMap((n) => (n.data.kind === 'step' ? [`${n.data.step.key}:${n.data.number}`] : []));
+    expect(numbers[0]).toBe('first:1');
+    expect(numbers).toHaveLength(new Set(numbers).size);
   });
 });

@@ -15,12 +15,15 @@ export function nextSort<K extends string>(current: SortState<K>, key: K): SortS
   return { key, dir: 'asc' };
 }
 
+// One collator for every comparison: `localeCompare` with options builds a new one per call (about 25× slower).
+const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+
 function compare(a: SortValue, b: SortValue): number {
   const aEmpty = a === null || a === undefined || a === '';
   const bEmpty = b === null || b === undefined || b === '';
   if (aEmpty || bEmpty) return aEmpty === bEmpty ? 0 : aEmpty ? 1 : -1;
   if (typeof a === 'number' && typeof b === 'number') return a - b;
-  return String(a).localeCompare(String(b), undefined, { sensitivity: 'base', numeric: true });
+  return collator.compare(String(a), String(b));
 }
 
 /** Returns a sorted copy. Empty values always sort last; ties keep their original order. */

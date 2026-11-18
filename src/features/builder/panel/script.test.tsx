@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ConnectorManifest, Flow, FlowDefinition, Issue, Step } from '../../../api/types';
 import { renderWithProviders } from '../../../test/render';
-import { BuilderContext, type BuilderCtx } from '../BuilderContext';
+import { type BuilderCtx, TestBuilderProvider } from '../BuilderContext';
 import { CodeEditor } from '../../../forms/CodeEditor';
 import { SCRIPT_EXAMPLES } from '../../../domain/script';
 import { findStep } from '../../../domain/tree';
@@ -31,12 +31,12 @@ function renderScript(code: string, issues: Issue[] = []) {
     latest = def;
     const ctx = {
       flowId: 'flw_1', flow: { trigger: { kind: 'webhook', token: 't', is_active: false } } as Flow, def, manifests: [script], selected: 'fn', select: vi.fn(),
-      apply: (d: FlowDefinition) => setDef(d), issues: new Map([['fn', issues]]), flush: async () => true, deleteStep: vi.fn(),
+      apply: (d: FlowDefinition) => setDef(d), issues: new Map([['fn', issues]]), flush: async () => true, readOnly: false, deleteStep: vi.fn(),
     } as unknown as BuilderCtx;
     return (
-      <BuilderContext.Provider value={ctx}>
+      <TestBuilderProvider value={ctx}>
         <SidePanel />
-      </BuilderContext.Provider>
+      </TestBuilderProvider>
     );
   }
   renderWithProviders(<Harness />);

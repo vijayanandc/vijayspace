@@ -5,14 +5,14 @@ import { Field } from '../../../components/Field';
 import { useBuilder } from '../BuilderContext';
 import { DynamicForm } from '../../../forms/DynamicForm';
 import { updateStep } from '../../../domain/tree';
-import { buildVariableTree } from '../../../domain/variables';
+import { useVariables } from './useVariables';
 import { StepConnectionPicker } from './StepConnectionPicker';
 
 export function ActionPanel({ step }: { step: ActionStep }) {
-  const { def, apply, manifests, flow, issues } = useBuilder();
+  const { def, apply, manifests, issues } = useBuilder();
   const manifest = manifests.find((m) => m.key === step.connector);
   const spec = manifest?.actions.find((a) => a.key === step.action);
-  const variables = buildVariableTree(def, step.key, manifests, flow.trigger?.sample);
+  const variables = useVariables(step.key);
   const set = (patch: Partial<ActionStep>, tag?: string) =>
     apply(updateStep(def, step.key, (s) => (s.type === 'action' ? { ...s, ...patch } : s)), tag);
 

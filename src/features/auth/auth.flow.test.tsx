@@ -159,6 +159,22 @@ describe('signing out', () => {
     expect(calls.list).toHaveLength(after);
   });
 
+  it('also waits for a save queued behind the one in flight', async () => {
+    logto.isAuthenticated = true;
+    const calls = stubApi(true, { user, orgs: [org('org_a', 'Alpha')], invitations: [] });
+    let release = () => undefined as void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    renderWithProviders(<AuthRoot><SaveThenSignOut gate={gate} queued /></AuthRoot>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    release();
+    await waitFor(() => expect(logto.signOut).toHaveBeenCalled());
+    const saves = calls.list.filter((c) => c.url.endsWith('/draft'));
+    expect(saves.map((c) => c.headers.Authorization)).toEqual(['Bearer token-1', 'Bearer token-1']);
+  });
+
   it('keeps the button busy when an old sign-in error is still showing', async () => {
     logto.isAuthenticated = false;
     logto.error = new Error('an earlier failure');
@@ -170,18 +186,20 @@ describe('signing out', () => {
   });
 });
 
-function SaveThenSignOut({ gate }: { gate: Promise<void> }) {
+/** `queued`: a second save starts right after the first finishes (as the builder chains its save on leaving). */
+function SaveThenSignOut({ gate, queued = false }: { gate: Promise<void>; queued?: boolean }) {
   const session = useSession();
   const save = useMutation({
     mutationKey: mk.saveDraft('flw_1'),
-    mutationFn: async () => {
-      await gate;
+    mutationFn: async (wait: boolean) => {
+      if (wait) await gate;
       return api.put('/api/v1/flows/flw_1/draft', {});
     },
   });
+  const run = () => void save.mutateAsync(true).then(() => queued && save.mutateAsync(false));
   return (
     <>
-      <button type="button" onClick={() => save.mutate()}>Save</button>
+      <button type="button" onClick={run}>Save</button>
       <button type="button" onClick={() => session?.signOut()}>Sign out</button>
     </>
   );

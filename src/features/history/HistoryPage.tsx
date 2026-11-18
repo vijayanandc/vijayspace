@@ -1,12 +1,12 @@
 // Execution history: filters in a command bar, a dense table of runs and "Load more".
 
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { ChevronRight, History, RefreshCw } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { errorMessage } from '../../api/client';
 import { endpoints } from '../../api/endpoints';
-import { qk, useOrg } from '../../api/hooks';
+import { qk, useFlows, useOrg } from '../../api/hooks';
 import { Badge, StatusBadge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { EmptyState, ErrorBox, Loading } from '../../components/Empty';
@@ -14,6 +14,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { formatDuration, formatTime, relativeTime } from '../../lib/format';
 import { retentionNote } from '../settings';
 import { MODE_LABELS } from './labels';
+import { historyPollMs } from './polling';
 
 const STATUSES: { value: string; label: string }[] = [
   { value: '', label: 'All' },
@@ -29,7 +30,7 @@ export function HistoryPage() {
   const [params, setParams] = useSearchParams();
   const flowId = params.get('flow_id') ?? '';
   const status = params.get('status') ?? '';
-  const flows = useQuery({ queryKey: qk.flows, queryFn: endpoints.flows });
+  const flows = useFlows();
   const { data: org } = useOrg();
   const filters = { flow_id: flowId || undefined, status: status || undefined };
   const executions = useInfiniteQuery({
@@ -37,7 +38,7 @@ export function HistoryPage() {
     queryFn: ({ pageParam }) => endpoints.executions({ ...filters, limit: 50, cursor: pageParam }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor ?? undefined,
-    refetchInterval: 5000,
+    refetchInterval: (q) => historyPollMs(q.state.data?.pages.length ?? 0),
   });
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(params);

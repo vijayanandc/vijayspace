@@ -46,17 +46,33 @@ function mapDecision(steps: Step[], key: string, f: (d: DecisionStep) => Decisio
   });
 }
 
-/** Applies `f` to every step (pre-order); decisions are recursed after mapping. */
+/** The same array when every element is the same object (so unchanged parts of the tree keep their identity). */
+function sameItems<T>(before: T[], after: T[]): T[] {
+  return after.every((x, i) => x === before[i]) ? before : after;
+}
+
+/**
+ * Applies `f` to every step (pre-order); decisions are recursed after mapping. Steps, branches and lists that did
+ * not change keep their objects: the canvas and memoised views compare by identity.
+ */
 export function mapDeep(steps: Step[], f: (s: Step) => Step): Step[] {
-  return steps.map((s) => {
-    const mapped = f(s);
-    if (mapped.type !== 'decision') return mapped;
-    return {
-      ...mapped,
-      branches: mapped.branches.map((b) => ({ ...b, steps: mapDeep(b.steps, f) })),
-      otherwise: mapDeep(mapped.otherwise, f),
-    };
-  });
+  return sameItems(
+    steps,
+    steps.map((s) => {
+      const mapped = f(s);
+      if (mapped.type !== 'decision') return mapped;
+      const branches = sameItems(
+        mapped.branches,
+        mapped.branches.map((b) => {
+          const inner = mapDeep(b.steps, f);
+          return inner === b.steps ? b : { ...b, steps: inner };
+        }),
+      );
+      const otherwise = mapDeep(mapped.otherwise, f);
+      if (branches === mapped.branches && otherwise === mapped.otherwise) return mapped;
+      return { ...mapped, branches, otherwise };
+    }),
+  );
 }
 
 export function updateList(def: FlowDefinition, ref: ListRef, f: (list: Step[]) => Step[]): FlowDefinition {

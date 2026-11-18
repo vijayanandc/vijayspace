@@ -50,3 +50,30 @@ export function inlineCodeParts(text: string): { code: boolean; text: string }[]
   if (parts.length % 2 === 0) return [{ code: false, text }];
   return parts.map((t, i) => ({ code: i % 2 === 1, text: t })).filter((p) => p.text !== '');
 }
+
+/**
+ * A short JSON preview of `value` (at most `max` characters, then "…"), built without serialising the whole
+ * value: a sample can be megabytes and the picker shows hundreds of them.
+ */
+export function previewJson(value: unknown, max = 40): string {
+  let out = '';
+  const add = (text: string): boolean => {
+    out += text;
+    return out.length <= max;
+  };
+  const walk = (v: unknown): boolean => {
+    if (v === null || typeof v !== 'object') return add(typeof v === 'string' ? JSON.stringify(v) : String(v));
+    const entries: [string | null, unknown][] = Array.isArray(v) ? v.map((x) => [null, x]) : Object.entries(v);
+    if (!add(Array.isArray(v) ? '[' : '{')) return false;
+    for (let i = 0; i < entries.length; i += 1) {
+      const [key, item] = entries[i] ?? [null, null];
+      if (i > 0 && !add(',')) return false;
+      if (key !== null && !add(`${JSON.stringify(key)}:`)) return false;
+      if (!walk(item)) return false;
+    }
+    return add(Array.isArray(v) ? ']' : '}');
+  };
+  if (typeof value === 'string') out = value;
+  else walk(value);
+  return out.length > max ? `${out.slice(0, max)}…` : out;
+}
