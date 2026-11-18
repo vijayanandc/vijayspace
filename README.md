@@ -1,3 +1,5 @@
+> **Moved.** The server now lives in [`vijayanandc/appblocks_flow`](https://github.com/vijayanandc/appblocks_flow) (`main`), with this branch's history. This branch is no longer updated; make changes there.
+
 # Weft: backend
 
 A Zoho Flow–style integration platform. This branch (`backend`) holds the Rust workspace (backed by MySQL 8.4), the REST contract and the project plan. The React web client lives on the `client` branch.
