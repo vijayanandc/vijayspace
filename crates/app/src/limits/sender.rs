@@ -3,12 +3,12 @@
 use std::{sync::Arc, time::Duration as StdDuration};
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, Timelike as _, Utc};
 use weft_connector_sdk::{ConnectorError, HttpRequest, HttpResponse, HttpSender};
 use weft_domain::ids::{ConnectionId, OrgId};
 
 use super::RequestClass;
-use crate::Deps;
+use crate::{Deps, ports::Counted};
 
 /// How long a request waits for a concurrency slot before its step is parked and retried later
 /// (short, so a busy connection never ties up worker tasks).
@@ -36,6 +36,11 @@ fn limited(retry_after_secs: u64, message: String) -> ConnectorError {
         retry_after_secs,
         message,
     }
+}
+
+/// Seconds until the next UTC minute (when the per-minute count resets).
+pub(crate) fn secs_to_next_minute(now: DateTime<Utc>) -> u64 {
+    u64::from(60 - now.second().min(59))
 }
 
 /// Seconds until the next UTC midnight (when the daily budget resets).
@@ -87,35 +92,43 @@ impl HttpSender for LimitedSender {
             None => None,
         };
         let now = self.deps.clock.now();
-        if self.class != RequestClass::Inbound
-            && let Ok(mut bucket) = entry.bucket.lock()
-            && let Some(bucket) = bucket.as_mut()
-            && let Err(wait) = bucket.take(now)
-        {
-            let per_minute = entry.limits.requests_per_minute.unwrap_or(0);
-            return Err(limited(
-                wait,
-                format!("connection.limit: {per_minute} requests per minute"),
-            ));
-        }
         let cap = cap_for(entry.limits.daily_requests, self.class);
-        let allowed = self
+        // Inbound event fetches are counted but never refused (refusing would lose the event).
+        let per_minute = match self.class {
+            RequestClass::Inbound => None,
+            RequestClass::Live | RequestClass::Background => entry.limits.requests_per_minute,
+        };
+        let counted = self
             .deps
             .store
-            .count_connection_request(self.org, self.connection, now.date_naive(), cap, now)
+            .count_connection_request(self.org, self.connection, cap, per_minute, now)
             .await
             .map_err(|e| ConnectorError::transient(format!("counting the request: {e}")))?;
-        if !allowed {
-            let why = match self.class {
-                RequestClass::Live | RequestClass::Inbound => "the daily request budget is used up",
-                RequestClass::Background => {
-                    "95% of the daily request budget is used; background work waits"
-                }
-            };
-            return Err(limited(
-                secs_to_midnight(now),
-                format!("connection.limit: {why}"),
-            ));
+        match counted {
+            Counted::Allowed => {}
+            Counted::MinuteFull => {
+                return Err(limited(
+                    secs_to_next_minute(now),
+                    format!(
+                        "connection.limit: {} requests per minute",
+                        per_minute.unwrap_or(0)
+                    ),
+                ));
+            }
+            Counted::DayFull => {
+                let why = match self.class {
+                    RequestClass::Live | RequestClass::Inbound => {
+                        "the daily request budget is used up"
+                    }
+                    RequestClass::Background => {
+                        "95% of the daily request budget is used; background work waits"
+                    }
+                };
+                return Err(limited(
+                    secs_to_midnight(now),
+                    format!("connection.limit: {why}"),
+                ));
+            }
         }
         self.deps.http.send(request).await
     }
@@ -139,5 +152,8 @@ mod tests {
         );
         let t = Utc.with_ymd_and_hms(2026, 1, 1, 23, 59, 0).unwrap();
         assert_eq!(secs_to_midnight(t), 60);
+        assert_eq!(secs_to_next_minute(t), 60);
+        let t = Utc.with_ymd_and_hms(2026, 1, 1, 23, 59, 45).unwrap();
+        assert_eq!(secs_to_next_minute(t), 15);
     }
 }

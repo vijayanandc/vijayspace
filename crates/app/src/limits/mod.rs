@@ -1,6 +1,8 @@
 //! Per-connection request limits (doc 13 §4.3): every HTTP request made through a connection
-//! passes a concurrency cap, a per-minute token bucket and a daily budget. Limits are the
-//! connector's defaults with the connection's overrides; background work stops at 95% of the day.
+//! passes a concurrency cap, a per-minute cap and a daily budget. Limits are the connector's defaults
+//! with the connection's overrides; background work stops at 95% of the day. The minute and day are
+//! counted in the database (they hold across every server); the concurrency cap is split between the
+//! live servers.
 
 mod bucket;
 mod mail;
@@ -37,8 +39,8 @@ pub enum RequestClass {
 /// How long a connection's effective limits are cached before being read again.
 const RELOAD_SECS: i64 = 60;
 
-/// In-process limiter state per connection: the effective limits, the minute bucket and the
-/// concurrency permits. The daily budget lives in the database (shared by every process).
+/// In-process limiter state per connection: the effective limits and this server's share of the
+/// concurrency permits. The minute and daily counts live in the database (shared by every server).
 #[derive(Default)]
 pub struct ConnectionLimiters {
     entries: Mutex<HashMap<ConnectionId, Arc<Entry>>>,
@@ -52,20 +54,22 @@ impl std::fmt::Debug for ConnectionLimiters {
 
 pub(crate) struct Entry {
     pub limits: ConnectionLimits,
+    /// Live servers when the permits were sized.
+    live: u32,
     loaded_at: Mutex<DateTime<Utc>>,
-    pub bucket: Mutex<Option<TokenBucket>>,
     pub permits: Option<Arc<Semaphore>>,
 }
 
 impl Entry {
-    fn new(limits: ConnectionLimits, now: DateTime<Utc>) -> Self {
+    fn new(limits: ConnectionLimits, live: u32, now: DateTime<Utc>) -> Self {
         Self {
             limits,
+            live,
             loaded_at: Mutex::new(now),
-            bucket: Mutex::new(limits.requests_per_minute.map(|n| TokenBucket::new(n, now))),
-            permits: limits
-                .max_concurrent
-                .map(|n| Arc::new(Semaphore::new(usize::try_from(n).unwrap_or(usize::MAX)))),
+            permits: limits.max_concurrent.map(|n| {
+                let mine = crate::instances::share(n, live);
+                Arc::new(Semaphore::new(usize::try_from(mine).unwrap_or(usize::MAX)))
+            }),
         }
     }
 
@@ -89,23 +93,32 @@ impl ConnectionLimiters {
         map.get(&id).filter(|e| e.fresh(now)).cloned()
     }
 
-    /// Stores freshly loaded limits; unchanged limits keep the bucket and permits.
-    fn store(&self, id: ConnectionId, limits: ConnectionLimits, now: DateTime<Utc>) -> Arc<Entry> {
+    /// Stores freshly loaded limits; unchanged limits (and server count) keep the permits.
+    fn store(
+        &self,
+        id: ConnectionId,
+        limits: ConnectionLimits,
+        live: u32,
+        now: DateTime<Utc>,
+    ) -> Arc<Entry> {
         let Ok(mut map) = self.entries.lock() else {
-            return Arc::new(Entry::new(limits, now));
+            return Arc::new(Entry::new(limits, live, now));
         };
-        if let Some(existing) = map.get(&id).filter(|e| e.limits == limits) {
+        if let Some(existing) = map
+            .get(&id)
+            .filter(|e| e.limits == limits && e.live == live)
+        {
             if let Ok(mut t) = existing.loaded_at.lock() {
                 *t = now;
             }
             return Arc::clone(existing);
         }
-        let entry = Arc::new(Entry::new(limits, now));
+        let entry = Arc::new(Entry::new(limits, live, now));
         map.insert(id, Arc::clone(&entry));
         entry
     }
 
-    /// The effective limits of a connection (cached for a minute).
+    /// The effective limits of a connection (cached for a minute; resized when servers come or go).
     pub(crate) async fn entry(
         &self,
         deps: &Deps,
@@ -119,7 +132,7 @@ impl ConnectionLimiters {
         let limits = manage::effective_limits(deps, org, id)
             .await
             .map_err(|e| ConnectorError::transient(format!("loading connection limits: {e}")))?;
-        Ok(self.store(id, limits, now))
+        Ok(self.store(id, limits, deps.instances.count(), now))
     }
 }
 

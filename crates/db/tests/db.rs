@@ -1,5 +1,5 @@
 //! MySQL adapter tests (test binary `db`, excluded from `just test-unit`): job queue leases,
-//! poison jobs, dedupe keys of dead jobs and daily send quotas.
+//! poison jobs, dedupe keys of dead jobs, daily send quotas and connection caps shared by servers.
 //! Needs MySQL (`WEFT_TEST_DATABASE_URL`, default `mysql://weft:weft@127.0.0.1:3306`).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -346,5 +346,54 @@ async fn a_run_older_than_the_cap_is_expired_and_its_partition_dropped() {
         (0, 0, 0),
         "{again:?}"
     );
+    drop_db(t).await;
+}
+
+#[tokio::test]
+async fn per_minute_and_daily_caps_hold_across_servers() {
+    use weft_app::ports::{Counted, LimitRepo as _};
+    use weft_domain::ids::{ConnectionId, OrgId};
+    let t = db().await;
+    // Two servers: two stores, each with its own pool, on the same database.
+    let other = MySqlStore::new(
+        weft_db::connect(&format!("{}/{}", t.base, t.name), 2)
+            .await
+            .unwrap(),
+    );
+    let (org, cxn) = (
+        OrgId::from_uuid(uuid::Uuid::new_v4()),
+        ConnectionId::from_uuid(uuid::Uuid::new_v4()),
+    );
+    let at = |s: i64| t0() + Duration::seconds(s);
+    let count = |store: &MySqlStore, s: i64| {
+        let store = store.clone();
+        async move {
+            store
+                .count_connection_request(org, cxn, Some(5), Some(2), at(s))
+                .await
+                .unwrap()
+        }
+    };
+    assert_eq!(count(&t.store, 1).await, Counted::Allowed);
+    assert_eq!(count(&other, 2).await, Counted::Allowed);
+    assert_eq!(
+        count(&t.store, 59).await,
+        Counted::MinuteFull,
+        "2 per minute between both servers"
+    );
+    assert_eq!(count(&other, 60).await, Counted::Allowed, "a new minute");
+    assert_eq!(count(&t.store, 61).await, Counted::Allowed);
+    assert_eq!(count(&other, 125).await, Counted::Allowed);
+    assert_eq!(
+        count(&t.store, 190).await,
+        Counted::DayFull,
+        "5 a day between both servers"
+    );
+    let usage = t
+        .store
+        .connection_usage(org, t0().date_naive())
+        .await
+        .unwrap();
+    assert_eq!((usage[0].requests, usage[0].refused), (5, 2));
     drop_db(t).await;
 }

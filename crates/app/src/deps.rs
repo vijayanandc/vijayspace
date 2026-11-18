@@ -67,6 +67,8 @@ pub struct Deps {
     pub limiters: Arc<crate::limits::ConnectionLimiters>,
     /// Serialises OAuth token refreshes per connection within this process.
     pub refresh_locks: Arc<crate::connections::handle::RefreshLocks>,
+    /// How many servers share the database (refreshed by heartbeats; per-connection concurrency is shared).
+    pub instances: Arc<crate::instances::LiveInstances>,
 }
 
 impl std::fmt::Debug for Deps {

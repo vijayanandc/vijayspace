@@ -3,7 +3,7 @@
 
 use clap::{Parser, Subcommand};
 use tokio_util::sync::CancellationToken;
-use weft_server::{config::Settings, wiring};
+use weft_server::{config::Settings, heartbeat, wiring};
 use weft_worker::WorkerConfig;
 
 #[derive(Debug, Parser)]
@@ -84,6 +84,23 @@ fn init_logging(source: &weft_server::properties::Source) {
     }
 }
 
+/// Scaling out multiplies connections: warn when this server's pool would take MySQL past 90% of its limit.
+async fn warn_if_pools_exceed_mysql(pool: &weft_db::Pool, pool_size: u32) {
+    match weft_db::connection_headroom(pool).await {
+        Ok((max, open)) if u64::from(open) + u64::from(pool_size) > u64::from(max) * 9 / 10 => {
+            tracing::warn!(
+                max_connections = max,
+                open,
+                pool_size,
+                "MySQL is close to its connection limit: raise max_connections or lower WEFT_DB_POOL_SIZE \
+                 (every server opens up to its pool size)"
+            );
+        }
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = %e, "reading MySQL's connection limit"),
+    }
+}
+
 async fn run(cli: Cli) -> anyhow::Result<()> {
     let source = weft_server::properties::Source::load().map_err(anyhow::Error::msg)?;
     init_logging(&source);
@@ -96,12 +113,20 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         tracing::info!("migrations applied");
         return Ok(());
     }
+    warn_if_pools_exceed_mysql(&pool, settings.db_pool_size).await;
     let deps = wiring::build(&settings, weft_db::MySqlStore::new(pool))?;
     let shutdown = CancellationToken::new();
+    let kind = match command {
+        Command::Api => "api",
+        Command::Worker => "worker",
+        Command::Serve | Command::Migrate | Command::ScriptChild => "all",
+    };
+    let me = heartbeat::me(&deps, kind);
     let worker_config = WorkerConfig {
-        id: format!("worker-{}", uuid::Uuid::new_v4().simple()),
+        id: format!("worker-{}", me.id.simple()),
         concurrency: settings.worker_concurrency,
     };
+    let beats = heartbeat::spawn(deps.clone(), me, shutdown.clone());
     let worker = matches!(command, Command::Serve | Command::Worker).then(|| {
         tokio::spawn(weft_worker::run(
             deps.clone(),
@@ -131,5 +156,6 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
     if let Some(w) = worker {
         let _ = w.await;
     }
+    let _ = beats.await;
     Ok(())
 }

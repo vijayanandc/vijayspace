@@ -1,5 +1,7 @@
-//! Per-connection limits: a per-minute bucket and a daily budget, set through the API, hold back
+//! Per-connection limits: a per-minute cap and a daily budget, set through the API, hold back
 //! requests to the app (the step waits and retries); usage shows the warning and critical levels.
+//! Both are counted in the database, so they hold across every server; the connection test's own
+//! request counts too, so tests start each check in a fresh minute.
 
 use chrono::Duration;
 use serde_json::{Value, json};
@@ -79,12 +81,14 @@ async fn limits_hold_back_requests_and_usage_reports_the_budget() {
         .await;
     let flow = flow["id"].as_str().unwrap();
 
+    app.clock.advance(Duration::seconds(60)); // a minute without the connection test's request
     assert_eq!(run(&app, flow).await["status"], "succeeded");
     assert_eq!(run(&app, flow).await["status"], "succeeded");
-    // 2 per minute: the third request waits for the bucket instead of reaching the app.
+    // 2 per minute: the third request waits for the next minute instead of reaching the app.
     let held = run(&app, flow).await;
     assert_eq!(held["status"], "waiting", "{held}");
-    app.clock.advance(Duration::seconds(61));
+    // The park time is at most 60 s to the next minute plus a spread of at most 10%.
+    app.clock.advance(Duration::seconds(67));
     app.drain().await;
     let done = app
         .ok(
@@ -118,7 +122,10 @@ async fn limits_hold_back_requests_and_usage_reports_the_budget() {
         .unwrap()
         .clone();
     assert_eq!(row["level"], "critical", "{row}");
-    assert_eq!(row["refused"], 1);
+    assert_eq!(
+        row["refused"], 2,
+        "one held back by the minute cap, one by the daily budget"
+    );
 
     // Raising the budget takes effect at once (the cached limits are dropped).
     app.ok(
@@ -178,6 +185,7 @@ async fn a_held_back_request_is_not_an_attempt_and_is_never_skipped() {
         ]}))
         .await;
     let flow = flow["id"].as_str().unwrap();
+    app.clock.advance(Duration::seconds(60)); // a minute without the connection test's request
     assert_eq!(run(&app, flow).await["status"], "succeeded");
     let held = run(&app, flow).await;
     assert_eq!(

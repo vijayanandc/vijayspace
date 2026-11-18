@@ -138,7 +138,14 @@ impl RetentionRepo for MySqlStore {
             .execute(&self.pool)
             .await
             .map_err(db_err)?
-            .rows_affected();
+            .rows_affected()
+            + run("DELETE FROM instances WHERE seen_at < ? LIMIT ?")
+                .bind(now - chrono::Duration::days(1))
+                .bind(limit)
+                .execute(&self.pool)
+                .await
+                .map_err(db_err)?
+                .rows_affected();
         let usage_days = run("DELETE FROM connection_usage WHERE day < ? LIMIT ?")
             .bind(usage_before)
             .bind(limit)

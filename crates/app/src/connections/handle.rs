@@ -11,10 +11,28 @@ use weft_connector_sdk::{
     ConnectionHandle, Connector, ConnectorError, OAuth2Spec,
     oauth::{self, OAuthClient},
 };
-use weft_domain::model::ConnectionStatus;
+use weft_domain::{
+    ids::{ConnectionId, OrgId},
+    model::ConnectionStatus,
+};
 
 use super::secret_aad;
 use crate::{Deps, ports::StoredConnection};
+
+/// How long one server may hold a connection's refresh lease (a token call takes seconds).
+const REFRESH_LEASE_SECS: i64 = 60;
+/// While another server refreshes, look for its new token this often, at most this many times (15 s).
+const REFRESH_POLL: std::time::Duration = std::time::Duration::from_millis(250);
+const REFRESH_POLLS: u32 = 60;
+
+/// The refresh lease of a connection in `sync_leases` (32 bytes: a tag and the connection ID).
+#[must_use]
+pub fn refresh_lease_key(id: ConnectionId) -> [u8; 32] {
+    let mut key = [0_u8; 32];
+    key[..13].copy_from_slice(b"oauth-refresh");
+    key[16..].copy_from_slice(id.as_uuid().as_bytes());
+    key
+}
 
 /// Per-connection async locks so only one refresh runs at a time in this process.
 #[derive(Debug, Default)]
@@ -73,6 +91,86 @@ impl DbConnectionHandle {
         let seen = decrypt(&self.deps, &stored)
             .ok()
             .and_then(|s| token_of(&s).ok());
+        // One refresh per connection across every server (single-use refresh tokens would otherwise
+        // invalidate each other): a server that finds the lease taken waits for the other's new token.
+        let (org, key) = (
+            stored.connection.org_id,
+            refresh_lease_key(stored.connection.id),
+        );
+        let holder = format!("refresh-{}", self.deps.ids.uuid().simple());
+        let mut polls = 0;
+        while !self.take_lease(org, &key, &holder).await? {
+            if let Some(token) = self.reload_if_changed(&mut stored, seen.as_deref()).await? {
+                return Ok(token);
+            }
+            polls += 1;
+            if polls >= REFRESH_POLLS {
+                return Err(ConnectorError::transient(
+                    "another server is refreshing this connection's token",
+                ));
+            }
+            tokio::time::sleep(REFRESH_POLL).await;
+        }
+        let result = self.refresh_leased(&mut stored, seen, force).await;
+        let _ = self.deps.store.release_lease(org, &key, &holder).await;
+        result
+    }
+
+    async fn take_lease(
+        &self,
+        org: OrgId,
+        key: &[u8; 32],
+        holder: &str,
+    ) -> Result<bool, ConnectorError> {
+        let now = self.deps.clock.now();
+        self.deps
+            .store
+            .acquire_lease(
+                org,
+                key,
+                holder,
+                now + chrono::Duration::seconds(REFRESH_LEASE_SECS),
+                now,
+            )
+            .await
+            .map_err(|e| ConnectorError::transient(e.to_string()))
+    }
+
+    /// Re-reads the connection; returns its token when it differs from `seen` (another server refreshed).
+    async fn reload_if_changed(
+        &self,
+        stored: &mut StoredConnection,
+        seen: Option<&str>,
+    ) -> Result<Option<String>, ConnectorError> {
+        let conn = &stored.connection;
+        let Some(fresh) = self
+            .deps
+            .store
+            .get_connection(conn.org_id, conn.id)
+            .await
+            .map_err(|e| ConnectorError::transient(e.to_string()))?
+        else {
+            return Err(ConnectorError::AuthExpired {
+                message: "connection deleted".into(),
+            });
+        };
+        let token = decrypt(&self.deps, &fresh)
+            .ok()
+            .and_then(|s| token_of(&s).ok());
+        if token.is_none() || token.as_deref() == seen {
+            return Ok(None);
+        }
+        *stored = fresh;
+        Ok(token)
+    }
+
+    /// The refresh itself, with this server holding the connection's refresh lease.
+    async fn refresh_leased(
+        &self,
+        stored: &mut StoredConnection,
+        seen: Option<String>,
+        force: bool,
+    ) -> Result<String, ConnectorError> {
         let conn = &stored.connection;
         let fresh = self
             .deps
@@ -84,7 +182,7 @@ impl DbConnectionHandle {
                 message: "connection deleted".into(),
             })?;
         *stored = fresh;
-        let secrets = decrypt(&self.deps, &stored)?;
+        let secrets = decrypt(&self.deps, stored)?;
         let now = self.deps.clock.now();
         let current = token_of(&secrets).ok();
         // A forced refresh (after a 401) is skipped when the token already changed since this
@@ -145,7 +243,7 @@ impl DbConnectionHandle {
         stored.connection.updated_at = now;
         self.deps
             .store
-            .update_connection(&stored)
+            .update_connection(stored)
             .await
             .map_err(|e| ConnectorError::transient(e.to_string()))?;
         token_of(&new_secrets)

@@ -9,3 +9,4 @@ config.properties
 .DS_Store
 .idea/
 .vscode/
+scripts/my.cnf

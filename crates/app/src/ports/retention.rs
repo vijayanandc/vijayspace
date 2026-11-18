@@ -21,6 +21,7 @@ pub struct Purged {
 pub struct Housekeeping {
     pub dead_jobs: u64,
     pub oauth_states: u64,
+    /// Expired sync leases, and server instances not seen for a day.
     pub sync_leases: u64,
     pub usage_days: u64,
     /// Invitations that expired (or were revoked) more than a day ago.

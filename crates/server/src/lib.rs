@@ -2,6 +2,7 @@
 
 pub mod auth_settings;
 pub mod config;
+pub mod heartbeat;
 pub mod properties;
 pub mod script_child;
 pub mod wiring;

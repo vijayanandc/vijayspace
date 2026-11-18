@@ -141,6 +141,7 @@ Clients switch on `code` (see `crates/domain/src/error_codes.rs`). Errors the fr
   "usage": Usage }
 ```
 **Usage:** `{connection_id, day: "2026-11-18" (UTC), requests, refused, daily_limit|null, percent|null, level: "ok"|"warning"(≥80%)|"critical"(≥95%)}`
+`refused` counts requests held back by any limit (per minute or per day) that day. Both limits are counted in the database, so they hold across every server; `max_concurrent` is split between the live servers that run jobs (`worker`/`serve`).
 
 **Connection:**
 ```json
@@ -262,6 +263,7 @@ Roles: `owner | admin | member | viewer`. The matrix (doc 08 §2): owners do eve
 | PATCH | `/api/v1/org` with `{name?, timezone?, retention_days?: 1..30 \| null}` | the org (as above); owners only (403 otherwise). Finished runs older than this are deleted (every 15 minutes) with their step history. Run history is kept 30 days at most: runs queued more than 30 days ago are removed with their day, and one still unfinished then ends as failed (`execution.expired`). `null` = the server default (`WEFT_RETENTION_DAYS`, 30). |
 | GET | `/api/v1/usage` | `{period: "2026-11", tasks_used, executions}` |
 | GET | `/healthz`, `/readyz` | `ok` |
+| GET | `/api/v1/ops/status` | Staff only (owners and admins acting in the default org; others 403): `{now, instances: [{id, kind: "api"\|"worker"\|"all", host, version, started_at, seen_at}], queues: [{queue, ready, lag_seconds}], running_jobs, dead_jobs}`. `lag_seconds` is how long the oldest due job has waited: when it keeps growing, start another `weft worker`. |
 
 ## Public ingress
 | Method | Path | Response |

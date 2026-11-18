@@ -12,6 +12,7 @@ mod jobs;
 mod limits;
 mod links;
 mod members;
+mod ops;
 mod orgs;
 pub mod partitions;
 mod quotas;
@@ -28,6 +29,9 @@ use sqlx::{
     Executor as _,
     mysql::{MySqlPool, MySqlPoolOptions},
 };
+
+/// A pool of MySQL connections (what `connect` returns).
+pub type Pool = MySqlPool;
 
 /// The MySQL adapter (cheap to clone).
 #[derive(Debug, Clone)]
@@ -67,6 +71,19 @@ pub async fn connect(url: &str, max_connections: u32) -> Result<MySqlPool, sqlx:
         })
         .connect(url)
         .await
+}
+
+/// MySQL's connection limit and how many connections are open now: every server opens up to its pool size, so
+/// the pools of all servers together must stay below the limit (or new connections fail with "Too many
+/// connections").
+pub async fn connection_headroom(pool: &MySqlPool) -> Result<(u32, u32), sqlx::Error> {
+    let max: u32 = sqlx::query_scalar("SELECT CAST(@@max_connections AS UNSIGNED)")
+        .fetch_one(pool)
+        .await?;
+    let open: (String, String) = sqlx::query_as("SHOW GLOBAL STATUS LIKE 'Threads_connected'")
+        .fetch_one(pool)
+        .await?;
+    Ok((max, open.1.parse().unwrap_or(0)))
 }
 
 /// Applies pending migrations from `migrations/`.

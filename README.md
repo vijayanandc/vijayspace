@@ -6,6 +6,7 @@ A Zoho Flow–style integration platform. This branch (`backend`) holds the Rust
 
 - **What works today, and known gaps:** [`docs/STATUS.md`](docs/STATUS.md)
 - **REST contract (used by the client):** [`docs/api/README.md`](docs/api/README.md)
+- **Running it in production (config file, scaling out, retention, backups):** [`docs/operations.md`](docs/operations.md)
 - **Plan:** [`docs/plan/README.md`](docs/plan/README.md). The current MVP is [doc 13](docs/plan/13-mvp-zoho-crm-appblocks.md).
 - **Rules for AI agents and contributors:** [`AGENTS.md`](AGENTS.md)
 

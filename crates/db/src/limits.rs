@@ -1,10 +1,10 @@
 //! `LimitRepo` for MySQL: connection limit overrides and atomic daily request counters.
 
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Timelike as _, Utc};
 use sqlx::types::Json;
 use uuid::Uuid;
-use weft_app::ports::{ConnectionUsage, LimitRepo, Res};
+use weft_app::ports::{ConnectionUsage, Counted, LimitRepo, Res};
 use weft_connector_sdk::ConnectionLimits;
 use weft_domain::ids::{ConnectionId, OrgId};
 
@@ -46,10 +46,12 @@ impl LimitRepo for MySqlStore {
         &self,
         org: OrgId,
         id: ConnectionId,
-        day: NaiveDate,
-        cap: Option<u32>,
+        daily_cap: Option<u32>,
+        per_minute: Option<u32>,
         now: DateTime<Utc>,
-    ) -> Res<bool> {
+    ) -> Res<Counted> {
+        let day = now.date_naive();
+        let minute = minute_of(now);
         sqlx::query("INSERT IGNORE INTO connection_usage (org_id, connection_id, day, requests, refused, updated_at) VALUES (?, ?, ?, 0, 0, ?)")
             .bind(org.as_uuid())
             .bind(id.as_uuid())
@@ -58,20 +60,40 @@ impl LimitRepo for MySqlStore {
             .execute(&self.pool)
             .await
             .map_err(db_err)?;
-        // The row lock serialises concurrent requests; each re-checks the cap on the latest count.
-        let counted = sqlx::query("UPDATE connection_usage SET requests = requests + 1, updated_at = ? WHERE org_id = ? AND connection_id = ? AND day = ? AND (? IS NULL OR requests < ?)")
-            .bind(now)
-            .bind(org.as_uuid())
-            .bind(id.as_uuid())
-            .bind(day)
-            .bind(cap)
-            .bind(cap)
-            .execute(&self.pool)
-            .await
-            .map_err(db_err)?;
+        // The row lock serialises concurrent requests from every server; each re-checks both caps on the latest
+        // counts. Assignments run left to right: the minute count is reset before `minute_start` moves on.
+        let counted = sqlx::query(
+            "UPDATE connection_usage SET minute_requests = IF(minute_start <=> ?, minute_requests + 1, 1), \
+             minute_start = ?, requests = requests + 1, updated_at = ? \
+             WHERE org_id = ? AND connection_id = ? AND day = ? AND (? IS NULL OR requests < ?) \
+             AND (? IS NULL OR NOT (minute_start <=> ?) OR minute_requests < ?)",
+        )
+        .bind(minute)
+        .bind(minute)
+        .bind(now)
+        .bind(org.as_uuid())
+        .bind(id.as_uuid())
+        .bind(day)
+        .bind(daily_cap)
+        .bind(daily_cap)
+        .bind(per_minute)
+        .bind(minute)
+        .bind(per_minute)
+        .execute(&self.pool)
+        .await
+        .map_err(db_err)?;
         if counted.rows_affected() > 0 {
-            return Ok(true);
+            return Ok(Counted::Allowed);
         }
+        let (requests, minute_start, minute_requests): (u32, Option<NaiveDateTime>, u32) = sqlx::query_as(
+            "SELECT requests, minute_start, minute_requests FROM connection_usage WHERE org_id = ? AND connection_id = ? AND day = ?",
+        )
+        .bind(org.as_uuid())
+        .bind(id.as_uuid())
+        .bind(day)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
         sqlx::query("UPDATE connection_usage SET refused = refused + 1, updated_at = ? WHERE org_id = ? AND connection_id = ? AND day = ?")
             .bind(now)
             .bind(org.as_uuid())
@@ -80,7 +102,14 @@ impl LimitRepo for MySqlStore {
             .execute(&self.pool)
             .await
             .map_err(db_err)?;
-        Ok(false)
+        let day_full = daily_cap.is_some_and(|cap| requests >= cap);
+        let minute_full = per_minute
+            .is_some_and(|cap| minute_start == Some(minute.naive_utc()) && minute_requests >= cap);
+        Ok(if minute_full && !day_full {
+            Counted::MinuteFull
+        } else {
+            Counted::DayFull
+        })
     }
 
     async fn connection_usage(&self, org: OrgId, day: NaiveDate) -> Res<Vec<ConnectionUsage>> {
@@ -101,4 +130,11 @@ impl LimitRepo for MySqlStore {
             })
             .collect())
     }
+}
+
+/// The start of `now`'s UTC minute (the per-minute window).
+fn minute_of(now: DateTime<Utc>) -> DateTime<Utc> {
+    now.with_second(0)
+        .and_then(|t| t.with_nanosecond(0))
+        .unwrap_or(now)
 }

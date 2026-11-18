@@ -28,6 +28,7 @@ Weft is a Zoho Flow–style integration platform. Users build **flows**: one tri
 | Recipes (prebuilt integrations) | `crates/app/src/recipes/` (templates with `$slot:<name>` connection placeholders) |
 | Sign-in, orgs, members, roles | `crates/app/src/tenancy/` (actor, session, orgs, members, invitations), `crates/domain/src/permissions.rs` (the matrix, 🔒), `crates/infra/src/logto/` (token checks, 🔒), `crates/api/src/extract.rs` (`SignedIn`, `Acting`) |
 | Background loops | `crates/worker/` |
+| Running several servers (heartbeats, shared limits, ops status) | `crates/app/src/instances.rs`, `crates/server/src/heartbeat.rs`, `docs/operations.md` |
 | Wiring and config | `crates/server/` |
 | Test helpers | `crates/testkit/`; end-to-end scenarios in `crates/server/tests/scenarios/` |
 | SQL schema | `migrations/` (append-only, 🔒) |
