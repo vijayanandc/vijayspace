@@ -71,4 +71,32 @@ describe('api client', () => {
     await expect(request('GET', '/api/v1/flows')).rejects.toMatchObject({ status: 401, code: 'auth.unauthenticated' });
     expect(onSignedOut).toHaveBeenCalledTimes(1);
   });
+
+  it('never sends a request unsigned when the token cannot be refreshed, and does not sign out for it', async () => {
+    const fetchMock = vi.fn(async () => new Response('{"code":"auth.unauthenticated"}', { status: 401 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onSignedOut = vi.fn();
+    configureAuth({ token: async () => undefined, refresh: async () => undefined, onSignedOut });
+    await expect(request('GET', '/api/v1/flows')).rejects.toMatchObject({ code: 'auth.unavailable' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    configureAuth({ token: async () => 'stale', refresh: async () => undefined, onSignedOut });
+    await expect(request('GET', '/api/v1/flows')).rejects.toMatchObject({ code: 'auth.unavailable' });
+    expect(onSignedOut).not.toHaveBeenCalled();
+  });
+
+  it('keeps the org a request was made in, even if the org changes while it waits for a token', async () => {
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => {
+      seen.push((init?.headers as Record<string, string>)['X-Org-ID'] ?? '');
+      return new Response('{}');
+    }));
+    let release: (t: string) => void = () => undefined;
+    configureAuth({ token: () => new Promise((r) => (release = r)), refresh: async () => 't', onSignedOut: vi.fn() });
+    setCurrentOrg('org_a');
+    const pending = request('PUT', '/api/v1/flows/flw_1/draft', {});
+    setCurrentOrg('org_b');
+    release('t');
+    await pending;
+    expect(seen).toEqual(['org_a']);
+  });
 });

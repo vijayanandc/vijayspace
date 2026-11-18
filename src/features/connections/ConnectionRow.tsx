@@ -39,8 +39,9 @@ interface RowProps {
 export function ConnectionRow({ connection, manifest, usage, onLimits }: RowProps) {
   const role = useRole();
   const canUse = can(role, 'connection.use');
-  const canManage = can(role, 'connection.create');
-  const canDelete = can(role, 'connection.delete', connection.created_by, useUserId());
+  // Reconnecting, editing and deleting are managing the connection: members only their own.
+  const canManage = can(role, 'connection.delete', connection.created_by, useUserId());
+  const canDelete = canManage;
   const qc = useQueryClient();
   const toast = useToast();
   const isOauth = manifest?.auth.kind === 'oauth2';

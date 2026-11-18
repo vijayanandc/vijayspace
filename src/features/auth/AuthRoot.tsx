@@ -10,6 +10,7 @@ import { qk } from '../../api/hooks';
 import { type SignInConfig, tenancy } from '../../api/tenancy';
 import { Button } from '../../components/Button';
 import { logtoConfig } from './config';
+import { WeftLogtoClient } from './logtoClient';
 import { LogtoGate } from './LogtoGate';
 import { MeGate } from './MeGate';
 import { Splash } from './Splash';
@@ -19,12 +20,13 @@ const noop = () => undefined;
 
 function WithLogto({ signIn, children }: { signIn: SignInConfig; children: ReactNode }) {
   const config = useMemo(() => {
-    // Plain-HTTP origins other than localhost have no crypto.subtle; the SDK needs SHA-256 for PKCE.
+    // Plain-HTTP origins other than localhost have no crypto.subtle: SHA-256 for PKCE comes from webCrypto.ts and
+    // ID tokens are checked by WeftLogtoClient.
     ensureSubtleDigest();
     return logtoConfig(signIn);
   }, [signIn]);
   return (
-    <LogtoProvider config={config}>
+    <LogtoProvider config={config} LogtoClientClass={WeftLogtoClient}>
       <LogtoGate signIn={signIn}>{children}</LogtoGate>
     </LogtoProvider>
   );

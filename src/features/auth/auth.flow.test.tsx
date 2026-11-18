@@ -1,4 +1,8 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { configureAuth, setCurrentOrg } from '../../api/client';
@@ -10,6 +14,7 @@ import { AuthRoot } from './AuthRoot';
 const logto = vi.hoisted(() => ({
   isAuthenticated: false,
   isLoading: false,
+  error: undefined as Error | undefined,
   signIn: vi.fn(async () => undefined),
   signOut: vi.fn(async () => undefined),
   getAccessToken: vi.fn(async () => 'token-1'),
@@ -17,10 +22,11 @@ const logto = vi.hoisted(() => ({
   clearAllTokens: vi.fn(async () => undefined),
 }));
 
-vi.mock('@logto/react', () => ({
+vi.mock('@logto/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@logto/react')>()),
   LogtoProvider: ({ children }: { children: unknown }) => children,
   useLogto: () => logto,
-  useHandleSignInCallback: () => ({ isAuthenticated: logto.isAuthenticated, error: undefined }),
+  useHandleSignInCallback: () => ({ isAuthenticated: logto.isAuthenticated, isLoading: false, error: undefined }),
 }));
 
 const org = (id: string, name: string, role: Membership['role'] = 'owner'): Membership => ({
@@ -51,6 +57,7 @@ describe('sign-in', () => {
   beforeEach(() => {
     logto.isAuthenticated = false;
     logto.isLoading = false;
+    logto.error = undefined;
     window.localStorage.clear();
   });
   afterEach(() => {
@@ -95,9 +102,73 @@ describe('sign-in', () => {
     const calls = stubApi(true, { user, orgs: [org('org_a', 'Alpha'), org('org_b', 'Beta', 'viewer')], invitations: [] });
     renderWithProviders(<AuthRoot><OrgSwitcher /></AuthRoot>);
     fireEvent.click(await screen.findByRole('button', { name: /Beta/ }));
-    expect(screen.getByRole('menuitemradio', { name: /Beta/ })).toHaveAttribute('aria-checked', 'true');
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /Alpha/ }));
-    expect(window.localStorage.getItem('weft.org')).toBe('org_a');
+    const group = screen.getByRole('group', { name: 'Organisations' });
+    expect(within(group).getByRole('button', { name: /Beta/ })).toHaveAttribute('aria-current', 'true');
+    fireEvent.click(within(group).getByRole('button', { name: /Alpha/ }));
+    await waitFor(() => expect(window.localStorage.getItem('weft.org')).toBe('org_a'));
     await waitFor(() => expect(calls.list.at(-1)?.headers['X-Org-ID']).toBe('org_a'));
   });
+
+  it('lets people who already have an org accept an invitation from the switcher', async () => {
+    logto.isAuthenticated = true;
+    const invitation = { id: 'inv_1', org_id: 'org_c', org_name: 'Gamma', email: 'ann@example.com', role: 'member' as const, invited_by: 'Bo', created_at: '', expires_at: '2026-12-01T00:00:00Z' };
+    const calls = stubApi(true, { user, orgs: [org('org_a', 'Alpha')], invitations: [invitation] });
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.list.push({ method: init?.method ?? 'GET', url, headers: (init?.headers ?? {}) as Record<string, string> });
+      if (url.endsWith('/accept')) return new Response(JSON.stringify(org('org_c', 'Gamma', 'member')));
+      if (url.endsWith('/api/v1/auth/config')) return new Response(JSON.stringify({ sign_in: { endpoint: 'https://t', app_id: 'web', resource: null, scopes: [] } }));
+      if (url.endsWith('/api/v1/me')) return new Response(JSON.stringify({ user, orgs: [org('org_a', 'Alpha')], invitations: [invitation] }));
+      return new Response('[]');
+    }));
+    renderWithProviders(<AuthRoot><OrgSwitcher /></AuthRoot>);
+    fireEvent.click(await screen.findByRole('button', { name: /Alpha/ }));
+    expect(screen.getByLabelText('1 invitation waiting')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept Gamma' }));
+    await waitFor(() => expect(window.localStorage.getItem('weft.org')).toBe('org_c'));
+  });
 });
+
+describe('ending a session', () => {
+  it('treats a refresh Logto rejects as signed out, and a network failure as not', async () => {
+    const { LogtoClientError, LogtoRequestError } = await vi.importActual<typeof import('@logto/react')>('@logto/react');
+    const { sessionEnded } = await import('./LogtoGate');
+    expect(sessionEnded(new LogtoRequestError('oidc.invalid_grant', 'grant request is invalid'))).toBe(true);
+    expect(sessionEnded(new LogtoClientError('not_authenticated'))).toBe(true);
+    expect(sessionEnded(new TypeError('Failed to fetch'))).toBe(false);
+    expect(sessionEnded(new LogtoRequestError('oidc.server_error', 'down'))).toBe(false);
+    expect(sessionEnded(undefined)).toBe(false);
+  });
+});
+
+describe('returning after sign-in', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    configureAuth(null);
+    window.sessionStorage.clear();
+  });
+
+  it('opens the page the user started on, also under StrictMode', async () => {
+    logto.isAuthenticated = true;
+    window.sessionStorage.setItem('weft.return', '/settings?tab=users');
+    stubApi(true, { user, orgs: [org('org_a', 'Alpha')], invitations: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <StrictMode>
+        <QueryClientProvider client={client}>
+          <MemoryRouter initialEntries={['/callback?code=x&state=y']}>
+            <AuthRoot>
+              <Where />
+            </AuthRoot>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </StrictMode>,
+    );
+    expect(await screen.findByText('at /settings?tab=users')).toBeInTheDocument();
+    expect(window.sessionStorage.getItem('weft.return')).toBeNull();
+  });
+});
+
+function Where() {
+  const { pathname, search } = useLocation();
+  return <p>{`at ${pathname}${search}`}</p>;
+}

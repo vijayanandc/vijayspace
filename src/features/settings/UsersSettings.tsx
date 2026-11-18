@@ -7,7 +7,7 @@ import { useState } from 'react';
 
 import { errorMessage } from '../../api/client';
 import { qk } from '../../api/hooks';
-import { type Member, type Role, tenancy } from '../../api/tenancy';
+import { type Me, type Member, type Role, tenancy } from '../../api/tenancy';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { ErrorBox, Loading } from '../../components/Empty';
@@ -24,6 +24,8 @@ function MemberRow({ member, actor, me, lastOwner }: { member: Member; actor: Ro
   const session = useSession();
   const isMe = member.user.id === me;
   const roles = assignableRoles(actor, member.role);
+  // A chosen role is applied with a button, so moving through the options with the keyboard sends nothing.
+  const [chosen, setChosen] = useState<Role>(member.role);
   const done = () => void qc.invalidateQueries({ queryKey: qk.members });
   const setRole = useMutation({
     mutationFn: (role: Role) => tenancy.setRole(member.user.id, role),
@@ -31,14 +33,20 @@ function MemberRow({ member, actor, me, lastOwner }: { member: Member; actor: Ro
       done();
       toast.show('success', `${m.user.name ?? m.user.email ?? 'Member'} is now ${ROLE_LABELS[m.role].label.toLowerCase()}`);
     },
-    onError: (e) => toast.show('error', errorMessage(e)),
+    onError: (e) => {
+      setChosen(member.role);
+      toast.show('error', errorMessage(e));
+    },
   });
   const remove = useMutation({
     mutationFn: () => tenancy.removeMember(member.user.id),
     onSuccess: () => {
-      if (isMe) {
-        void qc.invalidateQueries({ queryKey: qk.me });
-        session?.switchOrg(session.me.orgs.find((o) => o.id !== session.org.id)?.id ?? '');
+      if (isMe && session) {
+        // Gone from the org: drop it from the session, then open another org (or onboarding when none is left).
+        const left = session.org.id;
+        const rest = session.me.orgs.filter((o) => o.id !== left);
+        qc.setQueryData<Me>(qk.me, (old) => (old ? { ...old, orgs: old.orgs.filter((o) => o.id !== left) } : old));
+        if (rest[0]) session.switchOrg(rest[0].id);
         return;
       }
       done();
@@ -63,13 +71,20 @@ function MemberRow({ member, actor, me, lastOwner }: { member: Member; actor: Ro
       </td>
       <td>
         {roles.length > 0 && !isMe ? (
-          <select className="input input-sm" aria-label={`Role of ${name}`} value={member.role} disabled={setRole.isPending} onChange={(e) => setRole.mutate(e.target.value as Role)}>
-            {Array.from(new Set([member.role, ...roles])).map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABELS[r].label}
-              </option>
-            ))}
-          </select>
+          <span className="role-edit">
+            <select className="input input-sm" aria-label={`Role of ${name}`} value={chosen} disabled={setRole.isPending} onChange={(e) => setChosen(e.target.value as Role)}>
+              {Array.from(new Set([member.role, ...roles])).map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_LABELS[r].label}
+                </option>
+              ))}
+            </select>
+            {chosen !== member.role && (
+              <Button size="sm" variant="primary" onClick={() => setRole.mutate(chosen)} disabled={setRole.isPending} aria-label={`Apply role for ${name}`}>
+                Apply
+              </Button>
+            )}
+          </span>
         ) : (
           <span>{ROLE_LABELS[member.role].label}</span>
         )}

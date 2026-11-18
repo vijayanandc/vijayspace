@@ -15,8 +15,12 @@ import { PageHeader } from '../../components/PageHeader';
 import { SearchBox } from '../../components/SearchBox';
 import { InstallWizard } from './InstallWizard';
 import { RecipeApps } from './RecipeApps';
+import { can } from '../auth/permissions';
+import { useRole } from '../auth/session';
 
 export function RecipesPage() {
+  const role = useRole();
+  const canInstall = can(role, 'flow.edit') && can(role, 'connection.use');
   const recipes = useQuery({ queryKey: qk.recipes, queryFn: endpoints.recipes });
   const { data: manifests = [] } = useConnectors();
   const [installing, setInstalling] = useState<Recipe | null>(null);
@@ -76,9 +80,11 @@ export function RecipesPage() {
                 <Workflow size={14} aria-hidden="true" />
                 {r.flows.length} flow{r.flows.length === 1 ? '' : 's'}
               </span>
-              <Button variant="primary" size="sm" onClick={() => setInstalling(r)}>
-                Install
-              </Button>
+              {canInstall && (
+                <Button variant="primary" size="sm" onClick={() => setInstalling(r)}>
+                  Install
+                </Button>
+              )}
             </div>
           </article>
         ))}

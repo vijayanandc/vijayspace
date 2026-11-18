@@ -65,3 +65,4 @@
   .auth-page { grid-template-columns: 1fr; }
   .auth-brand { display: none; }
 }
+.role-edit { display: inline-flex; gap: 6px; align-items: center; }

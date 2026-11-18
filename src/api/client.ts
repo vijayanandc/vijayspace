@@ -72,10 +72,9 @@ export function toApiError(status: number, body: unknown, fallbackText = ''): Ap
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-async function send(method: HttpMethod, path: string, body: unknown, token: string | undefined): Promise<Response> {
+async function send(method: HttpMethod, path: string, body: unknown, token: string | undefined, org: string | undefined): Promise<Response> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const org = currentOrg ?? ORG;
   if (org) headers['X-Org-ID'] = org;
   if (token) headers.Authorization = `Bearer ${token}`;
   try {
@@ -89,14 +88,24 @@ async function send(method: HttpMethod, path: string, body: unknown, token: stri
   }
 }
 
+const unavailable = () =>
+  new ApiError(0, 'auth.unavailable', 'Your sign-in could not be refreshed. Check your connection and try again.');
+
 export async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
-  const token = auth ? await auth.token() : undefined;
-  let response = await send(method, path, body, token);
+  // Both taken before any await: a request belongs to the org (and sign-in) it was made in, even if
+  // the user switches organisation or signs out while it waits for a token.
+  const org = currentOrg ?? ORG;
+  const hooks = auth;
+  const token = hooks ? await hooks.token() : undefined;
+  // Signed in but no token (the identity provider was unreachable): never send the request unsigned.
+  if (hooks && !token) throw unavailable();
+  let response = await send(method, path, body, token, org);
   // A token that expired or was revoked while the tab was idle: one retry with a fresh token.
-  if (response.status === 401 && auth) {
-    const fresh = await auth.refresh().catch(() => undefined);
-    if (fresh && fresh !== token) response = await send(method, path, body, fresh);
-    if (response.status === 401) auth.onSignedOut();
+  if (response.status === 401 && hooks) {
+    const fresh = await hooks.refresh().catch(() => undefined);
+    if (!fresh) throw unavailable();
+    if (fresh !== token) response = await send(method, path, body, fresh, org);
+    if (response.status === 401) hooks.onSignedOut();
   }
   const text = await response.text();
   let parsed: unknown = undefined;

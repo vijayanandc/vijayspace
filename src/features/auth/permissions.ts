@@ -28,6 +28,7 @@ const MATRIX: Record<Permission, Record<Role, Access>> = {
   'execution.rerun': { owner: 'yes', admin: 'yes', member: 'yes', viewer: 'no' },
   'connection.create': { owner: 'yes', admin: 'yes', member: 'yes', viewer: 'no' },
   'connection.use': { owner: 'yes', admin: 'yes', member: 'yes', viewer: 'no' },
+  /** Also editing, reconnecting and setting limits: managing a connection (server: same access). */
   'connection.delete': { owner: 'yes', admin: 'yes', member: 'own', viewer: 'no' },
 };
 

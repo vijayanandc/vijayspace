@@ -17,6 +17,8 @@ import { StepSettings } from './StepSettings';
 import { TestStepBox } from './TestStepBox';
 import { TriggerSettings, TriggerTest } from './TriggerExtras';
 import { TriggerPanel } from './TriggerPanel';
+import { can } from '../../auth/permissions';
+import { useRole } from '../../auth/session';
 
 type PanelTab = 'configure' | 'settings' | 'test';
 
@@ -27,12 +29,16 @@ const ALL_TABS: Tab<PanelTab>[] = [
 ];
 
 export function SidePanel() {
+  const role = useRole();
   const { selected, def, manifests, select } = useBuilder();
   // The tab belongs to the node it was chosen on: selecting another node (or none) starts again on Configure.
   // A key rename keeps the tab because StepSettings reports the new key before selecting it.
   const [state, setState] = useState<{ id: string | null; tab: PanelTab }>({ id: selected, tab: 'configure' });
   if (state.id !== selected) setState({ id: selected, tab: 'configure' });
   if (!selected) return null;
+  // Testing runs things: not for viewers.
+  const canTest = can(role, 'flow.edit');
+  const visible = canTest ? ALL_TABS : ALL_TABS.filter((t) => t.key !== 'test');
   const tab = state.id === selected ? state.tab : 'configure';
   const setTab = (t: PanelTab) => setState({ id: selected, tab: t });
   const close = () => select(null);
@@ -41,7 +47,7 @@ export function SidePanel() {
     return (
       <aside className="side-panel" aria-label="Trigger settings">
         <PanelHeader label={triggerLabel(def.trigger, manifests)} onClose={close} />
-        <Tabs label="Trigger panel" tabs={ALL_TABS} value={tab} onChange={setTab} className="panel-tabs" />
+        <Tabs label="Trigger panel" tabs={visible} value={tab} onChange={setTab} className="panel-tabs" />
         <div className="panel-scroll">
           {tab === 'configure' && (
             <>
@@ -50,7 +56,7 @@ export function SidePanel() {
             </>
           )}
           {tab === 'settings' && <TriggerSettings />}
-          {tab === 'test' && <TriggerTest />}
+          {tab === 'test' && canTest && <TriggerTest />}
         </div>
       </aside>
     );
@@ -58,7 +64,7 @@ export function SidePanel() {
 
   const step = findStep(def, selected);
   if (!step) return null;
-  const tabs = step.type === 'action' ? ALL_TABS : ALL_TABS.filter((t) => t.key !== 'test');
+  const tabs = step.type === 'action' ? visible : visible.filter((t) => t.key !== 'test');
   const shown = tabs.some((t) => t.key === tab) ? tab : 'configure';
   // Keyed by step: nothing typed or run in one step's panel (test results, JSON drafts, rows) carries into another.
   return (

@@ -40,6 +40,8 @@ describe('settings: users', () => {
     const viRole = screen.getByRole('combobox', { name: 'Role of Vi' });
     expect(Array.from((viRole as HTMLSelectElement).options).map((o) => o.value)).toEqual(['viewer', 'admin', 'member']);
     fireEvent.change(viRole, { target: { value: 'member' } });
+    expect(sent.some((s) => s.method === 'PATCH')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Apply role for Vi' }));
     await waitFor(() => expect(sent.some((s) => s.method === 'PATCH' && s.url.endsWith('/api/v1/members/usr_v'))).toBe(true));
     fireEvent.click(screen.getByRole('button', { name: 'Invite people' }));
     const dialog = screen.getByRole('dialog', { name: 'Invite people' });

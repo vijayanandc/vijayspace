@@ -17,6 +17,8 @@ import { useToast } from '../../components/Toast';
 import { formatDuration, formatTime, isTerminal } from '../../lib/format';
 import { MODE_LABELS } from './labels';
 import { StepTimeline } from './StepTimeline';
+import { can } from '../auth/permissions';
+import { useRole } from '../auth/session';
 
 export function ExecutionPage() {
   const { executionId = '' } = useParams();
@@ -59,6 +61,7 @@ function Highlights({ e }: { e: ExecutionDetail }) {
 }
 
 function ExecutionView({ e }: { e: ExecutionDetail }) {
+  const canRerun = can(useRole(), 'execution.rerun');
   const qc = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
@@ -92,17 +95,17 @@ function ExecutionView({ e }: { e: ExecutionDetail }) {
             <LinkButton to={`/flows/${e.flow_id}`} icon={ExternalLink}>
               Open flow
             </LinkButton>
-            {e.status === 'failed' && (
+            {canRerun && e.status === 'failed' && (
               <Button icon={StepForward} onClick={() => retry.mutate()} disabled={retry.isPending} title="Continue from the failed step on the same version">
                 Retry from failed step
               </Button>
             )}
-            {isTerminal(e.status) && (
+            {canRerun && isTerminal(e.status) && (
               <Button icon={RotateCcw} onClick={() => rerun.mutate()} disabled={rerun.isPending} title="Start again with the same trigger data on the latest published version">
                 Re-run
               </Button>
             )}
-            {!isTerminal(e.status) && (
+            {canRerun && !isTerminal(e.status) && (
               <Button variant="danger" icon={Square} onClick={() => cancel.mutate()} disabled={cancel.isPending}>
                 Cancel run
               </Button>

@@ -11,6 +11,8 @@ import { formatTime, relativeTime } from '../../lib/format';
 import { type SortState, nextSort, sortRows } from '../../lib/sort';
 import { AppChain, FlowStatus, LastRun } from './FlowParts';
 import { useFlowActions } from './useFlowActions';
+import { can } from '../auth/permissions';
+import { useRole } from '../auth/session';
 
 type Column = 'name' | 'status' | 'last_run' | 'updated';
 
@@ -29,10 +31,11 @@ function sortValue(f: FlowSummary, key: Column): string | number | null {
 
 function FlowSwitch({ flow, toggle }: { flow: FlowSummary; toggle: { mutate: () => void; isPending: boolean } }) {
   const unpublished = flow.published_version === null;
+  const editable = can(useRole(), 'flow.edit');
   return (
     <Switch
       checked={flow.is_enabled}
-      disabled={toggle.isPending || (unpublished && !flow.is_enabled)}
+      disabled={!editable || toggle.isPending || (unpublished && !flow.is_enabled)}
       onChange={() => toggle.mutate()}
       label={`${flow.is_enabled ? 'Disable' : 'Enable'} ${flow.name}`}
       title={unpublished && !flow.is_enabled ? 'Publish the flow before switching it on' : undefined}

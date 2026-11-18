@@ -1,14 +1,15 @@
 // The session: who is signed in, the org they are acting in (sent as X-Org-ID), switching orgs and signing out.
 // With sign-in turned off on the server, the session is a local owner of the default org.
 
-import { useQueryClient } from '@tanstack/react-query';
-import { type ReactNode, createContext, useCallback, useContext, useMemo } from 'react';
+import { type QueryClient, useQueryClient } from '@tanstack/react-query';
+import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { setCurrentOrg } from '../../api/client';
 import { qk } from '../../api/hooks';
 import type { Me, Membership, Role } from '../../api/tenancy';
 import { read, write } from '../../lib/storage';
+import { Splash } from './Splash';
 
 const ORG_KEY = 'weft.org';
 
@@ -17,6 +18,7 @@ export interface Session {
   org: Membership;
   /** False when sign-in is turned off on the server (local development). */
   signedIn: boolean;
+  /** Acts in another org: the current page closes (pending saves finish first) and the flows list opens. */
   switchOrg: (orgId: string) => void;
   signOut: () => void;
 }
@@ -38,9 +40,30 @@ export function useUserId(): string | null {
   return useSession()?.me.user?.id ?? null;
 }
 
-/** The org to act in: the remembered one if the user still belongs to it, else their first. */
-export function pickOrg(orgs: Membership[], stored: string | null): Membership | undefined {
-  return orgs.find((o) => o.id === stored) ?? orgs[0];
+/** The org to act in: the chosen one if the user still belongs to it, else their first. */
+export function pickOrg(orgs: Membership[], chosen: string | null): Membership | undefined {
+  return orgs.find((o) => o.id === chosen) ?? orgs[0];
+}
+
+/** Resolves once no flow draft is being saved (or after `maxMs`), a macrotask after being called. */
+export function draftSavesSettled(qc: QueryClient, maxMs = 10_000): Promise<void> {
+  return new Promise((resolve) => {
+    let unsubscribe = () => undefined as void;
+    const giveUp = window.setTimeout(done, maxMs);
+    function done() {
+      window.clearTimeout(giveUp);
+      unsubscribe();
+      resolve();
+    }
+    // A save a page starts as it closes begins a few microtasks later: look after a macrotask.
+    window.setTimeout(() => {
+      const check = () => {
+        if (qc.isMutating({ mutationKey: ['save-draft'] }) === 0) done();
+      };
+      unsubscribe = qc.getMutationCache().subscribe(check);
+      check();
+    }, 0);
+  });
 }
 
 interface Props {
@@ -53,26 +76,50 @@ interface Props {
 export function SessionProvider({ me, signedIn, signOut, children }: Props) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const org = pickOrg(me.orgs, read(ORG_KEY));
+  // Read once: another tab switching orgs must not change this one.
+  const [chosen, setChosen] = useState(() => read(ORG_KEY));
+  const [pending, setPending] = useState<string | null>(null);
+  const org = pickOrg(me.orgs, chosen);
   // Set while rendering (an idempotent module variable), so the children's first queries already carry the org.
-  setCurrentOrg(org?.id ?? null);
+  if (!pending) setCurrentOrg(org?.id ?? null);
+
   const switchOrg = useCallback(
     (orgId: string) => {
-      write(ORG_KEY, orgId);
-      setCurrentOrg(orgId);
-      // Nothing from the previous org may show in the next one.
-      queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== qk.me[0] && q.queryKey[0] !== qk.authConfig[0] });
-      void queryClient.invalidateQueries({ queryKey: qk.me });
+      setPending(orgId);
       navigate('/flows');
     },
-    [queryClient, navigate],
+    [navigate],
   );
+
+  // The page is off screen while switching; its last draft save (sent for the old org) finishes before the org
+  // changes, and nothing cached for the old org is kept.
+  useEffect(() => {
+    if (!pending) return undefined;
+    let cancelled = false;
+    void draftSavesSettled(queryClient).then(() => {
+      if (cancelled) return;
+      write(ORG_KEY, pending);
+      setCurrentOrg(pending);
+      queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== qk.me[0] && q.queryKey[0] !== qk.authConfig[0] });
+      setChosen(pending);
+      setPending(null);
+      void queryClient.invalidateQueries({ queryKey: qk.me });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pending, queryClient]);
+
   const value = useMemo(
     () => (org ? { me, org, signedIn, switchOrg, signOut } : null),
     [me, org, signedIn, switchOrg, signOut],
   );
   if (!value) return null;
-  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+  return (
+    <SessionContext.Provider value={value}>
+      {pending ? <Splash title="Switching organisation…" /> : children}
+    </SessionContext.Provider>
+  );
 }
 
 /** For tests: a session with one org and the given role. */

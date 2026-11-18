@@ -80,8 +80,9 @@ export function Toolbar(props: Props) {
         aria-label="Flow name"
         title="Rename flow"
         value={name}
+        readOnly={props.readOnly}
         onChange={(e) => setName(e.target.value)}
-        onBlur={() => name.trim() && name.trim() !== flow.name && rename.mutate()}
+        onBlur={() => !props.readOnly && name.trim() && name.trim() !== flow.name && rename.mutate()}
         onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
       />
       {flow.published_version ? (

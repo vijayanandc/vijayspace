@@ -17,6 +17,8 @@ import {
   LIMIT_KEYS, LIMIT_LABELS, type LimitField, type LimitKey, type LimitMode, type LimitsForm, formatLimit, limitError, limitsBody, limitsForm,
 } from './limits';
 import { UsageMeter } from './UsageMeter';
+import { can } from '../auth/permissions';
+import { useRole, useUserId } from '../auth/session';
 
 interface Props {
   connection: Connection | null;
@@ -78,6 +80,7 @@ function LimitRow({ name, field, onChange, defaultValue, effective, showError }:
 }
 
 export function LimitsDialog({ connection, appName, onClose }: Props) {
+  const canManage = can(useRole(), 'connection.delete', connection?.created_by, useUserId());
   const qc = useQueryClient();
   const toast = useToast();
   const id = connection?.id ?? '';
@@ -124,9 +127,11 @@ export function LimitsDialog({ connection, appName, onClose }: Props) {
       footer={
         <>
           <Button onClick={close}>Cancel</Button>
-          <Button variant="primary" onClick={onSave} disabled={!form || save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save limits'}
-          </Button>
+          {canManage && (
+            <Button variant="primary" onClick={onSave} disabled={!form || save.isPending}>
+              {save.isPending ? 'Saving…' : 'Save limits'}
+            </Button>
+          )}
         </>
       }
     >
